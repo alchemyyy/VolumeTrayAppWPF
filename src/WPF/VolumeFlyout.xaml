@@ -1,0 +1,501 @@
+<Window
+    x:Class="VolumeTrayAppWPF.WPF.VolumeFlyout"
+    x:ClassModifier="internal"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:audio="clr-namespace:VolumeTrayAppWPF.Audio"
+    xmlns:wpf="clr-namespace:VolumeTrayAppWPF.WPF"
+    xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
+    xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    Width="350"
+    SizeToContent="Height"
+    WindowStyle="None"
+    AllowsTransparency="True"
+    Background="Transparent"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    Topmost="True"
+    Title="Volume">
+
+    <Window.Resources>
+        <!-- App-scope DynamicResource brushes still resolve here; per-flyout converters and slider style live local. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <!-- Slider primitives. Lifted from BrightnessFlyout but stripped of curve / preview chrome -
+             the volume slider only shows a track, fill, and thumb. -->
+        <!-- Thumb template: TextBlock + Border siblings, both bound to the SliderThumb* DynamicResources
+             that App.xaml.cs writes from the user's selected SliderThumbGlyphOption. The TextBlock
+             draws the glyph variant; the Border draws the capsule variant. Visibility resources gate
+             which one paints, so the same template serves every option. -->
+        <Style x:Key="VolumeSliderThumbStyle" TargetType="Thumb">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid>
+                            <TextBlock Text="{DynamicResource SliderThumbGlyph}"
+                                       FontFamily="{DynamicResource SliderThumbGlyphFont}"
+                                       FontSize="{DynamicResource SliderThumbGlyphSize}"
+                                       Width="{DynamicResource SliderThumbGlyphWidth}"
+                                       Height="{DynamicResource SliderThumbGlyphHeight}"
+                                       Foreground="{DynamicResource ThemeSliderThumb}"
+                                       TextAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Visibility="{DynamicResource SliderThumbGlyphVisibility}">
+                                <TextBlock.LayoutTransform>
+                                    <ScaleTransform ScaleX="{DynamicResource SliderThumbGlyphScaleX}" ScaleY="1"/>
+                                </TextBlock.LayoutTransform>
+                            </TextBlock>
+                            <Border Width="{DynamicResource SliderThumbGlyphWidth}"
+                                    Height="{DynamicResource SliderThumbGlyphHeight}"
+                                    CornerRadius="{DynamicResource CornerRadiusCapsule}"
+                                    Background="{DynamicResource ThemeSliderThumb}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="{DynamicResource SliderThumbCapsuleVisibility}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="VolumeSliderDecreaseButtonStyle" TargetType="RepeatButton">
+            <Setter Property="Background" Value="{DynamicResource ThemeSliderProgress}"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="{TemplateBinding Background}" Height="4"
+                                CornerRadius="{DynamicResource CornerRadiusSmall}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="VolumeSliderIncreaseButtonStyle" TargetType="RepeatButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="{TemplateBinding Background}" Height="4"
+                                CornerRadius="{DynamicResource CornerRadiusSmall}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="VolumeSliderStyle" TargetType="Slider">
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
+            <!-- Float-fidelity tuning (matches BrightnessFlyout):
+                 IsSnapToTickEnabled / IsMoveToPointEnabled both off so the slider value isn't
+                 rounded to LargeChange increments on click. Custom track-click capture in
+                 code-behind handles point-to-jump and keeps the thumb dragging after the click.
+                 SmallChange / LargeChange stay tiny so keyboard nudges feel smooth too. -->
+            <Setter Property="IsSnapToTickEnabled" Value="False"/>
+            <Setter Property="IsMoveToPointEnabled" Value="False"/>
+            <Setter Property="SmallChange" Value="0.1"/>
+            <Setter Property="LargeChange" Value="0.1"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="utils:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Rectangle Fill="Transparent" Height="24"/>
+                            <Border Height="4"
+                                    Background="{DynamicResource ThemeSliderTrack}"
+                                    CornerRadius="{DynamicResource CornerRadiusSmall}"
+                                    VerticalAlignment="Center"
+                                    IsHitTestVisible="False"/>
+                            <Track x:Name="PART_Track" VerticalAlignment="Center">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource VolumeSliderDecreaseButtonStyle}"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource VolumeSliderThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource VolumeSliderIncreaseButtonStyle}"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                            <!-- Peak meter overlay. Width is driven by VolumeSlider.UpdateMeterPeakWidth in
+                                 code-behind; HorizontalAlignment=Left so the overlay grows from the track's
+                                 left edge. Hit-test off so clicks fall through to the slider track. -->
+                            <Border x:Name="MeterPeak"
+                                    Height="4"
+                                    Width="0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource MeterPeakBrush}"
+                                    CornerRadius="{DynamicResource CornerRadiusSmall}"
+                                    IsHitTestVisible="False"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Caret-style icon button used for the device-row dropdown. Hover treatment matches the brightness footer. -->
+        <Style x:Key="DeviceCaretButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="utils:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource CornerRadiusMedium}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeButtonHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeButtonPressed}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <wpf:ScalarToPercentConverter x:Key="ScalarToPercent"/>
+        <wpf:VolumeGlyphConverter x:Key="VolumeGlyph"/>
+
+        <!-- Header-style icon button. Same chrome serves the undock/redock corner control on the right
+             and the settings + dummy cluster on the left so the title bar reads as one button family. -->
+        <Style x:Key="HeaderIconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="utils:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource CornerRadiusMedium}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ThemePressed}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <!-- Outer rounded card with drop-shadow. Mirrors BrightnessFlyout's RootCard so the family reads as one app.
+         Bubbled (non-preview) mouse handlers drive the drag-to-move gesture when the flyout is undocked;
+         interactive children (sliders, buttons) get first refusal so only clicks on the empty card surface
+         reach this handler. Click-to-drag on docked is intentionally a no-op — the docked corner is OS-anchored. -->
+    <Border x:Name="RootCard"
+            Background="{DynamicResource ThemeBackground}"
+            CornerRadius="{DynamicResource CornerRadiusFlyout}"
+            BorderBrush="{DynamicResource ThemeBorder}"
+            BorderThickness="1"
+            MouseLeftButtonDown="RootCard_MouseLeftButtonDown"
+            MouseMove="RootCard_MouseMove"
+            MouseLeftButtonUp="RootCard_MouseLeftButtonUp">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="30" ShadowDepth="4" Opacity="0.6" Direction="270"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Title-bar row hosts the left-side action cluster (Settings + dummies) and the
+                     right-side undock/redock button. Auto height is driven by the tallest button
+                     (32 + 6 top margin = 38 px); the bottom inset is supplied by the SessionsList's
+                     own top margin so the gap above and below the buttons reads as one. -->
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title bar. Hosts the left-side action cluster (Settings + dummies) and the right-side
+                 undock button. Empty space between them stays draggable so RootCard's bubbled drag
+                 handlers still receive mouse events when the flyout is undocked. The buttons themselves
+                 consume their own click gestures. -->
+            <Grid Grid.Row="0">
+                <!-- Left-side action cluster. Settings is leftmost; the three placeholders sit to its right
+                     and stay disabled until they are wired up to real actions. Vertical alignment matches
+                     the undock button's Margin="0,6,*,0" so the whole row reads as one strip. -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="5,6,0,0">
+                    <Button Style="{StaticResource HeaderIconButtonStyle}"
+                            Click="SettingsButton_Click"
+                            ToolTip="{loc:Loc Flyout_Settings_Tooltip}">
+                        <TextBlock Text="{DynamicResource GlyphSettings}"
+                                   FontFamily="Segoe Fluent Icons"
+                                   FontSize="19"
+                                   Foreground="{DynamicResource ThemeIconForeground}"/>
+                    </Button>
+                    <Button Style="{StaticResource HeaderIconButtonStyle}" IsEnabled="False"/>
+                    <Button Style="{StaticResource HeaderIconButtonStyle}" IsEnabled="False"/>
+                    <Button Style="{StaticResource HeaderIconButtonStyle}" IsEnabled="False"/>
+                </StackPanel>
+
+                <Button x:Name="UndockButton"
+                        Style="{StaticResource HeaderIconButtonStyle}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,6,7,0"
+                        Click="UndockButton_Click"
+                        PreviewMouseLeftButtonDown="UndockButton_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="UndockButton_PreviewMouseMove"
+                        PreviewMouseLeftButtonUp="UndockButton_PreviewMouseLeftButtonUp"
+                        Visibility="{Binding AllowFlyoutUndock, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                    <Button.Resources>
+                        <Style TargetType="ToolTip">
+                            <Setter Property="Placement" Value="Bottom"/>
+                        </Style>
+                    </Button.Resources>
+                    <Button.ToolTip>
+                        <ToolTip>
+                            <ToolTip.Style>
+                                <Style TargetType="ToolTip">
+                                    <Setter Property="Content" Value="{loc:Loc Flyout_Undock_Tooltip}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsUndocked, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                            <Setter Property="Content" Value="{loc:Loc Flyout_Redock_Tooltip}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ToolTip.Style>
+                        </ToolTip>
+                    </Button.ToolTip>
+                    <TextBlock FontFamily="Segoe Fluent Icons"
+                               FontSize="20"
+                               Foreground="{DynamicResource ThemeIconForeground}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="&#xE75B;"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsUndocked, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Text" Value="&#xE75A;"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Button>
+            </Grid>
+
+            <!-- Per-app session list. Each row = icon + slider + percent.
+                 Bound to DefaultDevice.Sessions in code-behind via DataContext = this Window;
+                 the host pushes the active device's session collection into Sessions.
+                 Top margin of 6 mirrors the button's top inset so the title-bar row reads as symmetric
+                 around the button (6 above button, 6 below button to start of sliders). -->
+            <ItemsControl x:Name="SessionsList" Grid.Row="1"
+                          ItemsSource="{Binding Sessions, RelativeSource={RelativeSource AncestorType=Window}}"
+                          Margin="14,6,12,4">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type audio:AudioAppGroup}">
+                        <Grid Margin="0,0,0,10" PreviewMouseWheel="SessionRow_PreviewMouseWheel" Tag="{Binding}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- App icon. Falls back to a generic glyph when the icon resolver returns null
+                                 (no icon, dead process, etc.). DataTrigger pattern is used on both the Image and
+                                 the TextBlock so they're mutually exclusive based on Icon being null. The standard
+                                 BooleanToVisibilityConverter cannot be used here because it returns Collapsed for
+                                 any non-bool input, including a non-null ImageSource. -->
+                            <Grid Grid.Column="0" Width="22" Height="22" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <Image Source="{Binding Icon}" Width="22" Height="22"
+                                       RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Image.Style>
+                                        <Style TargetType="Image">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Image.Style>
+                                </Image>
+                                <TextBlock Text="&#xE7F4;"
+                                           FontFamily="Segoe Fluent Icons"
+                                           FontSize="20"
+                                           Foreground="{DynamicResource ThemeIconForeground}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <wpf:VolumeSlider Grid.Column="1"
+                                              Style="{StaticResource VolumeSliderStyle}"
+                                              Value="{Binding Volume, Mode=TwoWay, Converter={StaticResource ScalarToPercent}, UpdateSourceTrigger=PropertyChanged}"
+                                              PeakValue="{Binding PeakValue}"
+                                              ToolTip="{Binding DisplayName}"
+                                              PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
+                                              PreviewMouseMove="Slider_PreviewMouseMove"
+                                              PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
+                                              MouseLeave="Slider_MouseLeave"/>
+
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding Volume, Converter={StaticResource ScalarToPercent}, StringFormat={}{0:0}}"
+                                       FontSize="18"
+                                       Foreground="{DynamicResource ThemeForeground}"
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,0,0"
+                                       MinWidth="32"
+                                       TextAlignment="Right"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Empty-state overlay shown when no apps currently target the default device.
+                 Sits in the same row as the ItemsControl so it occupies the empty space without forcing
+                 a height jump on first session arrival. -->
+            <TextBlock Grid.Row="1"
+                       Text="No applications playing audio"
+                       Foreground="{DynamicResource ThemeSecondaryForeground}"
+                       FontSize="13"
+                       Opacity="0.7"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Margin="0,18,0,18">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasSessions, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <!-- Device row (footer). Two-row stack: name + caret on top, glyph + slider + percent on bottom. -->
+            <Border Grid.Row="2"
+                    Background="{DynamicResource ThemeFooterBackground}"
+                    CornerRadius="{DynamicResource CornerRadiusFooterBottom}"
+                    Padding="14,10,12,12">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasDefaultDevice, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Device name + caret. Caret button is wired to DeviceCaret_Click in code-behind;
+                         no-op for this checkpoint (device picker is a follow-up feature). -->
+                    <Grid Grid.Row="0" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding DefaultDevice.FriendlyName, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue='No audio device'}"
+                                   Foreground="{DynamicResource ThemeForeground}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1"
+                                Style="{StaticResource DeviceCaretButtonStyle}"
+                                Click="DeviceCaret_Click"
+                                ToolTip="Switch device">
+                            <TextBlock Text="&#xE70D;"
+                                       FontFamily="Segoe Fluent Icons"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource ThemeIconForeground}"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Glyph + slider + percent for the device endpoint. Slider value is bound to
+                         AudioDevice.Volume; the glyph swaps based on volume + mute via VolumeGlyphConverter. -->
+                    <Grid Grid.Row="1" PreviewMouseWheel="DeviceRow_PreviewMouseWheel">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Style="{StaticResource DeviceCaretButtonStyle}"
+                                Click="DeviceMute_Click"
+                                ToolTip="Mute"
+                                Width="28" Height="28"
+                                Margin="0,0,8,0">
+                            <TextBlock FontFamily="Segoe Fluent Icons"
+                                       FontSize="20"
+                                       Foreground="{DynamicResource ThemeIconForeground}">
+                                <TextBlock.Text>
+                                    <MultiBinding Converter="{StaticResource VolumeGlyph}">
+                                        <Binding Path="DefaultDevice.Volume" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        <Binding Path="DefaultDevice.IsMuted" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </Button>
+
+                        <wpf:VolumeSlider x:Name="DeviceVolumeSlider"
+                                          Grid.Column="1"
+                                          Style="{StaticResource VolumeSliderStyle}"
+                                          Value="{Binding DefaultDevice.Volume, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay, Converter={StaticResource ScalarToPercent}, UpdateSourceTrigger=PropertyChanged}"
+                                          PeakValue="{Binding DefaultDevice.PeakValue, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
+                                          PreviewMouseMove="Slider_PreviewMouseMove"
+                                          PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
+                                          MouseLeave="Slider_MouseLeave"/>
+
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding DefaultDevice.Volume, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource ScalarToPercent}, StringFormat={}{0:0}}"
+                                   FontSize="18"
+                                   Foreground="{DynamicResource ThemeForeground}"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0,0,0"
+                                   MinWidth="32"
+                                   TextAlignment="Right"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

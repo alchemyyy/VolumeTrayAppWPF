@@ -1,0 +1,205 @@
+﻿<UserControl
+    x:Class="VolumeTrayAppWPF.WPF.Settings.Pages.ThemePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
+    xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
+    xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
+    mc:Ignorable="d"
+    d:DesignWidth="660"
+    d:DesignHeight="594"
+    d:Background="#1F1F1F"
+    utils1:SettingsKeyboardNavigation.IsContentSection="True">
+    <StackPanel>
+        <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_Theme_SectionHeader}"/>
+
+        <TextBlock Text="{loc:Loc Settings_Theme_ContextMenu_Header}"
+                   Style="{StaticResource SettingTitleStyle}"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,8"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_FontSize_Title}"
+                               Description="{loc:Loc Settings_Theme_FontSize_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="ContextMenuFontSizeBox"
+                                      Minimum="8" Maximum="48"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_Theme_Appearance_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_ThemeStyle_Title}"
+                               Description="{loc:Loc Settings_Theme_ThemeStyle_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="ThemeModeCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="ThemeMode" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="System" Content="{loc:Loc Settings_Theme_ThemeStyle_System}"/>
+                    <ComboBoxItem Tag="Light" Content="{loc:Loc Settings_Theme_ThemeStyle_Light}"/>
+                    <ComboBoxItem Tag="Dark" Content="{loc:Loc Settings_Theme_ThemeStyle_Dark}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_TextColor_Title}"
+                               Description="{loc:Loc Settings_Theme_TextColor_Description}">
+            <utils:SettingsCard.Control>
+                <StackPanel Style="{StaticResource SettingsCardControlPanel}">
+                    <Button x:Name="TextColorLightSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Tag="Text|Light" Click="ColorSwatch_Click"
+                            ToolTip="{loc:Loc Settings_Theme_TextColor_LightTooltip}"/>
+                    <Button x:Name="TextColorDarkSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Tag="Text|Dark" Click="ColorSwatch_Click"
+                            ToolTip="{loc:Loc Settings_Theme_TextColor_DarkTooltip}"/>
+                    <Button Style="{StaticResource SettingsButtonStyle}"
+                            Content="{loc:Loc Settings_Theme_Reset}"
+                            Tag="Text" Click="ColorReset_Click"/>
+                </StackPanel>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_BackgroundColor_Title}"
+                               Description="{loc:Loc Settings_Theme_BackgroundColor_Description}">
+            <utils:SettingsCard.Control>
+                <StackPanel Style="{StaticResource SettingsCardControlPanel}">
+                    <Button x:Name="BackgroundColorLightSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Tag="Background|Light" Click="ColorSwatch_Click"
+                            ToolTip="{loc:Loc Settings_Theme_BackgroundColor_LightTooltip}"/>
+                    <Button x:Name="BackgroundColorDarkSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Tag="Background|Dark" Click="ColorSwatch_Click"
+                            ToolTip="{loc:Loc Settings_Theme_BackgroundColor_DarkTooltip}"/>
+                    <Button Style="{StaticResource SettingsButtonStyle}"
+                            Content="{loc:Loc Settings_Theme_Reset}"
+                            Tag="Background" Click="ColorReset_Click"/>
+                </StackPanel>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_Theme_Flyout_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_RoundedCorners_Title}"
+                               Description="{loc:Loc Settings_Theme_RoundedCorners_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="RoundedCornersToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="EnableRoundedCorners" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <!-- Slider thumb shape. Each option carries its own font / size / dimensions so the dropdown's
+             preview renders the same shape the flyout will use. Capsule branch draws a Border at the
+             option's Width/Height with CornerRadiusCapsule; Glyph branch draws a TextBlock from the codepoint. -->
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_SliderIndicator_Title}"
+                               Description="{loc:Loc Settings_Theme_SliderIndicator_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="SliderThumbGlyphCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          SelectionChanged="SliderThumbGlyph_Changed">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:SliderThumbGlyphOption}">
+                            <StackPanel Orientation="Horizontal"
+                                        d:DataContext="{d:DesignInstance Type=models:SliderThumbGlyphOption}">
+                                <Grid Width="22" Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Glyph}"
+                                               FontFamily="{Binding FontFamily}"
+                                               FontSize="{Binding FontSize}"
+                                               Width="{Binding Width}"
+                                               Height="{Binding Height}"
+                                               Foreground="{DynamicResource ThemeForeground}"
+                                               TextAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"
+                                               Visibility="{Binding IsGlyph, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock.LayoutTransform>
+                                            <ScaleTransform ScaleX="{Binding XScale}" ScaleY="1"/>
+                                        </TextBlock.LayoutTransform>
+                                    </TextBlock>
+                                    <Border Width="{Binding Width}"
+                                            Height="{Binding Height}"
+                                            CornerRadius="{DynamicResource CornerRadiusCapsule}"
+                                            Background="{DynamicResource ThemeForeground}"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsCapsule, Converter={StaticResource BoolToVisibility}}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_Theme_TrayIcon_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_StaticIconColor_Title}"
+                               Description="{loc:Loc Settings_Theme_StaticIconColor_Description}">
+            <utils:SettingsCard.Control>
+                <StackPanel Style="{StaticResource SettingsCardControlPanel}">
+                    <Button x:Name="TrayIconColorLightSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Tag="TrayIcon|Light" Click="ColorSwatch_Click"
+                            ToolTip="{loc:Loc Settings_Theme_StaticIconColor_LightTooltip}"/>
+                    <Button x:Name="TrayIconColorDarkSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Tag="TrayIcon|Dark" Click="ColorSwatch_Click"
+                            ToolTip="{loc:Loc Settings_Theme_StaticIconColor_DarkTooltip}"/>
+                    <Button Style="{StaticResource SettingsButtonStyle}"
+                            Content="{loc:Loc Settings_Theme_Reset}"
+                            Tag="TrayIcon" Click="ColorReset_Click"/>
+                </StackPanel>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_Theme_MeterPeak_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakFps_Title}"
+                               Description="{loc:Loc Settings_Theme_MeterPeakFps_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="MeterPeakFpsBox"
+                                      Minimum="1" Maximum="1000"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakSampleRate_Title}"
+                               Description="{loc:Loc Settings_Theme_MeterPeakSampleRate_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="MeterPeakSampleRateBox"
+                                      Minimum="1" Maximum="1000"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakColor_Title}"
+                               Description="{loc:Loc Settings_Theme_MeterPeakColor_Description}">
+            <utils:SettingsCard.Control>
+                <StackPanel Style="{StaticResource SettingsCardControlPanel}">
+                    <Button x:Name="MeterPeakColorSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Click="MeterPeakColor_Click"
+                            ToolTip="{loc:Loc Settings_Theme_MeterPeakColor_Tooltip}"/>
+                    <Button Style="{StaticResource SettingsButtonStyle}"
+                            Content="{loc:Loc Settings_Theme_Reset}"
+                            Click="MeterPeakColorReset_Click"/>
+                </StackPanel>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+    </StackPanel>
+</UserControl>

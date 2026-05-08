@@ -1,0 +1,243 @@
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Windows.Media;
+using System.Windows.Threading;
+using VolumeTrayAppWPF.Audio.Interop;
+
+namespace VolumeTrayAppWPF.Audio;
+
+// Aggregates every audio session that shares an AppId into a single slider, mirroring EarTrumpet's
+// AudioDeviceSessionGroup. Discord, Chromium-based browsers, and Electron apps spawn several child
+// processes that each register their own IAudioSessionControl with WASAPI; without grouping, the
+// flyout would show two or three sliders for one app.
+//
+// The group exposes the same bindable surface area as a single AudioSession (DisplayName, Icon,
+// Volume, IsMuted, PeakValue, State) so the flyout DataTemplate can bind to either type. Volume
+// and IsMuted writes fan out to every session in the group; reads return the first session's value.
+// PeakValue is the max across all sessions so the loudest stream drives the meter.
+internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
+{
+    private readonly List<AudioSession> _sessions = [];
+    private readonly Dispatcher _dispatcher;
+
+    private float _peakValue;
+    private bool _disposed;
+
+    public string AppId { get; }
+
+    /// <summary>The sessions inside this group. Mutated only on the UI thread by AudioDevice.</summary>
+    public IReadOnlyList<AudioSession> Sessions => _sessions;
+
+    public string DisplayName => _sessions.Count > 0 ? _sessions[0].DisplayName : "Unknown";
+    public ImageSource? Icon => _sessions.Count > 0 ? _sessions[0].Icon : null;
+    public bool IsSystemSounds => _sessions.Count > 0 && _sessions[0].IsSystemSounds;
+
+    /// <summary>Active if any session in the group is active; expired only when every session has expired.</summary>
+    public AudioSessionState State
+    {
+        get
+        {
+            for (int i = 0; i < _sessions.Count; i++)
+            {
+                if (_sessions[i].State == AudioSessionState.Active) return AudioSessionState.Active;
+            }
+            for (int i = 0; i < _sessions.Count; i++)
+            {
+                if (_sessions[i].State != AudioSessionState.Expired) return AudioSessionState.Inactive;
+            }
+            return AudioSessionState.Expired;
+        }
+    }
+
+    public float Volume
+    {
+        get => _sessions.Count > 0 ? _sessions[0].Volume : 0f;
+        set
+        {
+            // Fan out to every session. Each AudioSession.Volume.set already filters near-equal writes
+            // and tolerates COM failures, so no extra guard is needed here.
+            for (int i = 0; i < _sessions.Count; i++) _sessions[i].Volume = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsMuted
+    {
+        get => _sessions.Count > 0 && _sessions[0].IsMuted;
+        set
+        {
+            for (int i = 0; i < _sessions.Count; i++) _sessions[i].IsMuted = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Loudest peak across the grouped sessions. Driven by AudioSession.PeakValue change events.</summary>
+    public float PeakValue
+    {
+        get => _peakValue;
+        private set { if (Math.Abs(value - _peakValue) > 0.001f) { _peakValue = value; OnPropertyChanged(); } }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Raised when the last session is removed so AudioDevice can drop the group from its list.</summary>
+    internal event Action<AudioAppGroup>? Empty;
+
+    public AudioAppGroup(string appId, Dispatcher dispatcher)
+    {
+        AppId = appId;
+        _dispatcher = dispatcher;
+    }
+
+    /// <summary>
+    /// Adds a session to the group. New sessions inherit the group's existing mute state so a freshly
+    /// spawned Discord renderer doesn't unmute an app that the user had silenced.
+    /// </summary>
+    public void AddSession(AudioSession session)
+    {
+        if (_sessions.Count > 0)
+        {
+            // Inherit current mute state. AudioSession.IsMuted.set guards against echo and COM failure
+            // internally, so a best-effort write is safe.
+            try { session.IsMuted = _sessions[0].IsMuted || session.IsMuted; }
+            catch { /* session may already be torn down */ }
+        }
+
+        _sessions.Add(session);
+        session.PropertyChanged += OnSessionPropertyChanged;
+
+        // First session populates the bindable surface; subsequent ones don't change the
+        // representative-derived properties so re-emitting them on every add wastes binding work.
+        if (_sessions.Count == 1)
+        {
+            OnPropertyChanged(nameof(DisplayName));
+            OnPropertyChanged(nameof(Icon));
+            OnPropertyChanged(nameof(Volume));
+            OnPropertyChanged(nameof(IsMuted));
+            OnPropertyChanged(nameof(State));
+        }
+    }
+
+    /// <summary>
+    /// Removes a session from the group. Raises <see cref="Empty"/> when the last session leaves so
+    /// the device can prune the group; otherwise re-emits property change for any representative-derived
+    /// fields since the head session may have shifted.
+    /// </summary>
+    public void RemoveSession(AudioSession session)
+    {
+        if (!_sessions.Remove(session)) return;
+        session.PropertyChanged -= OnSessionPropertyChanged;
+
+        if (_sessions.Count == 0)
+        {
+            Empty?.Invoke(this);
+            return;
+        }
+
+        // Representative session (index 0) may have changed; refresh anything keyed off it.
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(Icon));
+        OnPropertyChanged(nameof(Volume));
+        OnPropertyChanged(nameof(IsMuted));
+        OnPropertyChanged(nameof(State));
+        RefreshAggregatePeak();
+    }
+
+    /// <summary>
+    /// Bg-thread fan-out. Forwards the COM-read into every session so per-session raw peaks
+    /// are populated in parallel off the UI thread. Snapshots the session list under try/catch
+    /// because UI-thread Add/RemoveSession could otherwise tear the enumerator; a torn frame
+    /// just means we miss one 33 ms tick for the affected group.
+    /// </summary>
+    internal void UpdatePeakValueBackground()
+    {
+        if (_disposed) return;
+
+        AudioSession[] sessions;
+        try { sessions = _sessions.ToArray(); }
+        catch { return; }
+
+        for (int i = 0; i < sessions.Length; i++)
+        {
+            try { sessions[i].UpdatePeakValueBackground(); }
+            catch { /* session may have died between callbacks */ }
+        }
+    }
+
+    /// <summary>
+    /// Sample-timer fan-out (UI thread). Forwards into every session so each session arms its
+    /// own lerp from the latest cached raw peak. The group's own <see cref="PeakValue"/> doesn't
+    /// interpolate - it just maxes over the sessions, which are already smoothed individually.
+    /// </summary>
+    internal void OnNewSample(int interpolationSteps)
+    {
+        if (_disposed) return;
+        for (int i = _sessions.Count - 1; i >= 0; i--) _sessions[i].OnNewSample(interpolationSteps);
+    }
+
+    /// <summary>
+    /// Render-timer fan-out. Each session's render tick fires PeakValue PropertyChanged when it
+    /// shifts, which OnSessionPropertyChanged observes to recompute the group max - so this single
+    /// pass is enough to keep both per-session and per-group meters smooth.
+    /// </summary>
+    internal void OnRenderTick()
+    {
+        if (_disposed) return;
+        for (int i = _sessions.Count - 1; i >= 0; i--) _sessions[i].OnRenderTick();
+    }
+
+    private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // Re-emit representative-derived properties so the UI rebinds when an underlying session
+        // mutates (volume changed via Windows Volume Mixer, icon path updated by Discord, etc.).
+        switch (e.PropertyName)
+        {
+            case nameof(AudioSession.Volume):
+                if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
+                    OnPropertyChanged(nameof(Volume));
+                break;
+            case nameof(AudioSession.IsMuted):
+                if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
+                    OnPropertyChanged(nameof(IsMuted));
+                break;
+            case nameof(AudioSession.PeakValue):
+                RefreshAggregatePeak();
+                break;
+            case nameof(AudioSession.Icon):
+                if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
+                    OnPropertyChanged(nameof(Icon));
+                break;
+            case nameof(AudioSession.DisplayName):
+                if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
+                    OnPropertyChanged(nameof(DisplayName));
+                break;
+            case nameof(AudioSession.State):
+                OnPropertyChanged(nameof(State));
+                break;
+        }
+    }
+
+    private void RefreshAggregatePeak()
+    {
+        float max = 0f;
+        for (int i = 0; i < _sessions.Count; i++)
+        {
+            float p = _sessions[i].PeakValue;
+            if (p > max) max = p;
+        }
+        PeakValue = max;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        for (int i = 0; i < _sessions.Count; i++) _sessions[i].PropertyChanged -= OnSessionPropertyChanged;
+        _sessions.Clear();
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
