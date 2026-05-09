@@ -190,29 +190,25 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         SessionInstanceId = sessionInstanceId ?? string.Empty;
         _volumeThrottlerKey = "session:" + SessionInstanceId;
 
-        // Initial display name + icon. AppIconResolver runs the EarTrumpet-style resolution chain:
-        // session-supplied path -> UWP shell namespace -> PE-resource extraction -> shell fallback.
-        // System sounds gets the audiosrv.dll speaker glyph the legacy mixer uses.
-        // Compute AppId in the same branch since both rely on the same process-vs-system-sounds split.
+        // AppId routes the session to its group so it has to be ready synchronously - new sessions
+        // arriving while a name lookup is async would otherwise race the AppId-keyed bucket lookup
+        // in AudioDevice.AddSession. GetProcessImagePath uses kernel32 directly (OpenProcess +
+        // QueryFullProcessImageName); fast (<1ms) so it stays inline.
+        // The slow parts - AppIconResolver and FileVersionInfo lookups - are deferred to a
+        // background task so a session-migration burst (5-10 apps reconnecting after the default
+        // device flips) doesn't pile hundreds of ms of icon-extraction work onto the UI thread.
+        // ReadSessionDisplayName stays synchronous because it's a single COM read; only the
+        // process-based fallback (FileVersionInfo, slow) is deferred.
         if (IsSystemSounds)
         {
             _displayName = "System Sounds";
-            _icon = AppIconResolver.Resolve(_control, pid, isSystemSounds: true);
             AppId = SystemSoundsAppId;
         }
         else
         {
-            // Display-name preference order matches what users see in the OS volume mixer:
-            //   1. The session's own SetDisplayName value (browsers tab title, Discord channel name,
-            //      etc.) - this is what the app wants shown and trumps process metadata.
-            //   2. Process FileVersionInfo.FileDescription via ProcessHelper.
-            //   3. Process exe filename without extension; ultimately "Unknown".
-            // OnDisplayNameChanged only fires on changes after subscribe, so a name set before our
-            // RegisterAudioSessionNotification would be lost without this synchronous read.
             _displayName = ReadSessionDisplayName(_control);
-            if (string.IsNullOrEmpty(_displayName)) _displayName = ProcessHelper.GetDisplayNameForProcess(pid);
+            if (string.IsNullOrEmpty(_displayName)) _displayName = "Unknown";
 
-            _icon = AppIconResolver.Resolve(_control, pid, isSystemSounds: false);
             string? imagePath = ProcessHelper.GetProcessImagePath(pid);
             AppId = string.IsNullOrEmpty(imagePath) ? $"pid:{pid}" : imagePath.ToLowerInvariant();
         }
@@ -234,6 +230,68 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         {
             _watchingProcess = _processExitMonitor.Watch(pid, OnProcessExited);
         }
+
+        // Kick off the deferred icon + display-name resolution. Capture pid into the closure so we
+        // don't read the field after a possible Dispose; ResolveAsyncMetadata guards every COM hop
+        // against a torn-down session.
+        ScheduleAsyncMetadata(pid);
+    }
+
+    /// <summary>
+    /// Spawns the heavy metadata resolution (icon extraction + process FileVersionInfo) off the
+    /// UI thread and dispatches the results back. Called from the constructor after the cheap
+    /// fields are populated; running on the threadpool keeps a session-migration burst from
+    /// stalling the dispatcher.
+    /// </summary>
+    private void ScheduleAsyncMetadata(uint pid)
+    {
+        bool isSystemSounds = IsSystemSounds;
+        _ = Task.Run(() =>
+        {
+            // Each resolution can throw if the session is torn down between scheduling and run -
+            // the AppIconResolver / ProcessHelper calls already swallow most failures; outer catch
+            // is the belt that catches anything (e.g. RCW released).
+            ImageSource? icon = null;
+            string? resolvedName = null;
+
+            try
+            {
+                if (_disposed || _disconnected) return;
+                icon = AppIconResolver.Resolve(_control, pid, isSystemSounds);
+            }
+            catch { /* RCW gone; leave icon null */ }
+
+            // Display-name fallback only runs when the constructor's synchronous read landed on the
+            // "Unknown" placeholder. Avoid FileVersionInfo for system sounds (pid 0 is unreachable
+            // anyway) and for sessions that already named themselves.
+            if (!isSystemSounds)
+            {
+                try
+                {
+                    if (_disposed || _disconnected) return;
+                    if (string.Equals(_displayName, "Unknown", StringComparison.Ordinal))
+                    {
+                        resolvedName = ProcessHelper.GetDisplayNameForProcess(pid);
+                    }
+                }
+                catch { /* leave resolvedName null */ }
+            }
+
+            try
+            {
+                _dispatcher.BeginInvoke(() =>
+                {
+                    if (_disposed || _disconnected) return;
+                    if (icon != null) Icon = icon;
+                    if (!string.IsNullOrEmpty(resolvedName)
+                        && !string.Equals(resolvedName, "Unknown", StringComparison.Ordinal))
+                    {
+                        DisplayName = resolvedName;
+                    }
+                });
+            }
+            catch { /* dispatcher shut down */ }
+        });
     }
 
     /// <summary>

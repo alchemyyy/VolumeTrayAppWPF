@@ -125,7 +125,7 @@ public partial class App
         // can hand back a real volume-glyph icon instead of a null fallback.
         try
         {
-            if (_theme != null) _trayRenderer = new TrayIconRenderer(_theme) { Glyph = GlyphCatalog.VOLUME_SILENT };
+            if (_theme != null) _trayRenderer = new TrayIconRenderer(_theme) { Glyph = GlyphCatalog.PLAYBACK_VOLUME_SILENT };
         }
         catch (Exception ex) { WPFLog.Log($"App.OnStartup: TrayIconRenderer init failed: {ex.Message}"); }
 
@@ -278,13 +278,16 @@ public partial class App
     {
         ContextMenu contextMenu = new();
 
-        // Section 1: every active render endpoint, default rendered bold. Click promotes to default.
-        // Skipped entirely when no devices are present so we don't leave a dangling separator.
-        if (_audioManager != null && _audioManager.Devices.Count > 0)
+        // Section 1: visible devices, sourced from FlyoutDeviceOrdering so the tray menu and the
+        // flyout never disagree on what counts as visible. Same set, same in-flyout order; we just
+        // flip top-to-bottom here because the flyout stacks bottom-up with the default at the
+        // bottom while a tray menu reads top-down with the default at the top.
+        if (_audioManager != null && _appSettings != null)
         {
-            foreach (AudioDevice device in _audioManager.Devices)
-                contextMenu.Items.Add(BuildDeviceMenuItem(device));
-            contextMenu.Items.Add(new Separator());
+            List<AudioDevice> orderedForFlyout = FlyoutDeviceOrdering.Build(_audioManager.Devices, _appSettings);
+            for (int i = orderedForFlyout.Count - 1; i >= 0; i--)
+                contextMenu.Items.Add(BuildDeviceMenuItem(orderedForFlyout[i]));
+            if (orderedForFlyout.Count > 0) contextMenu.Items.Add(new Separator());
         }
 
         MenuItem soundDevicesItem = new() { Header = LocalizationManager.Instance["Tray_SoundDevices"] };
@@ -411,7 +414,7 @@ public partial class App
     /// </summary>
     private void OnTrayLeftMouseDown()
     {
-        if (_volumeFlyout != null && !_volumeFlyout.IsUndocked && _volumeFlyout.HasFocus())
+        if (_volumeFlyout is { IsUndocked: false } && _volumeFlyout.HasFocus())
         {
             _volumeFlyout.Hide();
             _suppressNextTrayClick = true;
@@ -495,15 +498,6 @@ public partial class App
         {
             RequestTrayRefresh();
         }
-    }
-
-    private static string GlyphForVolume(float scalar, bool muted)
-    {
-        if (muted) return GlyphCatalog.VOLUME_MUTE;
-        if (scalar <= 0.001f) return GlyphCatalog.VOLUME_SILENT;
-        if (scalar < 0.34f) return GlyphCatalog.VOLUME_LOW;
-        if (scalar < 0.67f) return GlyphCatalog.VOLUME_MID;
-        return GlyphCatalog.VOLUME_HIGH;
     }
 
     private void OnTrayRightClick(Point point)
@@ -691,19 +685,19 @@ public partial class App
         if (device == null)
         {
             _trayRenderer.IsLightTheme = isLight;
-            _trayRenderer.Glyph = GlyphCatalog.VOLUME_SILENT;
-            _trayRenderer.BackdropGlyph = GlyphCatalog.VOLUME_HIGH;
+            _trayRenderer.Glyph = GlyphCatalog.PLAYBACK_VOLUME_SILENT;
+            _trayRenderer.BackdropGlyph = GlyphCatalog.PLAYBACK_VOLUME_HIGH;
             return (_trayRenderer.CreateIcon(), "No audio device");
         }
 
         _trayRenderer.IsLightTheme = isLight;
-        string foregroundGlyph = GlyphForVolume(device.Volume, device.IsMuted);
+        string foregroundGlyph = GlyphCatalog.GetVolumeTier(device.Volume, device.IsMuted);
         _trayRenderer.Glyph = foregroundGlyph;
         // Full-volume speaker as a dimmed backdrop on every partial state, mirroring how the OS
         // shell paints Wi-Fi: the silhouette of the full glyph stays present so the partial
         // foreground reads as "this much of that". Skip the backdrop when the foreground IS
         // the full glyph - drawing it twice would just darken the icon.
-        _trayRenderer.BackdropGlyph = foregroundGlyph == GlyphCatalog.VOLUME_HIGH ? null : GlyphCatalog.VOLUME_HIGH;
+        _trayRenderer.BackdropGlyph = foregroundGlyph == GlyphCatalog.PLAYBACK_VOLUME_HIGH ? null : GlyphCatalog.PLAYBACK_VOLUME_HIGH;
 
         int percent = (int)Math.Round(device.Volume * 100);
         string tooltip = device.IsMuted

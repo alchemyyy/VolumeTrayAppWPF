@@ -205,6 +205,12 @@
                                      Checked="NavItem_Checked"
                                      Tag="TrayIcon"
                                      GroupName="SettingsNav"/>
+                        <RadioButton x:Name="NavDevices"
+                                     Style="{StaticResource NavItemStyle}"
+                                     Content="{loc:Loc Settings_Common_Tab_Devices}"
+                                     Checked="NavItem_Checked"
+                                     Tag="Devices"
+                                     GroupName="SettingsNav"/>
                         <RadioButton x:Name="NavHotkeys"
                                      Style="{StaticResource NavItemStyle}"
                                      Content="{loc:Loc Settings_Common_Tab_Hotkeys}"
@@ -248,6 +254,9 @@
 
                         <!-- Tray Icon -->
                         <pages:TrayIconPage x:Name="TrayIconSection" Visibility="Collapsed"/>
+
+                        <!-- Devices -->
+                        <pages:DevicesPage x:Name="DevicesSection" Visibility="Collapsed"/>
 
                         <!-- Hotkeys -->
                         <pages:HotkeysPage x:Name="HotkeysSection" Visibility="Collapsed"/>

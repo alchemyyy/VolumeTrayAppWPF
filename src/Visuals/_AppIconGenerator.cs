@@ -22,7 +22,7 @@ public static class AppIconGenerator
 
     // Glyph baked into app.ico. The medium-volume speaker matches the app's identity
     // and stays in sync with the tray icon's mid-band glyph.
-    private const string DefaultIconGlyph = GlyphCatalog.VOLUME_MID;
+    private const string DefaultIconGlyph = GlyphCatalog.PLAYBACK_VOLUME_MID;
 
     /// <summary>
     /// Renders the placeholder glyph at each size in <see cref="IconSizes"/>

@@ -50,6 +50,31 @@ public enum SliderThumbShape
 }
 
 /// <summary>
+/// How each device's row is laid out relative to its per-app session sliders.
+/// AppsAboveDevice: apps on top, device row underneath in the footer band - matches EarTrumpet.
+/// AppsBelowDevice: device row on top, apps underneath. Bottom-up device list ordering applies in
+/// either style; only the per-cell stacking flips.
+/// </summary>
+public enum FlyoutDeviceLayoutStyle
+{
+    AppsAboveDevice,
+    AppsBelowDevice,
+}
+
+/// <summary>
+/// Ordering rule for the device list in the flyout.
+/// StateGrouped: default, default-comms, enabled, disabled, disconnected. Enumeration order breaks ties
+/// inside each bucket. The list is rendered bottom-up so the default device sits closest to the user's
+/// volume slider in the tray.
+/// WindowsEnumeration: untouched MMDevice enumeration order, top-to-bottom matches Windows itself.
+/// </summary>
+public enum FlyoutDeviceSortOrder
+{
+    StateGrouped,
+    WindowsEnumeration,
+}
+
+/// <summary>
 /// A selectable volume-slider thumb glyph, stored with its own display properties
 /// (font family, font size, width, height, horizontal scale) so that differently-proportioned glyphs
 /// render correctly both in the dropdown preview and on the slider itself.
@@ -225,6 +250,38 @@ public class AppSettings
     // General
     public bool RunOnStartup { get; set; } = true;
     public bool Autosave { get; set; } = true;
+    // When the user promotes a device to default through this app (ctrl+click on the device icon
+    // or via the tray menu), also promote it to the communications-role default. Strictly a
+    // side-effect of our own write path; we never observe other apps' default-changes to mirror.
+    public bool SetDefaultCommsToDefault { get; set; } = false;
+
+    // Device visibility filters. The flyout / tray menu honor these when building lists.
+    // Parent off -> children are forced off; child "even if disabled" toggles only matter when the
+    // disabled-devices toggle is OFF (otherwise the disabled devices already show by default).
+    public bool ShowDisabledPlaybackDevices { get; set; } = false;
+    public bool ShowDefaultPlaybackDeviceEvenIfDisabled { get; set; } = true;
+    public bool ShowDefaultCommsPlaybackDeviceEvenIfDisabled { get; set; } = true;
+    public bool ShowDisconnectedPlaybackDevices { get; set; } = false;
+    public bool ShowRecordingDevices { get; set; } = true;
+    public bool ShowDisabledRecordingDevices { get; set; } = false;
+    public bool ShowDefaultRecordingDeviceEvenIfDisabled { get; set; } = true;
+    public bool ShowDefaultCommsRecordingDeviceEvenIfDisabled { get; set; } = true;
+
+    // Registry-only ghost endpoints surfaced via DeviceState.NotPresent: every USB DAC port the user
+    // has ever plugged into, every previous GPU's HDMI outputs, every paired Bluetooth headset that
+    // accumulated in the audio device registry. Off by default so the tray / flyout don't drown in
+    // "Unknown Device" rows; opt-in for users who want to inspect or revive a ghost endpoint.
+    // Cross-flow: applies to both render and capture NotPresent devices in one switch.
+    public bool ShowNotPresentDevices { get; set; } = false;
+
+    // Tray-menu quick links to the classic Sound control-panel tabs.
+    public bool ShowTrayMenuRecordingLink { get; set; } = false;
+    public bool ShowTrayMenuSoundsLink { get; set; } = false;
+    public bool ShowTrayMenuCommunicationsLink { get; set; } = false;
+
+    // Per-device link entries in the tray menu. When on, every visible enabled device gets a
+    // sub-entry that opens the classic device-properties tab (same as ctrl+click on the device icon).
+    public bool ShowTrayMenuDeviceLinks { get; set; } = false;
     // Apply a perceptual (exponential) curve when mapping the slider position to the system volume,
     // so equal slider deltas feel like equal loudness deltas. Off by default; raw linear mapping.
     public bool UseLogarithmicVolumeScale { get; set; } = false;
@@ -470,6 +527,17 @@ public class AppSettings
     public bool FlyoutHasSavedPosition { get; set; } = false;
     public double FlyoutLeft { get; set; } = 0;
     public double FlyoutTop { get; set; } = 0;
+
+    // Flyout device list. FlyoutDeviceLayout governs how each device's row stacks against its apps;
+    // FlyoutDeviceSort orders the device list itself. ShowRecordingDevicesInFlyout is the flyout-side
+    // gate for capture endpoints - it sits under the existing ShowRecordingDevices master so turning
+    // recording off globally also hides them from the flyout. IntermixRecordingWithPlaybackInFlyout
+    // controls whether render and capture devices interleave inside their state buckets or whether
+    // capture devices group together at the top of the list.
+    public FlyoutDeviceLayoutStyle FlyoutDeviceLayout { get; set; } = FlyoutDeviceLayoutStyle.AppsAboveDevice;
+    public FlyoutDeviceSortOrder FlyoutDeviceSort { get; set; } = FlyoutDeviceSortOrder.StateGrouped;
+    public bool ShowRecordingDevicesInFlyout { get; set; } = true;
+    public bool IntermixRecordingWithPlaybackInFlyout { get; set; } = false;
 
     // Empty by default; defaults are seeded by EnsureDefaultHotkeys() after construction or load.
     // The previous in-place initializer collided with XmlSerializer's "append to existing list" behavior:

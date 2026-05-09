@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -52,9 +52,8 @@ public static class WatermarkBehavior
     {
         string? watermark = GetText(tb);
         bool show = !string.IsNullOrEmpty(watermark)
-            && string.IsNullOrEmpty(tb.Text)
-            && !tb.IsKeyboardFocused
-            && tb.IsVisible;
+                    && string.IsNullOrEmpty(tb.Text)
+                    && tb is { IsKeyboardFocused: false, IsVisible: true };
 
         if (show)
             EnsureAdorner(tb, watermark!);

@@ -40,6 +40,14 @@ public static class TimeConstants
     // 30ms ~= 33Hz, smooth for a slider drag without flooding WASAPI on rapid mouse movement.
     public const int VolumeWriteRateDefaultMs = 30;
 
+    // Default-device refresh coalescing dwell. A single device disable / default-change can fire
+    // up to four IMMNotificationClient callbacks (Console / Multimedia / Communications role
+    // transitions plus the state change itself); dwelling this long inside the AsyncThrottler
+    // payload before doing the work, then bailing on HasReplacement, collapses the burst into a
+    // single UpdateAllDefaults pass. 50ms is short enough to feel instant and long enough to
+    // catch the trailing role-change notifications.
+    public const int DefaultsRefreshCoalesceDwellMs = 50;
+
     // Logging
     // 7 days in ms = 7 * 24 * 60 * 60 * 1000 = 604_800_000.
     public const int LogMaxAgeMs = 604_800_000;

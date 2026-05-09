@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
+using VolumeTrayAppWPF.Audio;
 using VolumeTrayAppWPF.Visuals;
 
 namespace VolumeTrayAppWPF.WPF;
@@ -33,10 +35,17 @@ internal sealed class ScalarToPercentConverter : IValueConverter
 }
 
 /// <summary>
-/// Selects the speaker glyph shown next to the device-row slider, using the
-/// <see cref="GlyphCatalog"/> volume tier constants so the tray icon and the
-/// device-row icon stay visually in sync.
-/// Inputs: [0]=Volume(scalar), [1]=IsMuted(bool).
+/// Selects the glyph shown on the per-row mute button.
+///
+/// Render endpoints: speaker tier from <see cref="GlyphCatalog.GetVolumeTier"/> so the tray icon
+/// and the device-row icon stay visually in sync.
+/// Capture endpoints: microphone-themed glyphs - muted wins, then "Listen to this device", else
+/// the plain mic. Volume level is ignored on capture rows (no tiered mic glyph in the catalog).
+///
+/// MultiBinding inputs (in declared order):
+///   [0]=Volume(scalar), [1]=IsMuted, [2]=IsCaptureDevice, [3]=IsListeningToThisDevice.
+/// The capture / listening inputs are optional - omit them and the converter behaves like the
+/// pre-capture render-only version.
 /// </summary>
 internal sealed class VolumeGlyphConverter : IMultiValueConverter
 {
@@ -44,25 +53,101 @@ internal sealed class VolumeGlyphConverter : IMultiValueConverter
 
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
-        if (values.Length < 2) return GlyphCatalog.VOLUME_SILENT;
+        if (values.Length < 2) return GlyphCatalog.PLAYBACK_VOLUME_LOW;
 
-        bool muted = values[1] is bool b && b;
-        if (muted) return GlyphCatalog.VOLUME_MUTE;
+        bool muted = values[1] is true;
+        bool isCapture = values.Length > 2 && values[2] is true;
+        bool isListening = values.Length > 3 && values[3] is true;
 
-        double scalar = values[0] switch
+        if (isCapture)
+        {
+            if (muted) return GlyphCatalog.MICROPHONE_OFF;
+            if (isListening) return GlyphCatalog.MICROPHONE_LISTENING;
+            return GlyphCatalog.MICROPHONE;
+        }
+
+        float scalar = values[0] switch
         {
             float f => f,
-            double d => d,
-            _ => 0.0,
+            double d => (float)d,
+            _ => 0f,
         };
-
-        // Bands chosen so a slight nudge off zero already swaps to "low" - matches Win11 system tray behavior.
-        if (scalar <= 0.001) return GlyphCatalog.VOLUME_SILENT;
-        if (scalar < 0.34)   return GlyphCatalog.VOLUME_LOW;
-        if (scalar < 0.67)   return GlyphCatalog.VOLUME_MID;
-        return GlyphCatalog.VOLUME_HIGH;
+        return GlyphCatalog.PLAYBACK_VOLUME_LOW; //GlyphCatalog.GetVolumeTier(scalar, muted);
     }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Picks the glyph that paints on the device-icon button in the flyout footer. Precedence:
+/// disabled > default > default-comms > enabled. Disabled wins because a disabled default device
+/// (unusual but reachable) shouldn't keep showing the default glyph - the glyph is meant to read
+/// as a state badge at a glance, and "this device isn't currently usable" trumps "this device
+/// would be the default if it were on".
+/// Default wins over default-comms on a device that holds both roles, so the multimedia identity
+/// reads first; comms-only devices still surface their own glyph distinctly.
+/// MultiBinding inputs (in declared order): IsActive, IsDefault, IsDefaultCommunications. Bound this
+/// way so external state flips (mmsys.cpl enable / disable, default-device changes from another app)
+/// re-trigger the converter through the standard PropertyChanged path - a Binding . here would only
+/// re-evaluate on DataContext replacement and miss in-place state mutations.
+/// </summary>
+internal sealed class DeviceIconGlyphConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        bool isActive = values.Length > 0 && values[0] is true;
+        bool isDefault = values.Length > 1 && values[1] is true;
+        bool isDefaultComms = values.Length > 2 && values[2] is true;
+
+        if (!isActive) return GlyphCatalog.PLAYBACK_DEVICE_DISABLED;
+        if (isDefault) return GlyphCatalog.PLAYBACK_DEVICE_DEFAULT;
+        if (isDefaultComms) return GlyphCatalog.PLAYBACK_DEVICE_DEFAULT_COMMS;
+        return GlyphCatalog.PLAYBACK_DEVICE_ENABLED;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Dims the device icon when the bound device is in any non-active state (Disabled / Unplugged /
+/// NotPresent). The visual delta pairs with the glyph so the user reads "this device is here but
+/// not currently usable". Bound to AudioDevice.IsActive directly so external state changes
+/// re-evaluate the binding immediately.
+/// </summary>
+internal sealed class DeviceIconOpacityConverter : IValueConverter
+{
+    private const double DimmedOpacity = 0.4;
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        bool isActive = value is true;
+        return isActive ? 1.0 : DimmedOpacity;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Maps a bool (typically VolumeFlyoutCell.IsLast) to either the shared CornerRadiusFooterBottom
+/// (rounded bottom corners) or zero. Lets the bottom cell of the device stack pick up the same
+/// rounded-corner treatment the old monolithic footer Border used to apply unconditionally.
+/// Reads from the application resources every time so a runtime EnableRoundedCorners flip flows
+/// through without re-binding.
+/// </summary>
+internal sealed class IsLastToFooterCornerRadiusConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        bool isLast = value is true;
+        if (!isLast) return new CornerRadius(0);
+
+        object? resource = System.Windows.Application.Current?.Resources["CornerRadiusFooterBottom"];
+        return resource is CornerRadius radius ? radius : new CornerRadius(0, 0, 8, 8);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }

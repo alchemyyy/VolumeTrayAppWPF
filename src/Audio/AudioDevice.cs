@@ -19,11 +19,16 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private static Guid EventContext { get; } = new(AppIdentity.AppGuid);
 
     private readonly IMMDevice _device;
-    private readonly IAudioEndpointVolume _endpointVolume;
-    private readonly IAudioMeterInformation _endpointMeter;
-    private readonly IAudioSessionManager2 _sessionManager;
-    private readonly EndpointVolumeBridge _volumeBridge;
-    private readonly SessionNotificationBridge _sessionBridge;
+    // Endpoint COM proxies are only available on Active devices; on Disabled / NotPresent /
+    // Unplugged endpoints, IMMDevice.Activate(IAudioEndpointVolume) returns AUDCLNT_E_DEVICE_INVALIDATED.
+    // We still want a managed wrapper for those devices so they can be listed in the tray menu, set
+    // as default, or re-enabled - hence the nullable proxies + UpgradeFromActiveState which retries
+    // activation when the OS reports the device transitioned to Active.
+    private IAudioEndpointVolume? _endpointVolume;
+    private IAudioMeterInformation? _endpointMeter;
+    private IAudioSessionManager2? _sessionManager;
+    private EndpointVolumeBridge? _volumeBridge;
+    private SessionNotificationBridge? _sessionBridge;
     private readonly Dispatcher _dispatcher;
     private readonly AsyncThrottler<string> _volumeThrottler;
     private readonly ProcessExitMonitor _processExitMonitor;
@@ -45,7 +50,20 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private float _volume;
     private bool _isMuted;
     private bool _isDefault;
+    private bool _isDefaultCommunications;
+    private bool _isListeningToThisDevice;
+    private DeviceState _state;
     private bool _disposed;
+
+    // Single-flight gate for IPolicyConfig calls on this device. SetEnabled / SetAsDefault /
+    // SetAsDefaultCommunications all share this flag so a rapid click that would otherwise fire
+    // two overlapping brokered calls into the audio service (each blocking hundreds of ms) drops
+    // the second one outright. The COM call itself is the verification that the state landed -
+    // we clear the flag in the Task.Run's finally block once the audio service has acknowledged
+    // the write.
+    // Interlocked over a Lock since the only operation is "test-and-set with a single-shot
+    // release" - lock/unlock would just be ceremony.
+    private int _policyConfigCallInFlight;
 
     // Step-counter linear-interpolation state for the stereo peak meter. The sample timer's
     // bg-thread half writes _rawPeakMin / _rawPeakMax from one IAudioMeterInformation call (min
@@ -64,6 +82,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private int _interpolationSteps = 1;
 
     public string Id { get; }
+    public EDataFlow DataFlow { get; }
     public ReadOnlyObservableCollection<AudioAppGroup> Groups { get; }
 
     public string FriendlyName
@@ -78,29 +97,164 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         internal set { if (_isDefault != value) { _isDefault = value; OnPropertyChanged(); } }
     }
 
-    // Process-wide IPolicyConfig client. The COM object is cheap and reusable so we cache it across
-    // calls; lazy init keeps non-default-switching sessions from paying the CoCreateInstance cost.
-    private static IPolicyConfig? _policyConfigClient;
+    public bool IsDefaultCommunications
+    {
+        get => _isDefaultCommunications;
+        internal set { if (_isDefaultCommunications != value) { _isDefaultCommunications = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>
+    /// Current device state from MMDevice (Active / Disabled / Unplugged / NotPresent).
+    /// Refreshed in place on every IMMNotificationClient.OnDeviceStateChanged for this id so
+    /// visibility filters in the flyout / tray menu reflect the live OS state without a rebuild.
+    /// Raises PropertyChanged for the derived bool projections (IsActive / IsDisabled / IsDisconnected
+    /// / IsNotPresent) too - they read State synthetically and would otherwise stay stale in the UI
+    /// since WPF only re-evaluates a binding when its bound path raises a notification.
+    /// </summary>
+    public DeviceState State
+    {
+        get => _state;
+        internal set
+        {
+            if (_state == value) return;
+            _state = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsActive));
+            OnPropertyChanged(nameof(IsDisabled));
+            OnPropertyChanged(nameof(IsDisconnected));
+            OnPropertyChanged(nameof(IsNotPresent));
+        }
+    }
+
+    public bool IsActive => (State & DeviceState.Active) != 0;
+    public bool IsDisabled => (State & DeviceState.Disabled) != 0;
+    public bool IsDisconnected => (State & (DeviceState.Unplugged | DeviceState.NotPresent)) != 0;
+
+    // Convenience flag for XAML triggers / converters that need to branch on device direction
+    // without dragging the internal EDataFlow enum into the binding layer.
+    public bool IsCaptureDevice => DataFlow == EDataFlow.eCapture;
+
+    /// <summary>
+    /// Mirrors the Sound Control Panel "Listen to this device" checkbox for capture endpoints.
+    /// Read on construction from the endpoint property store and refreshed in place when the OS
+    /// reports a change via IMMNotificationClient.OnPropertyValueChanged. Always false on render
+    /// endpoints - the underlying property only exists on capture devices.
+    /// </summary>
+    public bool IsListeningToThisDevice
+    {
+        get => _isListeningToThisDevice;
+        private set { if (_isListeningToThisDevice != value) { _isListeningToThisDevice = value; OnPropertyChanged(); } }
+    }
+
+    // Registry-only ghost: the endpoint exists in the user's audio device registry but no driver
+    // is currently loaded for it. NotPresent endpoints accumulate across years of plugged USB DACs,
+    // GPU swaps with HDMI audio, paired Bluetooth headsets, etc. Their FriendlyName usually fails
+    // to resolve and falls back to the literal "Unknown Device".
+    public bool IsNotPresent => (State & DeviceState.NotPresent) != 0;
+
+    // Process-wide IPolicyConfig client. The COM object is cheap and reusable so we cache it
+    // across calls. Lazy keeps non-default-switching sessions from paying the CoCreateInstance
+    // cost; ExecutionAndPublication makes the lazy init safe under concurrent first access from
+    // the threadpool callbacks below.
+    private static readonly Lazy<IPolicyConfig> PolicyConfigClient = new(
+        () => (IPolicyConfig)new PolicyConfigClientComObject(),
+        LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
     /// Promotes this endpoint to the system default. Mirrors mmsys.cpl's "Set as Default Device":
-    /// both Console (system sounds) and Multimedia roles are switched, while the Communications role
-    /// is left alone so the user's separate communication-device choice is preserved.
+    /// both Console (system sounds) and Multimedia roles are switched. Communications-role behavior
+    /// follows the user's <see cref="AppSettings.SetDefaultCommsToDefault"/> preference - on, we mirror
+    /// the multimedia default into the communications role here so a single click ties them together;
+    /// off, the user's separate comms choice is preserved.
+    /// The COM call is brokered to the audio service synchronously and the audio service's reply
+    /// fans out a notification storm before returning - blocks the UI thread for hundreds of ms,
+    /// up to seconds when the default changes. Off-loaded to the threadpool so the dispatcher stays
+    /// responsive; the resulting OnDefaultDeviceChanged notifications coalesce through
+    /// AudioDeviceManager.ScheduleUpdateAllDefaults.
+    /// Drops outright if another IPolicyConfig call is already in flight for this device - a rapid
+    /// follow-up click would otherwise stack a second multi-second blocked threadpool task with no
+    /// way to verify the first one has actually landed.
     /// </summary>
     internal void SetAsDefault()
     {
         if (_disposed || string.IsNullOrEmpty(Id)) return;
 
-        try
+        // Snapshot the closure-captured fields so a Dispose racing with this call can't NRE on
+        // FriendlyName / Id field reads after the wrapper is torn down.
+        string id = Id;
+        string friendlyName = FriendlyName;
+        bool mirrorComms = AppServices.Settings?.SetDefaultCommsToDefault == true;
+
+        RunPolicyConfigCall(client =>
         {
-            _policyConfigClient ??= (IPolicyConfig)new PolicyConfigClientComObject();
-            _policyConfigClient.SetDefaultEndpoint(Id, ERole.eConsole);
-            _policyConfigClient.SetDefaultEndpoint(Id, ERole.eMultimedia);
-        }
-        catch (Exception ex)
+            client.SetDefaultEndpoint(id, ERole.eConsole);
+            client.SetDefaultEndpoint(id, ERole.eMultimedia);
+            if (mirrorComms) client.SetDefaultEndpoint(id, ERole.eCommunications);
+        }, $"SetAsDefault({friendlyName})");
+    }
+
+    /// <summary>
+    /// Promotes this endpoint to the communications-role default only. One-way trip - never reverts
+    /// the user's other-role defaults. Bound to shift+click on the device icon in the flyout.
+    /// Off-loaded to the threadpool and gated by the same single-flight check as SetAsDefault.
+    /// </summary>
+    internal void SetAsDefaultCommunications()
+    {
+        if (_disposed || string.IsNullOrEmpty(Id)) return;
+
+        string id = Id;
+        string friendlyName = FriendlyName;
+
+        RunPolicyConfigCall(client => client.SetDefaultEndpoint(id, ERole.eCommunications),
+            $"SetAsDefaultCommunications({friendlyName})");
+    }
+
+    /// <summary>
+    /// Toggles endpoint visibility through IPolicyConfig. true enables the device (eq. mmsys.cpl
+    /// "Enable"); false disables it. The device list / state callbacks pick up the resulting
+    /// transition through OnDeviceStateChanged - we never tweak State locally.
+    /// Off-loaded to the threadpool because the call blocks while the audio service rewrites its
+    /// endpoint table and fans out the resulting notification storm to every audio-aware app on
+    /// the system - several hundred ms in the common case, multi-second when the default device
+    /// is the one being disabled.
+    /// Single-flight gated so a rapid double-click can't queue a second blocking call before the
+    /// first has been acknowledged.
+    /// </summary>
+    internal void SetEnabled(bool enabled)
+    {
+        if (_disposed || string.IsNullOrEmpty(Id)) return;
+
+        string id = Id;
+        string friendlyName = FriendlyName;
+        short visibility = enabled ? (short)1 : (short)0;
+
+        RunPolicyConfigCall(client => client.SetEndpointVisibility(id, visibility),
+            $"SetEnabled({friendlyName}, {enabled})");
+    }
+
+    /// <summary>
+    /// Single-flight runner for an IPolicyConfig action against this device. Returns immediately
+    /// (drops the action) when another IPolicyConfig call is already in flight for the same device;
+    /// otherwise dispatches the action onto the threadpool, clearing the flag in finally so a
+    /// thrown COM exception doesn't permanently strand the gate.
+    /// The flag is shared across SetEnabled / SetAsDefault / SetAsDefaultCommunications because
+    /// the audio service serializes them anyway and the user-perceived gesture is "any click on
+    /// the device icon counts as one in-flight operation".
+    /// </summary>
+    private void RunPolicyConfigCall(Action<IPolicyConfig> action, string callDescription)
+    {
+        if (Interlocked.CompareExchange(ref _policyConfigCallInFlight, 1, 0) != 0)
         {
-            WPFLog.Log($"AudioDevice.SetAsDefault({FriendlyName}): {ex.Message}");
+            WPFLog.Log($"AudioDevice.{callDescription}: dropped (prior IPolicyConfig call still in flight)");
+            return;
         }
+
+        _ = Task.Run(() =>
+        {
+            try { action(PolicyConfigClient.Value); }
+            catch (Exception ex) { WPFLog.Log($"AudioDevice.{callDescription}: {ex.Message}"); }
+            finally { Interlocked.Exchange(ref _policyConfigCallInFlight, 0); }
+        });
     }
 
     public float Volume
@@ -110,6 +264,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         {
             float clamped = Math.Clamp(value, 0f, 1f);
             if (Math.Abs(clamped - _volume) < 0.0005f) return;
+            // No endpoint volume proxy on disabled / unplugged devices - bail before churning the UI.
+            IAudioEndpointVolume? proxy = _endpointVolume;
+            if (proxy == null) return;
 
             // Update the cached value + raise PropertyChanged synchronously so the slider stays
             // responsive on fast drags. The COM write is queued through the shared throttler with
@@ -124,7 +281,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
                 try
                 {
                     Guid ctx = EventContext;
-                    _endpointVolume.SetMasterVolumeLevelScalar(captured, ref ctx);
+                    proxy.SetMasterVolumeLevelScalar(captured, ref ctx);
                 }
                 catch
                 {
@@ -142,11 +299,13 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         set
         {
             if (_isMuted == value) return;
+            IAudioEndpointVolume? proxy = _endpointVolume;
+            if (proxy == null) return;
 
             try
             {
                 Guid ctx = EventContext;
-                _endpointVolume.SetMute(value, ref ctx);
+                proxy.SetMute(value, ref ctx);
             }
             catch { return; }
 
@@ -169,9 +328,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public AudioDevice(IMMDevice device, Dispatcher dispatcher, AsyncThrottler<string> volumeThrottler, ProcessExitMonitor processExitMonitor)
+    public AudioDevice(IMMDevice device, EDataFlow dataFlow, Dispatcher dispatcher, AsyncThrottler<string> volumeThrottler, ProcessExitMonitor processExitMonitor)
     {
         _device = device;
+        DataFlow = dataFlow;
         _dispatcher = dispatcher;
         _volumeThrottler = volumeThrottler;
         _processExitMonitor = processExitMonitor;
@@ -183,28 +343,110 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         _friendlyName = ResolveFriendlyName(device);
 
-        // Activate the endpoint volume + meter + session manager. Each Activate yields an
-        // IUnknown* the runtime hands us as `object`; the cast here triggers QueryInterface.
-        device.Activate(typeof(IAudioEndpointVolume).GUID, ClsCtx.ALL, IntPtr.Zero, out object volObj);
-        _endpointVolume = (IAudioEndpointVolume)volObj;
+        device.GetState(out uint stateRaw);
+        _state = (DeviceState)stateRaw;
 
-        device.Activate(typeof(IAudioMeterInformation).GUID, ClsCtx.ALL, IntPtr.Zero, out object meterObj);
-        _endpointMeter = (IAudioMeterInformation)meterObj;
+        // Listen-to-this-device is a capture-only feature. Seed the field directly so the bound
+        // UI doesn't need a PropertyChanged round-trip on first paint; runtime changes flow
+        // through RefreshListenToThisDeviceFromStore via the manager's property-change callback.
+        if (DataFlow == EDataFlow.eCapture) _isListeningToThisDevice = ReadListenToThisDeviceFromStore(_device);
 
-        device.Activate(typeof(IAudioSessionManager2).GUID, ClsCtx.ALL, IntPtr.Zero, out object mgrObj);
-        _sessionManager = (IAudioSessionManager2)mgrObj;
+        // Endpoint volume / meter / session manager are only addressable on Active devices.
+        // For Disabled / NotPresent / Unplugged endpoints we keep a thin wrapper alive so the
+        // tray menu and visibility filters can still reason about them; UpgradeFromActiveState
+        // re-tries activation when the OS later reports the device active.
+        if (IsActive) TryActivateProxies();
+    }
 
-        _endpointVolume.GetMasterVolumeLevelScalar(out _volume);
-        _endpointVolume.GetMute(out _isMuted);
+    /// <summary>
+    /// Re-read PKEY_AudioEndpoint_ListenToThisDevice from the property store and update
+    /// <see cref="IsListeningToThisDevice"/>. No-op on render endpoints. Invoked by the manager
+    /// when OnPropertyValueChanged fires for the listen key on this device id.
+    /// </summary>
+    internal void RefreshListenToThisDeviceFromStore()
+    {
+        if (_disposed || DataFlow != EDataFlow.eCapture) return;
+        IsListeningToThisDevice = ReadListenToThisDeviceFromStore(_device);
+    }
 
-        _volumeBridge = new EndpointVolumeBridge(this);
-        _endpointVolume.RegisterControlChangeNotify(_volumeBridge);
+    private static bool ReadListenToThisDeviceFromStore(IMMDevice device)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            PROPERTYKEY key = PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice;
+            store.GetValue(ref key, out PROPVARIANT pv);
+            try
+            {
+                // Canonical storage is VT_UI4 (registry DWORD). Be permissive on VT_I4 / VT_BOOL
+                // since we can't formally type-check an undocumented property; VT_EMPTY = absent
+                // = listen has never been toggled = off.
+                return pv.vt switch
+                {
+                    PROPVARIANT.VT_UI4 => pv.GetUInt32() != 0,
+                    PROPVARIANT.VT_I4 => pv.p1.ToInt64() != 0,
+                    PROPVARIANT.VT_BOOL => ((short)(pv.p1.ToInt64() & 0xFFFF)) != 0,
+                    _ => false,
+                };
+            }
+            finally { Ole32.PropVariantClear(ref pv); }
+        }
+        catch { return false; }
+        finally { if (store != null) Marshal.FinalReleaseComObject(store); }
+    }
 
-        _sessionBridge = new SessionNotificationBridge(this);
-        _sessionManager.RegisterSessionNotification(_sessionBridge);
+    /// <summary>
+    /// Attempts the IAudioEndpointVolume / IAudioMeterInformation / IAudioSessionManager2 activation
+    /// chain. All three live behind the same WASAPI activation gate, so a single failure path covers
+    /// disconnect / disable / unplug. Idempotent - skips fields that are already populated.
+    /// </summary>
+    private void TryActivateProxies()
+    {
+        if (_endpointVolume != null) return;
 
-        // Initial enumeration. New sessions arrive via OnSessionCreated thereafter.
-        EnumerateExistingSessions();
+        try
+        {
+            int hr = _device.Activate(typeof(IAudioEndpointVolume).GUID, ClsCtx.ALL, IntPtr.Zero, out object volObj);
+            if (hr < 0 || volObj == null) return;
+            IAudioEndpointVolume endpointVolume = (IAudioEndpointVolume)volObj;
+
+            _device.Activate(typeof(IAudioMeterInformation).GUID, ClsCtx.ALL, IntPtr.Zero, out object meterObj);
+            _device.Activate(typeof(IAudioSessionManager2).GUID, ClsCtx.ALL, IntPtr.Zero, out object mgrObj);
+
+            _endpointVolume = endpointVolume;
+            _endpointMeter = (IAudioMeterInformation)meterObj;
+            _sessionManager = (IAudioSessionManager2)mgrObj;
+
+            endpointVolume.GetMasterVolumeLevelScalar(out _volume);
+            endpointVolume.GetMute(out _isMuted);
+            // Notify bindings that volume/mute now have real values - the wrapper may have lived as
+            // an inactive shell up to this point and the bound UI is showing the 0/false defaults.
+            OnPropertyChanged(nameof(Volume));
+            OnPropertyChanged(nameof(IsMuted));
+
+            _volumeBridge = new EndpointVolumeBridge(this);
+            endpointVolume.RegisterControlChangeNotify(_volumeBridge);
+
+            _sessionBridge = new SessionNotificationBridge(this);
+            _sessionManager.RegisterSessionNotification(_sessionBridge);
+
+            EnumerateExistingSessions();
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.TryActivateProxies({FriendlyName}): {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Re-runs the endpoint activation chain when the OS reports the device transitioned to
+    /// Active. No-op if the proxies are already wired (the device was already active). Called by
+    /// AudioDeviceManager from its OnDeviceStateChanged path when newState includes the Active bit.
+    /// </summary>
+    internal void UpgradeFromActiveState()
+    {
+        if (_endpointVolume == null) TryActivateProxies();
     }
 
     /// <summary>
@@ -219,10 +461,12 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     internal void UpdatePeakValueBackground(bool unified, int biasMultiplier)
     {
         if (_disposed) return;
+        IAudioMeterInformation? meter = _endpointMeter;
+        if (meter == null) return;
 
         try
         {
-            MeterReader.ReadStereoPeaks(_endpointMeter, unified, biasMultiplier, out float minPeak, out float maxPeak);
+            MeterReader.ReadStereoPeaks(meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
             _rawPeakMin = minPeak;
             _rawPeakMax = maxPeak;
         }
@@ -305,10 +549,13 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
     private void EnumerateExistingSessions()
     {
+        IAudioSessionManager2? mgr = _sessionManager;
+        if (mgr == null) return;
+
         IAudioSessionEnumerator? enumerator = null;
         try
         {
-            _sessionManager.GetSessionEnumerator(out enumerator);
+            mgr.GetSessionEnumerator(out enumerator);
             enumerator.GetCount(out int count);
             for (int i = 0; i < count; i++)
             {
@@ -455,8 +702,14 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // SetMasterVolumeLevelScalar on the about-to-be-released RCW.
         try { _volumeThrottler.Drop(_volumeThrottlerKey); } catch { }
 
-        try { _endpointVolume.UnregisterControlChangeNotify(_volumeBridge); } catch { }
-        try { _sessionManager.UnregisterSessionNotification(_sessionBridge); } catch { }
+        if (_endpointVolume != null && _volumeBridge != null)
+        {
+            try { _endpointVolume.UnregisterControlChangeNotify(_volumeBridge); } catch { }
+        }
+        if (_sessionManager != null && _sessionBridge != null)
+        {
+            try { _sessionManager.UnregisterSessionNotification(_sessionBridge); } catch { }
+        }
 
         // Tear down every group's sessions, then the groups themselves. Each group disposes its
         // session subscriptions; we still own the AudioSession lifecycle (Dispose/Disconnect handlers).

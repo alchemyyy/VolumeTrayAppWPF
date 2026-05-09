@@ -39,5 +39,57 @@
                           Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_Flyout_DeviceList_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_DeviceLayout_Title}"
+                            Description="{loc:Loc Settings_Flyout_DeviceLayout_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="FlyoutDeviceLayoutCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="FlyoutDeviceLayout" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="AppsAboveDevice" Content="{loc:Loc Settings_Flyout_DeviceLayout_AppsAbove}"/>
+                    <ComboBoxItem Tag="AppsBelowDevice" Content="{loc:Loc Settings_Flyout_DeviceLayout_AppsBelow}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_DeviceSort_Title}"
+                            Description="{loc:Loc Settings_Flyout_DeviceSort_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="FlyoutDeviceSortCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="FlyoutDeviceSort" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="StateGrouped" Content="{loc:Loc Settings_Flyout_DeviceSort_StateGrouped}"/>
+                    <ComboBoxItem Tag="WindowsEnumeration" Content="{loc:Loc Settings_Flyout_DeviceSort_WindowsEnumeration}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowRecordingDevices_Title}"
+                            Description="{loc:Loc Settings_Flyout_ShowRecordingDevices_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowRecordingDevicesInFlyoutToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowRecordingDevicesInFlyout"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="IntermixRecordingCard"
+                            Title="{loc:Loc Settings_Flyout_IntermixRecording_Title}"
+                            Description="{loc:Loc Settings_Flyout_IntermixRecording_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="IntermixRecordingWithPlaybackInFlyoutToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="IntermixRecordingWithPlaybackInFlyout"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
     </StackPanel>
 </UserControl>

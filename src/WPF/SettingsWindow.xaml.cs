@@ -16,6 +16,7 @@ public enum SettingsTab
     General,
     Flyout,
     TrayIcon,
+    Devices,
     Hotkeys,
     Theme,
     About,
@@ -46,7 +47,7 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
         ContentRendered += (_, _) =>
         {
             RadioButton? checkedNav = new[] {
-                NavGeneral, NavFlyout, NavTrayIcon, NavHotkeys, NavTheme, NavAbout
+                NavGeneral, NavFlyout, NavTrayIcon, NavDevices, NavHotkeys, NavTheme, NavAbout
             }.FirstOrDefault(rb => rb.IsChecked == true);
             checkedNav?.Focus();
         };
@@ -251,6 +252,7 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
             SettingsTab.General => NavGeneral,
             SettingsTab.Flyout => NavFlyout,
             SettingsTab.TrayIcon => NavTrayIcon,
+            SettingsTab.Devices => NavDevices,
             SettingsTab.Hotkeys => NavHotkeys,
             SettingsTab.Theme => NavTheme,
             SettingsTab.About => NavAbout,
@@ -265,6 +267,7 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
         GeneralSection.LoadFromSettings(_settings);
         FlyoutSection.LoadFromSettings(_settings);
         TrayIconSection.LoadFromSettings(_settings);
+        DevicesSection.LoadFromSettings(_settings);
         HotkeysSection.LoadFromSettings(_settings);
         ThemeSection.LoadFromSettings(_settings, this);
     }
@@ -289,6 +292,7 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
         GeneralSection.Visibility = Visibility.Collapsed;
         FlyoutSection.Visibility = Visibility.Collapsed;
         TrayIconSection.Visibility = Visibility.Collapsed;
+        DevicesSection.Visibility = Visibility.Collapsed;
         HotkeysSection.Visibility = Visibility.Collapsed;
         ThemeSection.Visibility = Visibility.Collapsed;
         AboutSection.Visibility = Visibility.Collapsed;
@@ -298,6 +302,7 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
             case "General": GeneralSection.Visibility = Visibility.Visible; break;
             case "Flyout": FlyoutSection.Visibility = Visibility.Visible; break;
             case "TrayIcon": TrayIconSection.Visibility = Visibility.Visible; break;
+            case "Devices": DevicesSection.Visibility = Visibility.Visible; break;
             case "Hotkeys": HotkeysSection.Visibility = Visibility.Visible; break;
             case "Theme": ThemeSection.Visibility = Visibility.Visible; break;
             case "About": AboutSection.Visibility = Visibility.Visible; break;

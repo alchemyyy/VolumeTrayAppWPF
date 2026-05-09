@@ -17,8 +17,9 @@ using VolumeTrayAppWPF.WPF.Utils;
 namespace VolumeTrayAppWPF.WPF;
 
 /// <summary>
-/// Tray flyout that surfaces per-app session volumes plus the default-device endpoint volume.
-/// DataContext is the window itself; properties below are the bindable surface area.
+/// Tray flyout that lists every visible audio endpoint as a stacked cell, each cell containing the
+/// device's per-app session sliders plus its own device-row volume slider.
+/// DataContext is the window itself; the Cells collection is the bindable surface for the device list.
 ///
 /// Lifecycle: constructed once at startup with a long-lived <see cref="AudioDeviceManager"/>.
 /// The host calls <see cref="Show"/> on tray click; <see cref="OnDeactivated"/> hides on focus loss.
@@ -43,31 +44,42 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // sound consistent. Falls back to silence if the file is missing.
     private const string AppFeedbackWavName = "Windows Background.wav";
 
+    // Property names on AudioDevice that affect the cell list ordering. A change to any of these on
+    // any device triggers a full rebuild so the StateGrouped sort picks up the new bucketing.
+    private static readonly HashSet<string> OrderingPropertyNames = new(StringComparer.Ordinal)
+    {
+        nameof(AudioDevice.IsDefault),
+        nameof(AudioDevice.IsDefaultCommunications),
+        nameof(AudioDevice.State),
+    };
+
     private readonly AudioDeviceManager _deviceManager;
-    // The visible list aggregates groups across every active render device, filtered to skip system
-    // sounds and expired groups. Cross-device aggregation is required because Discord (and most
-    // comms apps) routes voice to the user's Communications-role default endpoint, which Windows
-    // lets the user point at a different device than the Multimedia-role default. Watching only the
-    // multimedia default - the previous behavior - hid Discord and any other comms-routed app.
-    // Dedup by AppId picks the first device-level group per app so a user with the same app live on
-    // two endpoints sees one row instead of two.
-    // Type is AudioAppGroup so the slider DataTemplate fans volume changes out to all child sessions
-    // for apps like Discord that spawn several child processes.
-    private readonly ObservableCollection<AudioAppGroup> _sessions = [];
+
+    // Visible device cells in display order (top-to-bottom). Bound to the outer ItemsControl.
+    private readonly ObservableCollection<VolumeFlyoutCell> _cells = [];
 
     // Our own AppId, computed once with the same lower-cased-image-path scheme AudioSession uses.
     // Per-app slider feedback (PlayAppVolumeFeedback) routes through SoundPlayer / winmm, which
-    // registers an audio session under our PID; without this filter, the flyout would show its own
+    // registers an audio session under our PID; without this filter, each cell would show its own
     // slider transiently while sound is playing. Null means we couldn't resolve our image path -
     // fall back to no filtering rather than guessing.
     private readonly string? _ownAppId;
 
-    // Devices we have a Groups.CollectionChanged subscription on. Kept separately so add / remove
+    // Devices we have a PropertyChanged subscription on. Kept separately so add / remove
     // notifications from AudioDeviceManager.Devices can sync subscriptions without scanning twice.
     private readonly HashSet<AudioDevice> _subscribedDevices = new();
-    private AudioDevice? _trackedDevice;
+
+    // Cell wrappers indexed by device for incremental rebuild without disposing the wrapper on every
+    // ordering change. Pruning happens when the device drops out of the visible list.
+    private readonly Dictionary<AudioDevice, VolumeFlyoutCell> _cellsByDevice = new();
+
     private HwndSource? _hwndSource;
     private readonly AppSettings? _appSettings;
+
+    // The layout style at the time the cells were last rebuilt. A flip in
+    // FlyoutDeviceLayout requires force-rebuilding the cells (the DataTemplateSelector caches its
+    // selection per-ContentPresenter, so we have to recreate the visuals to swap templates).
+    private FlyoutDeviceLayoutStyle _renderedLayout;
 
     // Currently-captured slider during a track click drag. Null when no drag is in flight or the
     // active gesture is a thumb drag (which WPF handles natively).
@@ -98,22 +110,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private bool _isDraggingFromBackground;
     private readonly WindowDragHelper _dragHelper;
 
-    public ReadOnlyObservableCollection<AudioAppGroup> Sessions { get; }
+    /// <summary>The visible device cells in display order. One cell per visible audio endpoint.</summary>
+    public ReadOnlyObservableCollection<VolumeFlyoutCell> Cells { get; }
 
-    public AudioDevice? DefaultDevice
-    {
-        get => _trackedDevice;
-        private set
-        {
-            if (ReferenceEquals(_trackedDevice, value)) return;
-            _trackedDevice = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(HasDefaultDevice));
-        }
-    }
-
-    public bool HasDefaultDevice => _trackedDevice != null;
-    public bool HasSessions => _sessions.Count > 0;
+    /// <summary>True when at least one cell is visible. Drives the empty-state overlay.</summary>
+    public bool HasCells => _cells.Count > 0;
 
     /// <summary>
     /// True while the flyout is in user-positioned (undocked) mode.
@@ -149,10 +150,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         _deviceManager = deviceManager;
         _appSettings = AppServices.Settings;
-        Sessions = new ReadOnlyObservableCollection<AudioAppGroup>(_sessions);
+        Cells = new ReadOnlyObservableCollection<VolumeFlyoutCell>(_cells);
 
         // Resolve our own AppId once. Matches AudioSession's image-path-lower-invariant scheme
-        // so an exact string compare in RebuildSessionList suffices.
+        // so an exact string compare in the cell filter suffices.
         string? ownPath = ProcessHelper.GetProcessImagePath((uint)Environment.ProcessId);
         _ownAppId = string.IsNullOrEmpty(ownPath) ? null : ownPath.ToLowerInvariant();
 
@@ -161,11 +162,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
         _dragHelper = new WindowDragHelper(this);
 
-        // Restore the undocked state from settings.
-        // Requires a saved position too, otherwise the first session after the user toggled the flag
-        // would have nowhere to position the window.
-        // Honors the AllowFlyoutUndock master gate so disabling the feature can't leave us undocked,
-        // and RestoreFlyoutUndockedOnStartup so users can opt out of session restoration.
         IsUndocked = _appSettings is
         {
             FlyoutUndocked: true,
@@ -174,31 +170,26 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             RestoreFlyoutUndockedOnStartup: true
         };
 
-        _deviceManager.PropertyChanged += OnDeviceManagerPropertyChanged;
-        AttachToDevice(_deviceManager.DefaultDevice);
+        _renderedLayout = _appSettings?.FlyoutDeviceLayout ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
 
-        // Subscribe to the manager's device list and to every existing device's group list so the
-        // session aggregation stays live. Devices already created during AudioDeviceManager's
-        // constructor are present here, so SyncDeviceSubscriptions seeds the subscriptions before
-        // the first RebuildSessionList.
         ((INotifyCollectionChanged)_deviceManager.Devices).CollectionChanged += OnDevicesCollectionChanged;
         SyncDeviceSubscriptions();
-        RebuildSessionList();
+        RebuildCellList(forceFullRebuild: false);
 
         if (_appSettings != null) _appSettings.Changed += OnAppSettingsChanged;
 
         SourceInitialized += OnFlyoutSourceInitialized;
         Closed += OnFlyoutClosed;
 
-        // Pre-load the per-app feedback wav so the first slider interaction doesn't pay the file read.
         EnsureAppFeedbackData();
     }
 
     /// <summary>
-    /// Master-gate enforcement and binding refresh.
-    /// Pulls the flyout back to docked when AllowFlyoutUndock flips off mid-session so the user isn't
-    /// stranded with a free-floating window and no visible button to redock it. Also re-fires the
-    /// AllowFlyoutUndock notification so the undock-button visibility updates without waiting for a reopen.
+    /// Settings change handler.
+    /// Pulls the flyout back to docked when AllowFlyoutUndock flips off mid-session, then rebuilds
+    /// the cell list so any sort / layout / visibility setting change is reflected without waiting
+    /// for the next device event. A layout flip force-rebuilds the cells so the DataTemplateSelector
+    /// picks up the new mode.
     /// </summary>
     private void OnAppSettingsChanged()
     {
@@ -206,6 +197,13 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         {
             if (_isUndocked && _appSettings?.AllowFlyoutUndock == false) Redock();
             OnPropertyChanged(nameof(AllowFlyoutUndock));
+
+            FlyoutDeviceLayoutStyle currentLayout = _appSettings?.FlyoutDeviceLayout
+                ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
+            bool layoutChanged = currentLayout != _renderedLayout;
+            _renderedLayout = currentLayout;
+
+            RebuildCellList(forceFullRebuild: layoutChanged);
         });
     }
 
@@ -235,15 +233,15 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             _hwndSource.RemoveHook(WindowProcHook);
             _hwndSource = null;
         }
-        _deviceManager.PropertyChanged -= OnDeviceManagerPropertyChanged;
         ((INotifyCollectionChanged)_deviceManager.Devices).CollectionChanged -= OnDevicesCollectionChanged;
-        foreach (AudioDevice d in _subscribedDevices)
-        {
-            ((INotifyCollectionChanged)d.Groups).CollectionChanged -= OnDeviceGroupsChanged;
-        }
+        foreach (AudioDevice d in _subscribedDevices) d.PropertyChanged -= OnDevicePropertyChanged;
         _subscribedDevices.Clear();
         if (_appSettings != null) _appSettings.Changed -= OnAppSettingsChanged;
-        DetachFromDevice();
+
+        foreach (VolumeFlyoutCell cell in _cellsByDevice.Values) cell.Dispose();
+        _cellsByDevice.Clear();
+        _cells.Clear();
+
         if (_currentAppSound != null)
         {
             try { _currentAppSound.Stop(); _currentAppSound.Dispose(); }
@@ -253,40 +251,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _wavTemplate = null;
     }
 
-    private void OnDeviceManagerPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(AudioDeviceManager.DefaultDevice))
-            AttachToDevice(_deviceManager.DefaultDevice);
-    }
-
     /// <summary>
-    /// Update which device the master volume slider in the flyout header binds to. Does NOT touch
-    /// the session list - that aggregates across every device via the Devices subscription path.
-    /// Called at startup with the multimedia default and again on every OnDefaultDeviceChanged.
-    /// </summary>
-    private void AttachToDevice(AudioDevice? device)
-    {
-        if (ReferenceEquals(_trackedDevice, device)) return;
-        DefaultDevice = device;
-    }
-
-    /// <summary>
-    /// Tear down state owned by the flyout when the host is shutting down. Session-list subscriptions
-    /// are cleared in OnFlyoutClosed; this method now only resets the tracked device reference.
-    /// </summary>
-    private void DetachFromDevice()
-    {
-        DefaultDevice = null;
-        _sessions.Clear();
-        OnPropertyChanged(nameof(HasSessions));
-    }
-
-    /// <summary>
-    /// Sync our per-device Groups subscription set against the manager's current device list.
-    /// Called once at startup to seed subscriptions to existing devices, and again on every Devices
-    /// CollectionChanged to add subs for new endpoints / drop subs for removed ones. Disposed
-    /// AudioDevice instances stop firing Groups events, so leaving a stale handler is harmless,
-    /// but we explicitly unsubscribe to avoid keeping the device alive via the delegate chain.
+    /// Sync our per-device PropertyChanged subscription set against the manager's current device list.
     /// </summary>
     private void SyncDeviceSubscriptions()
     {
@@ -298,7 +264,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         {
             if (!liveSet.Contains(d))
             {
-                ((INotifyCollectionChanged)d.Groups).CollectionChanged -= OnDeviceGroupsChanged;
+                d.PropertyChanged -= OnDevicePropertyChanged;
                 _subscribedDevices.Remove(d);
             }
         }
@@ -307,60 +273,101 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         for (int i = 0; i < live.Length; i++)
         {
             AudioDevice d = live[i];
-            if (_subscribedDevices.Add(d))
-            {
-                ((INotifyCollectionChanged)d.Groups).CollectionChanged += OnDeviceGroupsChanged;
-            }
+            if (_subscribedDevices.Add(d)) d.PropertyChanged += OnDevicePropertyChanged;
         }
     }
 
     private void OnDevicesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncDeviceSubscriptions();
-        RebuildSessionList();
-        if (IsVisible) PositionNearTray();
-    }
-
-    private void OnDeviceGroupsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        RebuildSessionList();
-
-        // SizeToContent reflows automatically; re-anchor so the bottom edge stays at the work-area corner.
+        RebuildCellList(forceFullRebuild: false);
         if (IsVisible) PositionNearTray();
     }
 
     /// <summary>
-    /// Aggregate the visible session list from every active render device. Filters out system sounds
-    /// and groups whose state is Expired (every session inside has expired). Dedup by AppId across
-    /// devices ensures an app live on two endpoints (rare - usually only when the user has the same
-    /// app pinned to multiple outputs) shows as a single row driven by the first device's group.
+    /// Per-device PropertyChanged. Filtered to ordering-affecting properties so a volume drag or
+    /// peak-meter tick doesn't churn the cell list. The rebuild is cheap (single pass of
+    /// FlyoutDeviceOrdering.Build); the filter exists primarily to suppress a UI ripple on every
+    /// peak-sample callback.
     /// </summary>
-    private void RebuildSessionList()
+    private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        _sessions.Clear();
+        if (e.PropertyName == null || !OrderingPropertyNames.Contains(e.PropertyName)) return;
+        RebuildCellList(forceFullRebuild: false);
+    }
 
-        HashSet<string> seenAppIds = new(StringComparer.Ordinal);
-        foreach (AudioDevice device in _deviceManager.Devices)
+    /// <summary>
+    /// Recomputes the visible cell list from the manager's device list and the current settings.
+    /// Diff-based - existing cells are kept (preserving their internal state); only cells for
+    /// removed-from-visible devices are disposed. <paramref name="forceFullRebuild"/> wipes the
+    /// list and rebuilds from scratch so the DataTemplateSelector re-evaluates each cell - used
+    /// when FlyoutDeviceLayout flips mid-session.
+    /// </summary>
+    private void RebuildCellList(bool forceFullRebuild)
+    {
+        if (_appSettings == null)
         {
-            foreach (AudioAppGroup g in device.Groups)
+            // Without settings, fall back to listing every render device in enumeration order.
+            ApplyOrderedDevices(_deviceManager.Devices.Where(d => d.DataFlow == Audio.Interop.EDataFlow.eRender).ToList(),
+                forceFullRebuild);
+            return;
+        }
+
+        List<AudioDevice> ordered = FlyoutDeviceOrdering.Build(_deviceManager.Devices, _appSettings);
+        ApplyOrderedDevices(ordered, forceFullRebuild);
+    }
+
+    private void ApplyOrderedDevices(List<AudioDevice> ordered, bool forceFullRebuild)
+    {
+        if (forceFullRebuild)
+        {
+            // Layout flipped - DataTemplateSelector caches per-ContentPresenter, so we have to
+            // tear the visuals down to swap templates.
+            _cells.Clear();
+        }
+
+        // Step 1: prune cells whose device left the visible list.
+        HashSet<AudioDevice> orderedSet = new(ordered);
+        foreach (KeyValuePair<AudioDevice, VolumeFlyoutCell> kv in _cellsByDevice.ToArray())
+        {
+            if (!orderedSet.Contains(kv.Key))
             {
-                if (g.State == Audio.Interop.AudioSessionState.Expired) continue;
-                if (g.IsSystemSounds) continue;
-                if (g.Sessions.Count == 0) continue;
-                if (_ownAppId != null && string.Equals(g.AppId, _ownAppId, StringComparison.Ordinal)) continue;
-                if (!seenAppIds.Add(g.AppId)) continue;
-                _sessions.Add(g);
+                _cells.Remove(kv.Value);
+                kv.Value.Dispose();
+                _cellsByDevice.Remove(kv.Key);
             }
         }
 
-        OnPropertyChanged(nameof(HasSessions));
+        // Step 2: ensure each ordered device has a cell, and place cells in target order.
+        for (int targetIndex = 0; targetIndex < ordered.Count; targetIndex++)
+        {
+            AudioDevice device = ordered[targetIndex];
+            if (!_cellsByDevice.TryGetValue(device, out VolumeFlyoutCell? cell))
+            {
+                cell = new VolumeFlyoutCell(device, _ownAppId);
+                _cellsByDevice[device] = cell;
+            }
+
+            int currentIndex = _cells.IndexOf(cell);
+            if (currentIndex == targetIndex) continue;
+
+            if (currentIndex < 0) _cells.Insert(targetIndex, cell);
+            else _cells.Move(currentIndex, targetIndex);
+        }
+
+        // Step 3: stamp positional flags on every cell.
+        for (int i = 0; i < _cells.Count; i++)
+        {
+            _cells[i].IsFirst = i == 0;
+            _cells[i].IsLast = i == _cells.Count - 1;
+        }
+
+        OnPropertyChanged(nameof(HasCells));
     }
 
     /// <summary>
-    /// Positions the flyout. Anchors to the bottom-right of the working area when docked,
-    /// or restores the user's saved undocked coordinates when undocked. The docked corner is always
-    /// recomputed and cached so a subsequent drag's snap-back check has the right reference even
-    /// if Window dimensions changed.
+    /// Positions the flyout. Anchors to the bottom-right of the working area when docked, or
+    /// restores the user's saved undocked coordinates when undocked.
     /// </summary>
     public void PositionNearTray()
     {
@@ -381,12 +388,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// Snapshots the docked corner and the snap tolerance without moving the window.
-    /// Called at drag start so the snap-back-on-release check uses a stable reference even if the user
-    /// drags across a DPI boundary or the working area shifts mid-gesture. Returns the snap tolerance
-    /// so the drag helper can be armed in one call without re-reading WorkArea.
-    /// </summary>
     private double CaptureDockedPosition()
     {
         Rect workArea = SystemParameters.WorkArea;
@@ -396,12 +397,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         return Math.Min(workArea.Width, workArea.Height) * SnapTolerancePercent;
     }
 
-    /// <summary>
-    /// Returns the flyout to docked behavior.
-    /// Called on tray click, on undock-button click while undocked, and after a drag releases inside
-    /// the snap zone. Doesn't clear the saved position: a subsequent click of the undock button
-    /// restores the user's last manual placement.
-    /// </summary>
     public void Redock()
     {
         IsUndocked = false;
@@ -413,10 +408,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         PositionNearTray();
     }
 
-    /// <summary>
-    /// Click-only undock path. Flips state and moves the window to the last saved position.
-    /// With no saved position yet, the window stays where it is so the user can drag it from there.
-    /// </summary>
     private void UndockToSavedPosition()
     {
         IsUndocked = true;
@@ -433,10 +424,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// Persists the window's current position as the saved undocked location.
-    /// Called on drag-release outside the snap zone for both the button-drag and background-drag gestures.
-    /// </summary>
     private void SaveUndockedPosition()
     {
         if (_appSettings == null) return;
@@ -461,10 +448,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Shows the flyout without taking foreground/keyboard focus from the caller.
-    /// Used when SettingsWindow re-opens the flyout on its own activation:
-    /// activating the flyout would deactivate settings and trigger the paired hide,
-    /// racing into a flicker loop.
+    /// Shows the flyout without taking foreground/keyboard focus from the caller. Used when
+    /// SettingsWindow re-opens the flyout on its own activation.
     /// </summary>
     public void ShowWithoutActivating()
     {
@@ -485,13 +470,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         base.Hide();
     }
 
-    /// <summary>
-    /// True when the OS-level foreground window is this flyout's HWND.
-    /// Uses Win32 GetForegroundWindow rather than Window.IsActive:
-    /// when called from another window's Deactivated handler in the same process,
-    /// the receiving window's WM_ACTIVATE may not have been pumped yet so its IsActive is still false
-    /// even though the OS has already foregrounded it.
-    /// </summary>
+    /// <summary>True when the OS-level foreground window is this flyout's HWND.</summary>
     public bool HasFocus()
     {
         IntPtr hwnd = new WindowInteropHelper(this).Handle;
@@ -501,8 +480,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
-        // Height changes are common - sessions arrive / depart, device row hides when no default exists.
-        // Re-anchor so the bottom edge stays pinned to the work-area corner.
+        // Height changes are common as cells arrive / depart - re-anchor so the bottom edge stays pinned.
         if (IsVisible && sizeInfo.HeightChanged) PositionNearTray();
     }
 
@@ -510,30 +488,23 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         base.OnDeactivated(e);
 
-        // Undocked acts like a real window - stays open across focus changes.
-        // The user dismisses it by redocking (button or tray click), at which point the docked path's
-        // auto-hide-on-deactivate behavior resumes.
+        // Undocked acts like a real window - stays open across focus changes. The user dismisses it
+        // by redocking (button or tray click), at which point the docked path's auto-hide-on-deactivate
+        // behavior resumes.
         if (_isUndocked) return;
 
         SettingsWindow? settings = null;
         foreach (Window window in System.Windows.Application.Current.Windows)
             if (window is SettingsWindow s) { settings = s; break; }
 
-        // No settings window in play. Original behavior: hide immediately.
         if (settings == null)
         {
             HideAndNotify();
             return;
         }
 
-        // Fast path: settings already foreground (user clicked settings). Keep open.
         if (settings.HasFocus()) return;
 
-        // Activation transition still in flight.
-        // Race settings.Activated against an Input-priority dispatcher tick:
-        // if focus lands on settings, keep open. Otherwise hide.
-        // Mirrors the symmetric pattern in SettingsWindow.OnDeactivated so neither side relies on a Background wait
-        // that can stall behind unrelated dispatcher work.
         bool keep = false;
         EventHandler? onActivated = null;
         onActivated = (_, _) =>
@@ -559,9 +530,9 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Mouse-down on a slider. Thumb hits go to WPF's native track for smooth dragging;
-    /// track-body hits start a captured drag here so the cursor jumps to the click point and the
-    /// thumb keeps following until release. Mirrors BrightnessFlyout's pattern.
+    /// Mouse-down on a slider. Thumb hits go to WPF's native track for smooth dragging; track-body
+    /// hits start a captured drag here so the cursor jumps to the click point and the thumb keeps
+    /// following until release.
     /// </summary>
     private void Slider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -574,14 +545,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             track.Thumb.TranslatePoint(new System.Windows.Point(0, 0), slider),
             new System.Windows.Size(track.Thumb.ActualWidth, track.Thumb.ActualHeight));
 
-        if (thumbBounds.Contains(e.GetPosition(slider)))
-        {
-            // Click landed on the thumb - WPF's Track owns the drag from here.
-            return;
-        }
+        if (thumbBounds.Contains(e.GetPosition(slider))) return;
 
-        // Track click: jump to position and keep the value following the cursor until release.
-        // CaptureMouse keeps the move events flowing even when the cursor leaves the slider bounds.
         _draggingSlider = slider;
         slider.CaptureMouse();
         UpdateSliderValueFromMousePosition(slider, track, e.GetPosition(slider));
@@ -590,12 +555,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     private void Slider_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        // Only act on the captured slider; thumb-drags don't go through here.
         if (sender is not Slider slider || _draggingSlider != slider) return;
 
         if (e.LeftButton != MouseButtonState.Pressed)
         {
-            // Lost the button somewhere off-window without a release event arriving here; clean up.
             StopDragging(slider);
             return;
         }
@@ -606,16 +569,14 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     private void Slider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        WPFLog.Log($"Slider_PreviewMouseLeftButtonUp: senderType={sender?.GetType().Name ?? "null"}");
         if (sender is not Slider slider) return;
 
-        WPFLog.Log($"Slider mouse-up: isDevice={slider == DeviceVolumeSlider} dataCtxType={slider.DataContext?.GetType().Name ?? "null"}");
-
-        // Track-click drags route through StopDragging; thumb drags don't (WPF's Track owns the gesture)
-        // but still arrive here on release. Both paths feed the release-feedback beep below.
         if (_draggingSlider == slider) StopDragging(slider);
 
-        if (slider == DeviceVolumeSlider) PlayDeviceVolumeFeedback();
+        // Branch on DataContext type rather than element identity: the slider's data context is the
+        // device wrapper for device sliders (set on the device-row template) and the AudioAppGroup
+        // for session sliders.
+        if (slider.DataContext is AudioDevice) PlayDeviceVolumeFeedback();
         else if (slider.DataContext is AudioAppGroup group) PlayAppVolumeFeedback(group.Volume);
     }
 
@@ -625,10 +586,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         // bounds (matches BrightnessFlyout). Release happens on PreviewMouseLeftButtonUp.
     }
 
-    /// <summary>
-    /// Sets the slider's value to the percentage represented by the cursor's X position, accounting
-    /// for the half-thumb-width inset on each end of the usable track. Float-precision: no rounding.
-    /// </summary>
     private static void UpdateSliderValueFromMousePosition(Slider slider, Track track, System.Windows.Point position)
     {
         double thumbWidth = track.Thumb?.ActualWidth ?? 0;
@@ -661,13 +618,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         return null;
     }
 
-    /// <summary>
-    /// Mouse wheel over a session row scrolls that session's volume.
-    /// Step matches the device-row scroll so the family of controls feels consistent.
-    /// </summary>
     private void SessionRow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        WPFLog.Log($"SessionRow_PreviewMouseWheel: senderType={sender?.GetType().Name ?? "null"} tagType={(sender as FrameworkElement)?.Tag?.GetType().Name ?? "null"}");
         if (sender is not FrameworkElement fe || fe.Tag is not AudioAppGroup group) return;
 
         double currentPercent = group.Volume * 100.0;
@@ -682,11 +634,14 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Mouse wheel over the device row scrolls the default device's volume.
+    /// Mouse wheel over a device row scrolls that device's volume. The owning device is resolved
+    /// via the row's DataContext (the device-row content control sets DataContext to the cell's
+    /// Device, so scroll events bubble back here with that context).
     /// </summary>
     private void DeviceRow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        AudioDevice? device = _trackedDevice;
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
         if (device == null) return;
 
         double currentPercent = device.Volume * 100.0;
@@ -701,33 +656,34 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Plays the Windows default-beep system sound as feedback for a discrete device-volume change.
-    /// Gated by <see cref="AppSettings.PlayDeviceVolumeChangeSound"/>; per-app sliders never call in here,
-    /// so the feedback stays scoped to the device row only - matches EarTrumpet and the OS volume slider.
-    /// MessageBeep (which SystemSounds wraps) is async and self-throttling, so a fast wheel scroll won't
-    /// queue an audible backlog.
+    /// Walks the visual tree from a click target up to a FrameworkElement whose DataContext is an
+    /// AudioDevice. Used by the device-row click / wheel handlers since the row template's DataContext
+    /// is set to the cell's Device but the click target itself may be a child Grid that inherits the
+    /// same DataContext.
     /// </summary>
+    private static AudioDevice? ResolveDeviceFromContext(FrameworkElement element)
+    {
+        FrameworkElement? cursor = element;
+        while (cursor != null)
+        {
+            if (cursor.DataContext is AudioDevice device) return device;
+            cursor = VisualTreeHelper.GetParent(cursor) as FrameworkElement;
+        }
+        return null;
+    }
+
     private void PlayDeviceVolumeFeedback()
     {
         if (_appSettings?.PlayDeviceVolumeChangeSound != true) return;
         try { System.Media.SystemSounds.Beep.Play(); }
-        catch { /* sound playback is best-effort; never let audio feedback break the UI gesture */ }
+        catch { /* sound playback is best-effort */ }
     }
 
-    /// <summary>
-    /// Plays the per-app feedback wav scaled to <paramref name="scalarVolume"/> (the target app's
-    /// slider value). Each call clones the wav template, multiplies its PCM samples by the volume
-    /// scalar, and hands the buffer to SoundPlayer; the prior player (if any) is disposed so its
-    /// in-flight playback is preempted - matches Windows' "each press starts a fresh sound" model
-    /// and keeps a wheel-spam from queueing a backlog of overlapping beeps.
-    /// </summary>
     private void PlayAppVolumeFeedback(float scalarVolume)
     {
-        WPFLog.Log($"PlayAppVolumeFeedback ENTRY: vol={scalarVolume:F2} settingsNull={_appSettings == null} setting={_appSettings?.PlayAppVolumeChangeSound}");
         if (_appSettings?.PlayAppVolumeChangeSound != true) return;
 
         EnsureAppFeedbackData();
-        WPFLog.Log($"PlayAppVolumeFeedback: vol={scalarVolume:F2} template={(_wavTemplate?.Length ?? -1)} bits={_wavBitsPerSample} dataOff={_wavDataOffset} dataLen={_wavDataLength}");
         if (_wavTemplate == null) return;
 
         try
@@ -739,20 +695,13 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             MemoryStream stream = new(scaled, writable: false);
             System.Media.SoundPlayer player = new(stream);
             player.Play();
-            WPFLog.Log("PlayAppVolumeFeedback: SoundPlayer.Play() returned");
 
-            // Swap _currentAppSound only after the new play started so the previous byte[] stays
-            // referenced (kept alive) until the OS has had a chance to consume it on its own thread.
             _currentAppSound?.Dispose();
             _currentAppSound = player;
         }
-        catch (Exception ex) { WPFLog.Log($"PlayAppVolumeFeedback threw: {ex.GetType().Name}: {ex.Message}"); }
+        catch { /* feedback is best-effort */ }
     }
 
-    /// <summary>
-    /// Reads the wav into memory once and parses just enough of the RIFF header to know the data-chunk
-    /// span and bit depth - the only inputs the per-play sample scaler needs. Idempotent.
-    /// </summary>
     private void EnsureAppFeedbackData()
     {
         if (_wavTemplate != null) return;
@@ -771,13 +720,9 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             _wavDataLength = dataLength;
             _wavBitsPerSample = bitsPerSample;
         }
-        catch { /* file disappeared / unreadable - stay silent rather than crashing on volume change */ }
+        catch { /* file disappeared / unreadable - stay silent */ }
     }
 
-    /// <summary>
-    /// Walks the RIFF chunk list to locate the fmt and data chunks. Returns false on any structural
-    /// issue so the caller falls back to silence rather than playing garbage at full volume.
-    /// </summary>
     private static bool ParseWavHeader(byte[] data, out int dataOffset, out int dataLength, out int bitsPerSample)
     {
         dataOffset = 0; dataLength = 0; bitsPerSample = 0;
@@ -805,20 +750,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
                 return bitsPerSample > 0;
             }
 
-            // RIFF chunks pad to even byte boundaries; advance past the pad byte if size is odd.
             pos = chunkData + chunkSize;
             if ((chunkSize & 1) != 0) pos++;
         }
         return false;
     }
 
-    /// <summary>
-    /// Multiplies every PCM sample in the data span by <paramref name="volume"/> in-place.
-    /// 16-bit signed PCM is the path the default Windows install actually exercises; 24-bit and 32-bit
-    /// signed PCM are supported defensively in case a custom sound theme has swapped the wav.
-    /// Unsupported bit depths fall through unscaled - they'll play at full volume rather than silently
-    /// dropping the sound, which is the right failure mode for audible feedback.
-    /// </summary>
     private static void ScalePcmSamples(byte[] data, int offset, int length, int bitsPerSample, float volume)
     {
         if (volume >= 0.999f) return;
@@ -839,7 +776,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
                 for (int i = offset; i + 2 < end; i += 3)
                 {
                     int sample = data[i] | (data[i + 1] << 8) | (data[i + 2] << 16);
-                    // Sign-extend the 24-bit value into the upper byte of the int.
                     if ((sample & 0x800000) != 0) sample |= unchecked((int)0xFF000000);
                     int scaled = (int)(sample * volume);
                     if (scaled > 0x7FFFFF) scaled = 0x7FFFFF;
@@ -864,38 +800,61 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Toggles mute on the default device. Bound to the speaker-glyph button in the device row.
+    /// Toggles mute on the device whose row hosts this button. The button's DataContext is the
+    /// AudioDevice (the row template sets DataContext to cell.Device).
     /// </summary>
     private void DeviceMute_Click(object sender, RoutedEventArgs e)
     {
-        AudioDevice? device = _trackedDevice;
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
         if (device == null) return;
         device.IsMuted = !device.IsMuted;
     }
 
     /// <summary>
-    /// Stub for the device-picker caret. The dropdown UI is a follow-up feature; for now the click
-    /// is a no-op so the chrome reads correctly without committing to a half-finished menu.
+    /// Device-icon button click. Plain -> toggle enable/disable; Ctrl -> set as default and open
+    /// classic device properties; Shift -> set as default communications. The owning device comes
+    /// from the click target's DataContext.
     /// </summary>
-    private void DeviceCaret_Click(object sender, RoutedEventArgs e)
+    private void DeviceIcon_Click(object sender, RoutedEventArgs e)
     {
-        // Intentionally empty - device-switching popup will land in a later iteration.
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null) return;
+
+        ModifierKeys mods = Keyboard.Modifiers;
+        bool ctrl = (mods & ModifierKeys.Control) != 0;
+        bool shift = (mods & ModifierKeys.Shift) != 0;
+
+        if (shift) device.SetAsDefaultCommunications();
+        else if (ctrl)
+        {
+            device.SetAsDefault();
+            DeviceShellLinks.OpenDeviceProperties(device);
+        }
+        else device.SetEnabled(!device.IsActive);
     }
 
-    /// <summary>
-    /// Footer Settings button. Hands off to the host via <see cref="SettingsRequested"/>;
-    /// App.xaml.cs opens the SettingsWindow there. Focus moves off the flyout as a side effect,
-    /// which lets the docked-mode auto-hide path dismiss the flyout naturally.
-    /// </summary>
+    /// <summary>Footer Settings button. Hands off to the host; App.xaml.cs opens SettingsWindow.</summary>
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
 
-    /// <summary>
-    /// Click-only path on the undock/redock button.
-    /// The drag path (PreviewMouseLeftButtonDown/Move/Up) sets <see cref="_undockButtonDragOccurred"/>
-    /// when motion exceeds <see cref="DragThreshold"/> and finalizes the drag in the button-up handler.
-    /// When that happens, the bubbled Click that follows is suppressed here so a press-drag-release
-    /// doesn't also flip dock state.
-    /// </summary>
+    private void DeviceIcon_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null) return;
+        DeviceShellLinks.OpenDeviceProperties(device);
+        e.Handled = true;
+    }
+
+    private void AppIcon_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        if (fe.DataContext is not AudioAppGroup group) return;
+        group.IsMuted = !group.IsMuted;
+        e.Handled = true;
+    }
+
     private void UndockButton_Click(object sender, RoutedEventArgs e)
     {
         if (_undockButtonDragOccurred)
@@ -904,18 +863,13 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             return;
         }
 
-        if (_isUndocked)
-            Redock();
-        else
-            UndockToSavedPosition();
+        if (_isUndocked) Redock();
+        else UndockToSavedPosition();
     }
 
     private void UndockButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _undockButtonDragOccurred = false;
-        // The window may already be at the docked corner (the common case for a press from docked state).
-        // BeginDrag seeds IsCurrentlySnapped from the window's current position so a no-motion release
-        // still resolves to "redock" rather than "save current position as saved".
         double snapTolerance = CaptureDockedPosition();
         _dragHelper.BeginDrag(e.GetPosition(this), _dockedLeft, _dockedTop, snapTolerance);
         UndockButton.CaptureMouse();
@@ -924,7 +878,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private void UndockButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
-
         if (!UndockButton.IsMouseCaptured) return;
 
         (double naturalX, double naturalY) = _dragHelper.ComputeNatural(e.GetPosition(this));
@@ -942,17 +895,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     private void UndockButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        // Don't release the capture here, even on the no-drag path: ButtonBase only raises Click
-        // from its bubbled OnMouseLeftButtonUp when IsMouseCaptured is still true at that moment,
-        // so an early release silently kills the Click and takes the toggle path with it.
-        // On the drag path the cursor has moved off the button so ButtonBase's IsMouseOver check
-        // skips Click on its own.
         if (!_undockButtonDragOccurred) return;
 
         if (_dragHelper.IsCurrentlySnapped)
         {
-            // Released while parked at the docked corner. Redock without overwriting the previously saved
-            // position - a subsequent click of the undock button restores the user's last manual placement.
             IsUndocked = false;
             if (_appSettings != null)
             {
@@ -962,25 +908,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             Left = _dockedLeft;
             Top = _dockedTop;
         }
-        else
-            SaveUndockedPosition();
-
-        // _undockButtonDragOccurred is consumed in UndockButton_Click. For a small drag that ends with
-        // the cursor still over the button, ButtonBase will still raise Click and we need that flag
-        // to short-circuit the toggle path.
+        else SaveUndockedPosition();
     }
 
-    /// <summary>
-    /// Drag-to-move when the flyout is undocked.
-    /// RootCard is the outermost themed Border, and we listen on its bubbled (non-preview)
-    /// MouseLeftButtonDown so interactive children (sliders, buttons) get first refusal, and only
-    /// clicks on the empty card surface or row backgrounds reach this handler.
-    /// Dragging when docked is intentionally ignored (the docked corner is OS-anchored).
-    /// </summary>
     private void RootCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (!_isUndocked) return;
-
         if (sender is not IInputElement el) return;
 
         double snapTolerance = CaptureDockedPosition();
@@ -994,7 +927,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private void RootCard_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
         if (!_isDraggingFromBackground) return;
-
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
         (double naturalX, double naturalY) = _dragHelper.ComputeNatural(e.GetPosition(this));
@@ -1008,10 +940,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         Mouse.Capture(null);
         _isDraggingFromBackground = false;
 
-        if (_dragHelper.IsCurrentlySnapped)
-            Redock();
-        else
-            SaveUndockedPosition();
+        if (_dragHelper.IsCurrentlySnapped) Redock();
+        else SaveUndockedPosition();
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

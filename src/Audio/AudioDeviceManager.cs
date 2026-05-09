@@ -44,19 +44,51 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     // the owning process is force-killed instead of firing Expired promptly.
     private readonly ProcessExitMonitor _processExitMonitor;
 
+    // Coalesces the notification storm that follows a single device disable / default-change.
+    // Up to four IMMNotificationClient callbacks (Console / Multimedia / Communications role
+    // transitions plus the state change itself) marshal onto the dispatcher in quick succession;
+    // ScheduleUpdateAllDefaults dwells inside the throttler payload and uses HasReplacement to
+    // collapse the burst into a single UpdateAllDefaults pass on the UI thread.
+    private readonly AsyncThrottler<string> _defaultsRefreshThrottler;
+    private const string DefaultsRefreshKey = "defaults";
+
     private AudioDevice? _defaultDevice;
+    private AudioDevice? _defaultCommunicationsDevice;
+    private AudioDevice? _defaultCaptureDevice;
+    private AudioDevice? _defaultCommunicationsCaptureDevice;
     private bool _disposed;
 
     public ReadOnlyObservableCollection<AudioDevice> Devices { get; }
 
     /// <summary>
-    /// The current default render endpoint. May be null briefly during device transitions
-    /// (e.g. between an unplug and the OS picking a successor).
+    /// The current default render endpoint (multimedia role). May be null briefly during device
+    /// transitions (e.g. between an unplug and the OS picking a successor).
     /// </summary>
     public AudioDevice? DefaultDevice
     {
         get => _defaultDevice;
         private set { if (!ReferenceEquals(_defaultDevice, value)) { _defaultDevice = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>The current communications-role default render endpoint, or null when unset.</summary>
+    public AudioDevice? DefaultCommunicationsDevice
+    {
+        get => _defaultCommunicationsDevice;
+        private set { if (!ReferenceEquals(_defaultCommunicationsDevice, value)) { _defaultCommunicationsDevice = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>The current default capture endpoint (multimedia role).</summary>
+    public AudioDevice? DefaultCaptureDevice
+    {
+        get => _defaultCaptureDevice;
+        private set { if (!ReferenceEquals(_defaultCaptureDevice, value)) { _defaultCaptureDevice = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>The current communications-role default capture endpoint.</summary>
+    public AudioDevice? DefaultCommunicationsCaptureDevice
+    {
+        get => _defaultCommunicationsCaptureDevice;
+        private set { if (!ReferenceEquals(_defaultCommunicationsCaptureDevice, value)) { _defaultCommunicationsCaptureDevice = value; OnPropertyChanged(); } }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -69,6 +101,11 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
         _volumeThrottler = new AsyncThrottler<string>(TimeConstants.VolumeWriteRateDefaultMs, StringComparer.Ordinal);
         _processExitMonitor = new ProcessExitMonitor();
+
+        // Cooldown 0; the dwell-then-bail pattern in ScheduleUpdateAllDefaults's payload provides
+        // the coalescing instead. Cooldown would only space out successive runs, which we don't
+        // need - one final UpdateAllDefaults per quiet window is the goal.
+        _defaultsRefreshThrottler = new AsyncThrottler<string>(0);
 
         _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
 
@@ -210,22 +247,34 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// One-shot full enumeration. Used at startup; runtime device events take the incremental
     /// add / remove paths so unrelated devices don't lose their session state on every plug event.
+    /// Enumerates both render and capture endpoints across every device state (Active | Disabled |
+    /// NotPresent | Unplugged) - the visibility filters in consumers decide what's surfaced to
+    /// the user; the manager keeps the full set so clicks through the tray menu can re-enable a
+    /// disabled device without the wrapper having to be re-built first.
     /// </summary>
     private void RebuildDeviceList()
     {
         foreach (AudioDevice d in _devices.ToArray()) d.Dispose();
         _devices.Clear();
 
+        EnumerateAndWrap(EDataFlow.eRender);
+        EnumerateAndWrap(EDataFlow.eCapture);
+
+        UpdateAllDefaults();
+    }
+
+    private void EnumerateAndWrap(EDataFlow flow)
+    {
         IMMDeviceCollection? collection = null;
         try
         {
-            _enumerator.EnumAudioEndpoints(EDataFlow.eRender, DeviceState.Active, out collection);
+            _enumerator.EnumAudioEndpoints(flow, DeviceState.All, out collection);
             collection.GetCount(out uint count);
 
             for (uint i = 0; i < count; i++)
             {
                 collection.Item(i, out IMMDevice device);
-                AudioDevice? wrapped = WrapOrRelease(device);
+                AudioDevice? wrapped = WrapOrRelease(device, flow);
                 if (wrapped != null) _devices.Add(wrapped);
             }
         }
@@ -237,14 +286,12 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         {
             if (collection != null) Marshal.FinalReleaseComObject(collection);
         }
-
-        UpdateDefaultDevice();
     }
 
     /// <summary>
-    /// Add a device by ID if it's an active render endpoint we don't already track.
-    /// No-op when the device is wrong-flow (capture), wrong-state (disabled, unplugged),
-    /// or already present. Used for OnDeviceAdded / OnDeviceStateChanged(active) paths.
+    /// Add a device by ID if we don't already track it. Wraps it for any state and either flow
+    /// (render or capture) so visibility-filter consumers can decide what to surface. Used for
+    /// OnDeviceAdded paths.
     /// </summary>
     private void AddDeviceById(string id)
     {
@@ -257,18 +304,20 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             _enumerator.GetDevice(id, out device);
             if (device == null) return;
 
-            // Only render endpoints. The same OnDeviceAdded fires for capture too; ignore those.
-            if (!IsRenderEndpoint(device)) { Marshal.FinalReleaseComObject(device); return; }
+            EDataFlow flow = ResolveDataFlow(device);
+            // Sanity check: ResolveDataFlow returns eAll on failure - drop those rather than wrap a
+            // device with no usable flow.
+            if (flow != EDataFlow.eRender && flow != EDataFlow.eCapture)
+            {
+                Marshal.FinalReleaseComObject(device);
+                return;
+            }
 
-            // Active state only. Disabled / NotPresent / Unplugged devices shouldn't appear in the list.
-            device.GetState(out uint state);
-            if ((state & (uint)DeviceState.Active) == 0) { Marshal.FinalReleaseComObject(device); return; }
-
-            AudioDevice? wrapped = WrapOrRelease(device);
+            AudioDevice? wrapped = WrapOrRelease(device, flow);
             if (wrapped != null)
             {
                 _devices.Add(wrapped);
-                UpdateDefaultDevice();
+                ScheduleUpdateAllDefaults();
             }
         }
         catch
@@ -280,7 +329,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Remove a single device wrapper by ID, disposing its sessions and releasing its COM proxies.
-    /// Used for OnDeviceRemoved and OnDeviceStateChanged(non-active) paths.
+    /// Used for OnDeviceRemoved.
     /// </summary>
     private void RemoveDeviceById(string id)
     {
@@ -290,18 +339,31 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
         _devices.Remove(match);
         try { match.Dispose(); } catch { }
-        UpdateDefaultDevice();
+        ScheduleUpdateAllDefaults();
     }
 
     /// <summary>
-    /// OnDeviceStateChanged demultiplexer: a device transitioning to Active is an effective add,
-    /// any other state is an effective remove. Render-flow filtering happens inside the add path.
+    /// OnDeviceStateChanged: refresh the existing wrapper's State and, when transitioning to Active,
+    /// upgrade its endpoint proxies so volume / metering wakes back up. Default-device evaluation
+    /// runs at the end so a state flip on a default-eligible device propagates immediately.
     /// </summary>
     private void HandleDeviceStateChanged(string id, uint newState)
     {
         if (string.IsNullOrEmpty(id)) return;
-        if ((newState & (uint)DeviceState.Active) != 0) AddDeviceById(id);
-        else RemoveDeviceById(id);
+
+        AudioDevice? match = FindDeviceById(id);
+        if (match == null)
+        {
+            // First time we've seen this device id - run the add path (e.g. user re-enabled a device
+            // we never wrapped; we always wrap on first sight).
+            AddDeviceById(id);
+            return;
+        }
+
+        match.State = (DeviceState)newState;
+        if ((newState & (uint)DeviceState.Active) != 0) match.UpgradeFromActiveState();
+
+        ScheduleUpdateAllDefaults();
     }
 
     /// <summary>
@@ -316,6 +378,18 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         match.RefreshFriendlyNameFromStore();
     }
 
+    /// <summary>
+    /// Refresh one device's "Listen to this device" state when the OS reports a change to
+    /// PKEY_AudioEndpoint_ListenToThisDevice. Capture-only feature; render endpoints ignore it.
+    /// </summary>
+    private void RefreshDeviceListenState(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        AudioDevice? match = FindDeviceById(id);
+        if (match == null) return;
+        match.RefreshListenToThisDeviceFromStore();
+    }
+
     private AudioDevice? FindDeviceById(string id)
     {
         foreach (AudioDevice d in _devices)
@@ -325,22 +399,20 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         return null;
     }
 
-    private static bool IsRenderEndpoint(IMMDevice device)
+    private static EDataFlow ResolveDataFlow(IMMDevice device)
     {
-        IMMEndpoint? endpoint = null;
         try
         {
-            endpoint = device as IMMEndpoint;
-            if (endpoint == null) return false;
+            if (device is not IMMEndpoint endpoint) return EDataFlow.eAll;
             endpoint.GetDataFlow(out EDataFlow flow);
-            return flow == EDataFlow.eRender;
+            return flow;
         }
-        catch { return false; }
+        catch { return EDataFlow.eAll; }
     }
 
-    private AudioDevice? WrapOrRelease(IMMDevice device)
+    private AudioDevice? WrapOrRelease(IMMDevice device, EDataFlow flow)
     {
-        try { return new AudioDevice(device, _dispatcher, _volumeThrottler, _processExitMonitor); }
+        try { return new AudioDevice(device, flow, _dispatcher, _volumeThrottler, _processExitMonitor); }
         catch
         {
             try { Marshal.FinalReleaseComObject(device); } catch { }
@@ -348,46 +420,84 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void UpdateDefaultDevice()
+    /// <summary>
+    /// Schedules a coalesced UpdateAllDefaults run. Notification handlers fire this instead of
+    /// calling UpdateAllDefaults directly so a burst of role-change notifications (common when a
+    /// default device is disabled - up to three role transitions plus a state change all marshal
+    /// onto the dispatcher in succession) collapses into one refresh after a brief quiet window.
+    /// The payload itself dispatches back to the UI thread for the actual flag flips.
+    /// </summary>
+    private void ScheduleUpdateAllDefaults()
+    {
+        _ = _defaultsRefreshThrottler.RunAsync(DefaultsRefreshKey, async ctx =>
+        {
+            // Dwell before doing the work, then bail if a fresher schedule landed during the dwell -
+            // the replacement payload will handle the refresh itself, no need to do it twice.
+            try { await Task.Delay(TimeConstants.DefaultsRefreshCoalesceDwellMs, ctx.CancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return; }
+            if (ctx.HasReplacement) return;
+
+            try { await _dispatcher.InvokeAsync(UpdateAllDefaults); }
+            catch { /* dispatcher shut down - nothing to refresh */ }
+        });
+    }
+
+    /// <summary>
+    /// Re-evaluates every default-role binding (render multimedia + render comms + capture
+    /// multimedia + capture comms) against the current device list. Cheap to call - four
+    /// GetDefaultAudioEndpoint COM hits and a flag-by-flag toggle on each wrapper.
+    /// </summary>
+    private void UpdateAllDefaults()
+    {
+        AudioDevice? renderDefault = LookupDefault(EDataFlow.eRender, ERole.eMultimedia);
+        AudioDevice? renderComms = LookupDefault(EDataFlow.eRender, ERole.eCommunications);
+        AudioDevice? captureDefault = LookupDefault(EDataFlow.eCapture, ERole.eMultimedia);
+        AudioDevice? captureComms = LookupDefault(EDataFlow.eCapture, ERole.eCommunications);
+
+        // IsDefault tracks the multimedia-role default for the device's flow. IsDefaultCommunications
+        // tracks the comms-role default. The flyout already binds DefaultDevice to the render path.
+        foreach (AudioDevice d in _devices)
+        {
+            bool flowDefault = d.DataFlow == EDataFlow.eRender
+                ? ReferenceEquals(d, renderDefault)
+                : ReferenceEquals(d, captureDefault);
+            bool flowComms = d.DataFlow == EDataFlow.eRender
+                ? ReferenceEquals(d, renderComms)
+                : ReferenceEquals(d, captureComms);
+            d.IsDefault = flowDefault;
+            d.IsDefaultCommunications = flowComms;
+        }
+
+        DefaultDevice = renderDefault;
+        DefaultCommunicationsDevice = renderComms;
+        DefaultCaptureDevice = captureDefault;
+        DefaultCommunicationsCaptureDevice = captureComms;
+    }
+
+    private AudioDevice? LookupDefault(EDataFlow flow, ERole role)
     {
         IMMDevice? defaultDevice = null;
         string? defaultId = null;
         try
         {
-            // GetDefaultAudioEndpoint returns E_NOTFOUND (0x80070490) when no render endpoint exists
-            // (common right after the last endpoint is unplugged); treat that as "no default".
-            int hr = _enumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out defaultDevice);
-            if (hr < 0 || defaultDevice == null)
-            {
-                MarkDefault(null);
-                return;
-            }
-
+            // GetDefaultAudioEndpoint returns E_NOTFOUND (0x80070490) when no endpoint of that flow
+            // exists; treat as "no default" instead of throwing.
+            int hr = _enumerator.GetDefaultAudioEndpoint(flow, role, out defaultDevice);
+            if (hr < 0 || defaultDevice == null) return null;
             defaultDevice.GetId(out defaultId);
         }
-        catch
-        {
-            MarkDefault(null);
-            return;
-        }
+        catch { return null; }
         finally
         {
             if (defaultDevice != null) Marshal.FinalReleaseComObject(defaultDevice);
         }
 
-        // Match by ID against our wrapped list.
-        AudioDevice? match = null;
+        if (string.IsNullOrEmpty(defaultId)) return null;
         foreach (AudioDevice d in _devices)
         {
-            if (d.Id == defaultId) { match = d; break; }
+            if (d.Id == defaultId) return d;
         }
-        MarkDefault(match);
-    }
-
-    private void MarkDefault(AudioDevice? newDefault)
-    {
-        foreach (AudioDevice d in _devices) d.IsDefault = ReferenceEquals(d, newDefault);
-        DefaultDevice = newDefault;
+        return null;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)
@@ -422,6 +532,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         // RCW it captured and bail out via its inner try/catch. Letting it run to completion
         // is preferable to forcibly cancelling, which can race with finalization.
         try { _volumeThrottler.Dispose(); } catch { }
+        try { _defaultsRefreshThrottler.Dispose(); } catch { }
 
         // Tear the watcher thread down after every device (and so every session) is disposed -
         // sessions Unwatch on Dispose, so by the time we get here the watch set is empty and the
@@ -432,7 +543,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     }
 
     // Notification callbacks fire on COM worker threads; everything is marshaled to the dispatcher
-    // before mutating observable state.
+    // before mutating observable state. Each callback emits one diagnostic log line so an external
+    // state change (mmsys.cpl enable / disable, default-device change from another app) leaves a
+    // trail that proves the CCW is actually wired - a missing line in the active.log when the user
+    // toggles a device from Windows is a clear signal the registration didn't take.
     private sealed class NotificationBridge : IMMNotificationClient
     {
         private readonly AudioDeviceManager _owner;
@@ -444,6 +558,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             // path preserves session state on every other device, which a full rebuild would discard.
             string id = pwstrDeviceId;
             uint state = dwNewState;
+            WPFLog.Log($"AudioDeviceManager.OnDeviceStateChanged: id={id} newState=0x{state:X}");
             _owner._dispatcher.BeginInvoke(() => _owner.HandleDeviceStateChanged(id, state));
             return 0;
         }
@@ -451,6 +566,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         public int OnDeviceAdded(string pwstrDeviceId)
         {
             string id = pwstrDeviceId;
+            WPFLog.Log($"AudioDeviceManager.OnDeviceAdded: id={id}");
             _owner._dispatcher.BeginInvoke(() => _owner.AddDeviceById(id));
             return 0;
         }
@@ -458,15 +574,19 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         public int OnDeviceRemoved(string pwstrDeviceId)
         {
             string id = pwstrDeviceId;
+            WPFLog.Log($"AudioDeviceManager.OnDeviceRemoved: id={id}");
             _owner._dispatcher.BeginInvoke(() => _owner.RemoveDeviceById(id));
             return 0;
         }
 
         public int OnDefaultDeviceChanged(EDataFlow flow, ERole role, string? pwstrDefaultDeviceId)
         {
-            // Only the render+multimedia default drives our flyout selection; ignore the rest.
-            if (flow != EDataFlow.eRender || role != ERole.eMultimedia) return 0;
-            _owner._dispatcher.BeginInvoke(() => _owner.UpdateDefaultDevice());
+            // Refresh every role / flow because the manager exposes all four. ScheduleUpdateAllDefaults
+            // coalesces the burst (a single device disable typically fires this 3+ times in quick
+            // succession - one per role transition) into a single UpdateAllDefaults pass; the throttler
+            // payload itself dispatches onto the UI thread for the actual flag flips.
+            WPFLog.Log($"AudioDeviceManager.OnDefaultDeviceChanged: flow={flow} role={role} id={pwstrDefaultDeviceId ?? "<null>"}");
+            _owner.ScheduleUpdateAllDefaults();
             return 0;
         }
 
@@ -479,6 +599,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             {
                 string id = pwstrDeviceId;
                 _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceFriendlyName(id));
+            }
+            // 'Listen to this device' toggles in mmsys.cpl land here for the affected capture
+            // endpoint. Refresh just that device's bound flag so the icon swaps live.
+            else if (key.fmtid == PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice.fmtid &&
+                key.pid == PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice.pid)
+            {
+                string id = pwstrDeviceId;
+                _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceListenState(id));
             }
             return 0;
         }

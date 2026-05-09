@@ -26,6 +26,22 @@ public static class SettingsBindings
         ["AllowFlyoutUndock"] = (s, v) => s.AllowFlyoutUndock = v,
         ["RestoreFlyoutUndockedOnStartup"] = (s, v) => s.RestoreFlyoutUndockedOnStartup = v,
         ["UnifiedPeakMeter"] = (s, v) => s.UnifiedPeakMeter = v,
+        ["SetDefaultCommsToDefault"] = (s, v) => s.SetDefaultCommsToDefault = v,
+        ["ShowDisabledPlaybackDevices"] = (s, v) => s.ShowDisabledPlaybackDevices = v,
+        ["ShowDefaultPlaybackDeviceEvenIfDisabled"] = (s, v) => s.ShowDefaultPlaybackDeviceEvenIfDisabled = v,
+        ["ShowDefaultCommsPlaybackDeviceEvenIfDisabled"] = (s, v) => s.ShowDefaultCommsPlaybackDeviceEvenIfDisabled = v,
+        ["ShowDisconnectedPlaybackDevices"] = (s, v) => s.ShowDisconnectedPlaybackDevices = v,
+        ["ShowRecordingDevices"] = (s, v) => s.ShowRecordingDevices = v,
+        ["ShowDisabledRecordingDevices"] = (s, v) => s.ShowDisabledRecordingDevices = v,
+        ["ShowDefaultRecordingDeviceEvenIfDisabled"] = (s, v) => s.ShowDefaultRecordingDeviceEvenIfDisabled = v,
+        ["ShowDefaultCommsRecordingDeviceEvenIfDisabled"] = (s, v) => s.ShowDefaultCommsRecordingDeviceEvenIfDisabled = v,
+        ["ShowNotPresentDevices"] = (s, v) => s.ShowNotPresentDevices = v,
+        ["ShowTrayMenuRecordingLink"] = (s, v) => s.ShowTrayMenuRecordingLink = v,
+        ["ShowTrayMenuSoundsLink"] = (s, v) => s.ShowTrayMenuSoundsLink = v,
+        ["ShowTrayMenuCommunicationsLink"] = (s, v) => s.ShowTrayMenuCommunicationsLink = v,
+        ["ShowTrayMenuDeviceLinks"] = (s, v) => s.ShowTrayMenuDeviceLinks = v,
+        ["ShowRecordingDevicesInFlyout"] = (s, v) => s.ShowRecordingDevicesInFlyout = v,
+        ["IntermixRecordingWithPlaybackInFlyout"] = (s, v) => s.IntermixRecordingWithPlaybackInFlyout = v,
     };
 
     /// <summary>Setter + parser pair for an enum-bound ComboBox.</summary>
@@ -45,6 +61,8 @@ public static class SettingsBindings
         ["ContextMenuPosition"] = Bind<ContextMenuPosition>((s, v) => s.ContextMenuPosition = v),
         ["ThemeMode"] = Bind<ThemeMode>((s, v) => s.ThemeMode = v),
         ["TrayIconStyle"] = Bind<TrayIconStyle>((s, v) => s.TrayIconStyle = v),
+        ["FlyoutDeviceLayout"] = Bind<FlyoutDeviceLayoutStyle>((s, v) => s.FlyoutDeviceLayout = v),
+        ["FlyoutDeviceSort"] = Bind<FlyoutDeviceSortOrder>((s, v) => s.FlyoutDeviceSort = v),
     };
 
     /// <summary>

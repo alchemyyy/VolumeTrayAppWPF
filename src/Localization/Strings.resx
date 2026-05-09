@@ -184,6 +184,45 @@
   <data name="Settings_Flyout_Visibility_Header" xml:space="preserve">
     <value>Visibility</value>
   </data>
+  <data name="Settings_Flyout_DeviceList_Header" xml:space="preserve">
+    <value>Device list</value>
+  </data>
+  <data name="Settings_Flyout_DeviceLayout_Title" xml:space="preserve">
+    <value>Device layout</value>
+  </data>
+  <data name="Settings_Flyout_DeviceLayout_Description" xml:space="preserve">
+    <value>Where each device's row sits relative to its app sliders.</value>
+  </data>
+  <data name="Settings_Flyout_DeviceLayout_AppsAbove" xml:space="preserve">
+    <value>Apps above device</value>
+  </data>
+  <data name="Settings_Flyout_DeviceLayout_AppsBelow" xml:space="preserve">
+    <value>Apps below device</value>
+  </data>
+  <data name="Settings_Flyout_DeviceSort_Title" xml:space="preserve">
+    <value>Device sort</value>
+  </data>
+  <data name="Settings_Flyout_DeviceSort_Description" xml:space="preserve">
+    <value>Default sort: default, default communications, enabled, disabled, disconnected. The default device sits at the bottom of the flyout. Windows sort: untouched MMDevice enumeration order.</value>
+  </data>
+  <data name="Settings_Flyout_DeviceSort_StateGrouped" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="Settings_Flyout_DeviceSort_WindowsEnumeration" xml:space="preserve">
+    <value>Windows order</value>
+  </data>
+  <data name="Settings_Flyout_ShowRecordingDevices_Title" xml:space="preserve">
+    <value>Show recording devices</value>
+  </data>
+  <data name="Settings_Flyout_ShowRecordingDevices_Description" xml:space="preserve">
+    <value>Include capture endpoints (microphones, line-in) in the flyout's device list. Still gated by the global recording-devices toggle on the Devices page.</value>
+  </data>
+  <data name="Settings_Flyout_IntermixRecording_Title" xml:space="preserve">
+    <value>Intermix recording with playback</value>
+  </data>
+  <data name="Settings_Flyout_IntermixRecording_Description" xml:space="preserve">
+    <value>When on, recording devices interleave with playback devices inside each sort bucket. When off, all playback devices show first and recording devices group together at the top of the list.</value>
+  </data>
   <data name="Settings_General_Apply_Button" xml:space="preserve">
     <value>Apply</value>
   </data>
@@ -572,8 +611,122 @@ Target: {1}</value>
   <data name="Settings_TrayIcon_SectionHeader" xml:space="preserve">
     <value>Tray Icon</value>
   </data>
+  <data name="Flyout_DeviceIcon_Tooltip" xml:space="preserve">
+    <value>Click: enable / disable. Ctrl+click: set as default. Shift+click: set as default communications.</value>
+  </data>
   <data name="Tray_Bluetooth" xml:space="preserve">
     <value>Bluetooth</value>
+  </data>
+  <data name="Tray_Communications" xml:space="preserve">
+    <value>Communications</value>
+  </data>
+  <data name="Tray_Recording" xml:space="preserve">
+    <value>Recording</value>
+  </data>
+  <data name="Tray_Sounds" xml:space="preserve">
+    <value>Sounds</value>
+  </data>
+  <data name="Settings_Devices_SectionHeader" xml:space="preserve">
+    <value>Devices</value>
+  </data>
+  <data name="Settings_Devices_Defaulting_Header" xml:space="preserve">
+    <value>Defaulting</value>
+  </data>
+  <data name="Settings_Devices_SetDefaultCommsToDefault_Title" xml:space="preserve">
+    <value>Tie default comms device to default device</value>
+  </data>
+  <data name="Settings_Devices_SetDefaultCommsToDefault_Description" xml:space="preserve">
+    <value>When you set a default device through this app, also promote it to the communications-role default. Only triggered by your own clicks; never reacts to other apps' default-changes.</value>
+  </data>
+  <data name="Settings_Devices_Visibility_Header" xml:space="preserve">
+    <value>Playback visibility</value>
+  </data>
+  <data name="Settings_Devices_RecordingVisibility_Header" xml:space="preserve">
+    <value>Recording visibility</value>
+  </data>
+  <data name="Settings_Devices_ShowDisabledPlayback_Title" xml:space="preserve">
+    <value>Show disabled playback devices</value>
+  </data>
+  <data name="Settings_Devices_ShowDisabledPlayback_Description" xml:space="preserve">
+    <value>List playback devices that are disabled in Windows. Off by default.</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Title" xml:space="preserve">
+    <value>Show default playback device even if disabled</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Description" xml:space="preserve">
+    <value>Always include the default playback device in lists, even when it's disabled in Windows.</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Title" xml:space="preserve">
+    <value>Show default comms playback device even if disabled</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Description" xml:space="preserve">
+    <value>Always include the communications-role default playback device, even when it's disabled in Windows.</value>
+  </data>
+  <data name="Settings_Devices_ShowDisconnectedPlayback_Title" xml:space="preserve">
+    <value>Show disconnected playback devices</value>
+  </data>
+  <data name="Settings_Devices_ShowDisconnectedPlayback_Description" xml:space="preserve">
+    <value>List playback devices Windows reports as currently unplugged but still recognized. Registry-only ghost endpoints have their own setting below.</value>
+  </data>
+  <data name="Settings_Devices_ShowRecording_Title" xml:space="preserve">
+    <value>Show recording devices</value>
+  </data>
+  <data name="Settings_Devices_ShowRecording_Description" xml:space="preserve">
+    <value>Master switch for recording-device entries. When off, every recording-side option below is ignored.</value>
+  </data>
+  <data name="Settings_Devices_ShowDisabledRecording_Title" xml:space="preserve">
+    <value>Show disabled recording devices</value>
+  </data>
+  <data name="Settings_Devices_ShowDisabledRecording_Description" xml:space="preserve">
+    <value>List recording devices that are disabled in Windows.</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Title" xml:space="preserve">
+    <value>Show default recording device even if disabled</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Description" xml:space="preserve">
+    <value>Always include the default recording device, even when it's disabled in Windows.</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Title" xml:space="preserve">
+    <value>Show default comms recording device even if disabled</value>
+  </data>
+  <data name="Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Description" xml:space="preserve">
+    <value>Always include the communications-role default recording device, even when it's disabled in Windows.</value>
+  </data>
+  <data name="Settings_Devices_ShowNotPresent_Title" xml:space="preserve">
+    <value>Show registry ghost devices</value>
+  </data>
+  <data name="Settings_Devices_ShowNotPresent_Description" xml:space="preserve">
+    <value>List endpoints Windows still has on file but no driver is currently loaded for - old USB DACs, removed GPUs' HDMI outputs, paired Bluetooth headsets. Most surface as "Unknown Device". Off by default.</value>
+  </data>
+  <data name="Settings_Devices_TrayMenu_Header" xml:space="preserve">
+    <value>Tray menu</value>
+  </data>
+  <data name="Settings_Devices_ShowTrayRecordingLink_Title" xml:space="preserve">
+    <value>Show "Recording" link in tray menu</value>
+  </data>
+  <data name="Settings_Devices_ShowTrayRecordingLink_Description" xml:space="preserve">
+    <value>Add an entry that opens the classic Sound control panel on the Recording tab.</value>
+  </data>
+  <data name="Settings_Devices_ShowTraySoundsLink_Title" xml:space="preserve">
+    <value>Show "Sounds" link in tray menu</value>
+  </data>
+  <data name="Settings_Devices_ShowTraySoundsLink_Description" xml:space="preserve">
+    <value>Add an entry that opens the classic Sound control panel on the Sounds tab.</value>
+  </data>
+  <data name="Settings_Devices_ShowTrayCommunicationsLink_Title" xml:space="preserve">
+    <value>Show "Communications" link in tray menu</value>
+  </data>
+  <data name="Settings_Devices_ShowTrayCommunicationsLink_Description" xml:space="preserve">
+    <value>Add an entry that opens the classic Sound control panel on the Communications tab.</value>
+  </data>
+  <data name="Settings_Devices_ShowTrayDeviceLinks_Title" xml:space="preserve">
+    <value>Show per-device links in tray menu</value>
+  </data>
+  <data name="Settings_Devices_ShowTrayDeviceLinks_Description" xml:space="preserve">
+    <value>Add a sub-menu entry per visible enabled device. Each entry opens the matching classic Sound tab (same as Ctrl+click on the device icon in the flyout).</value>
+  </data>
+  <data name="Settings_Common_Tab_Devices" xml:space="preserve">
+    <value>Devices</value>
   </data>
   <data name="Tray_Exit" xml:space="preserve">
     <value>Exit</value>
