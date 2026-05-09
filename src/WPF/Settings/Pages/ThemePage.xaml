@@ -169,24 +169,6 @@
         <TextBlock Text="{loc:Loc Settings_Theme_MeterPeak_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
 
-        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakFps_Title}"
-                               Description="{loc:Loc Settings_Theme_MeterPeakFps_Description}">
-            <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="MeterPeakFpsBox"
-                                      Minimum="1" Maximum="1000"/>
-            </utils:SettingsCard.Control>
-        </utils:SettingsCard>
-
-        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakSampleRate_Title}"
-                               Description="{loc:Loc Settings_Theme_MeterPeakSampleRate_Description}">
-            <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="MeterPeakSampleRateBox"
-                                      Minimum="1" Maximum="1000"/>
-            </utils:SettingsCard.Control>
-        </utils:SettingsCard>
-
         <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakColor_Title}"
                                Description="{loc:Loc Settings_Theme_MeterPeakColor_Description}">
             <utils:SettingsCard.Control>
@@ -198,6 +180,21 @@
                     <Button Style="{StaticResource SettingsButtonStyle}"
                             Content="{loc:Loc Settings_Theme_Reset}"
                             Click="MeterPeakColorReset_Click"/>
+                </StackPanel>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakStereoColor_Title}"
+                               Description="{loc:Loc Settings_Theme_MeterPeakStereoColor_Description}">
+            <utils:SettingsCard.Control>
+                <StackPanel Style="{StaticResource SettingsCardControlPanel}">
+                    <Button x:Name="MeterPeakStereoColorSwatch"
+                            Style="{StaticResource ColorRowSwatchStyle}"
+                            Click="MeterPeakStereoColor_Click"
+                            ToolTip="{loc:Loc Settings_Theme_MeterPeakStereoColor_Tooltip}"/>
+                    <Button Style="{StaticResource SettingsButtonStyle}"
+                            Content="{loc:Loc Settings_Theme_Reset}"
+                            Click="MeterPeakStereoColorReset_Click"/>
                 </StackPanel>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>

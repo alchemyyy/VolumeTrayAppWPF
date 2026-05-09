@@ -55,6 +55,13 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // for apps like Discord that spawn several child processes.
     private readonly ObservableCollection<AudioAppGroup> _sessions = [];
 
+    // Our own AppId, computed once with the same lower-cased-image-path scheme AudioSession uses.
+    // Per-app slider feedback (PlayAppVolumeFeedback) routes through SoundPlayer / winmm, which
+    // registers an audio session under our PID; without this filter, the flyout would show its own
+    // slider transiently while sound is playing. Null means we couldn't resolve our image path -
+    // fall back to no filtering rather than guessing.
+    private readonly string? _ownAppId;
+
     // Devices we have a Groups.CollectionChanged subscription on. Kept separately so add / remove
     // notifications from AudioDeviceManager.Devices can sync subscriptions without scanning twice.
     private readonly HashSet<AudioDevice> _subscribedDevices = new();
@@ -143,6 +150,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _deviceManager = deviceManager;
         _appSettings = AppServices.Settings;
         Sessions = new ReadOnlyObservableCollection<AudioAppGroup>(_sessions);
+
+        // Resolve our own AppId once. Matches AudioSession's image-path-lower-invariant scheme
+        // so an exact string compare in RebuildSessionList suffices.
+        string? ownPath = ProcessHelper.GetProcessImagePath((uint)Environment.ProcessId);
+        _ownAppId = string.IsNullOrEmpty(ownPath) ? null : ownPath.ToLowerInvariant();
 
         InitializeComponent();
         DataContext = this;
@@ -335,6 +347,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
                 if (g.State == Audio.Interop.AudioSessionState.Expired) continue;
                 if (g.IsSystemSounds) continue;
                 if (g.Sessions.Count == 0) continue;
+                if (_ownAppId != null && string.Equals(g.AppId, _ownAppId, StringComparison.Ordinal)) continue;
                 if (!seenAppIds.Add(g.AppId)) continue;
                 _sessions.Add(g);
             }
@@ -447,6 +460,24 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _deviceManager.StartMetering();
     }
 
+    /// <summary>
+    /// Shows the flyout without taking foreground/keyboard focus from the caller.
+    /// Used when SettingsWindow re-opens the flyout on its own activation:
+    /// activating the flyout would deactivate settings and trigger the paired hide,
+    /// racing into a flicker loop.
+    /// </summary>
+    public void ShowWithoutActivating()
+    {
+        bool previousShowActivated = ShowActivated;
+        ShowActivated = false;
+        try { base.Show(); }
+        finally { ShowActivated = previousShowActivated; }
+
+        UpdateLayout();
+        PositionNearTray();
+        _deviceManager.StartMetering();
+    }
+
     /// <summary>Hides the flyout and stops peak metering.</summary>
     public new void Hide()
     {
@@ -454,7 +485,13 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         base.Hide();
     }
 
-    /// <summary>True when the OS-level foreground window is this flyout's HWND.</summary>
+    /// <summary>
+    /// True when the OS-level foreground window is this flyout's HWND.
+    /// Uses Win32 GetForegroundWindow rather than Window.IsActive:
+    /// when called from another window's Deactivated handler in the same process,
+    /// the receiving window's WM_ACTIVATE may not have been pumped yet so its IsActive is still false
+    /// even though the OS has already foregrounded it.
+    /// </summary>
     public bool HasFocus()
     {
         IntPtr hwnd = new WindowInteropHelper(this).Handle;
@@ -478,6 +515,45 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         // auto-hide-on-deactivate behavior resumes.
         if (_isUndocked) return;
 
+        SettingsWindow? settings = null;
+        foreach (Window window in System.Windows.Application.Current.Windows)
+            if (window is SettingsWindow s) { settings = s; break; }
+
+        // No settings window in play. Original behavior: hide immediately.
+        if (settings == null)
+        {
+            HideAndNotify();
+            return;
+        }
+
+        // Fast path: settings already foreground (user clicked settings). Keep open.
+        if (settings.HasFocus()) return;
+
+        // Activation transition still in flight.
+        // Race settings.Activated against an Input-priority dispatcher tick:
+        // if focus lands on settings, keep open. Otherwise hide.
+        // Mirrors the symmetric pattern in SettingsWindow.OnDeactivated so neither side relies on a Background wait
+        // that can stall behind unrelated dispatcher work.
+        bool keep = false;
+        EventHandler? onActivated = null;
+        onActivated = (_, _) =>
+        {
+            settings.Activated -= onActivated;
+            keep = true;
+        };
+        settings.Activated += onActivated;
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            settings.Activated -= onActivated;
+            if (keep || settings.HasFocus()) return;
+
+            HideAndNotify();
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void HideAndNotify()
+    {
         Hide();
         FlyoutDeactivated?.Invoke();
     }

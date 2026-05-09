@@ -76,8 +76,12 @@ internal interface IAudioMeterInformation
 {
     void GetPeakValue(out float pfPeak);
     void GetMeteringChannelCount(out uint pnChannelCount);
-    // GetChannelsPeakValues / QueryHardwareSupport not used here; declared as stubs to keep the vtable layout
-    // intact so a future caller can extend without re-aligning offsets.
-    void GetChannelsPeakValues(uint u32ChannelCount, [Out] float[] afPeakValues);
+    // afPeakValues is [out, size_is(u32ChannelCount)] float* - the COM contract is "caller hands
+    // me a pointer to a buffer of u32ChannelCount floats, I fill it." The CLR's default array
+    // marshaler doesn't know about size_is and writes past unsafely-sized arrays, so we declare
+    // the parameter as IntPtr and have callers allocate / copy explicitly via Marshal.AllocHGlobal
+    // and Marshal.Copy. PreserveSig so callers can branch on HRESULT instead of catching.
+    [PreserveSig]
+    int GetChannelsPeakValues(uint u32ChannelCount, IntPtr afPeakValues);
     void QueryHardwareSupport(out uint pdwHardwareSupportMask);
 }

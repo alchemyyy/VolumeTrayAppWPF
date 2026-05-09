@@ -604,12 +604,18 @@ public partial class App
         Resources["ThemeSliderProgress"] = new SolidColorBrush(_theme.SliderProgress.For(isLightTheme));
         Resources["ThemeSliderThumb"] = new SolidColorBrush(_theme.SliderThumb.For(isLightTheme));
 
-        // Peak meter overlay color. Single solid color (no light/dark variant), live-preview-aware
-        // so the picker drag updates the brush in real time before the user closes the picker.
-        // Falls back to opaque white when no settings instance is wired - matches AppSettings.MeterPeakColorDefaultHex.
+        // Peak meter overlays. Two solid colors (no light/dark variant), both live-preview-aware
+        // so the picker drag updates each brush in real time before the user closes the picker.
+        // MeterPeakBrush paints the base bar to min(L, R); MeterPeakStereoBrush paints on top to
+        // max(L, R) and is translucent by default so the stereo extension reads as a halo.
+        // Fallbacks match the *Default consts in AppSettings.
         System.Windows.Media.Color meterPeakColor =
             _appSettings?.EffectiveMeterPeakColor ?? System.Windows.Media.Colors.White;
         Resources["MeterPeakBrush"] = new SolidColorBrush(meterPeakColor);
+        System.Windows.Media.Color meterPeakStereoColor =
+            _appSettings?.EffectiveMeterPeakStereoColor
+            ?? System.Windows.Media.Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF);
+        Resources["MeterPeakStereoBrush"] = new SolidColorBrush(meterPeakStereoColor);
         Resources["ThemeButtonHover"] = new SolidColorBrush(_theme.ButtonHover.For(isLightTheme));
         Resources["ThemeButtonPressed"] = new SolidColorBrush(_theme.ButtonPressed.For(isLightTheme));
         Resources["ThemeIconForeground"] = new SolidColorBrush(_theme.IconForeground.For(isLightTheme));

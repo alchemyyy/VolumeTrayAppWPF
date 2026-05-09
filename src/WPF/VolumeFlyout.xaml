@@ -123,9 +123,19 @@
                                     <RepeatButton Style="{StaticResource VolumeSliderIncreaseButtonStyle}"/>
                                 </Track.IncreaseRepeatButton>
                             </Track>
-                            <!-- Peak meter overlay. Width is driven by VolumeSlider.UpdateMeterPeakWidth in
-                                 code-behind; HorizontalAlignment=Left so the overlay grows from the track's
-                                 left edge. Hit-test off so clicks fall through to the slider track. -->
+                            <!-- Two-layer peak meter overlay. MeterPeak (base) is sized to min(L, R) and
+                                 MeterPeakStereo paints on top sized to max(L, R) - so for stereo content the
+                                 stereo brush extends past the base bar to the louder channel. Widths driven
+                                 by VolumeSlider.UpdateMeterPeakWidths in code-behind; HorizontalAlignment=Left
+                                 so both grow from the track's left edge. Hit-test off so clicks fall through. -->
+                            <Border x:Name="MeterPeakStereo"
+                                    Height="4"
+                                    Width="0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource MeterPeakStereoBrush}"
+                                    CornerRadius="{DynamicResource CornerRadiusSmall}"
+                                    IsHitTestVisible="False"/>
                             <Border x:Name="MeterPeak"
                                     Height="4"
                                     Width="0"
@@ -315,6 +325,23 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type audio:AudioAppGroup}">
                         <Grid Margin="0,0,0,10" PreviewMouseWheel="SessionRow_PreviewMouseWheel" Tag="{Binding}">
+                            <!-- Mute dim: matches BrightnessTrayAppWPF disabled-row treatment.
+                                 Two independent triggers, both 0.4. Per-app mute (the group's
+                                 own state) and device mute (output is silent regardless of
+                                 the app slider) both make the row read as inactive. -->
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Opacity" Value="1.0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding DefaultDevice.IsMuted, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -361,7 +388,8 @@
                             <wpf:VolumeSlider Grid.Column="1"
                                               Style="{StaticResource VolumeSliderStyle}"
                                               Value="{Binding Volume, Mode=TwoWay, Converter={StaticResource ScalarToPercent}, UpdateSourceTrigger=PropertyChanged}"
-                                              PeakValue="{Binding PeakValue}"
+                                              PeakValueMin="{Binding PeakValueMin}"
+                                              PeakValueMax="{Binding PeakValueMax}"
                                               ToolTip="{Binding DisplayName}"
                                               PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
                                               PreviewMouseMove="Slider_PreviewMouseMove"
@@ -451,6 +479,18 @@
                     <!-- Glyph + slider + percent for the device endpoint. Slider value is bound to
                          AudioDevice.Volume; the glyph swaps based on volume + mute via VolumeGlyphConverter. -->
                     <Grid Grid.Row="1" PreviewMouseWheel="DeviceRow_PreviewMouseWheel">
+                        <!-- Mute dim: matches BrightnessTrayAppWPF disabled-row treatment.
+                             Mute button stays clickable through the dim so the user can toggle back. -->
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Opacity" Value="1.0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DefaultDevice.IsMuted, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -479,7 +519,8 @@
                                           Grid.Column="1"
                                           Style="{StaticResource VolumeSliderStyle}"
                                           Value="{Binding DefaultDevice.Volume, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay, Converter={StaticResource ScalarToPercent}, UpdateSourceTrigger=PropertyChanged}"
-                                          PeakValue="{Binding DefaultDevice.PeakValue, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          PeakValueMin="{Binding DefaultDevice.PeakValueMin, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          PeakValueMax="{Binding DefaultDevice.PeakValueMax, RelativeSource={RelativeSource AncestorType=Window}}"
                                           PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
                                           PreviewMouseMove="Slider_PreviewMouseMove"
                                           PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"

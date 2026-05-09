@@ -23,10 +23,11 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private readonly IMMDeviceEnumerator _enumerator;
     private readonly NotificationBridge _bridge;
     private readonly Dispatcher _dispatcher;
-    // Threadpool-fired timers. Sample timer's Elapsed runs on a bg thread and reads COM peaks
-    // off the UI thread, then BeginInvokes the lerp arming back to the dispatcher. Render timer's
-    // Elapsed BeginInvokes the lerp advancement onto the dispatcher. Mirrors EarTrumpet's split-
-    // thread pattern - keeps the UI dispatcher free even at high sample rates.
+    // Threadpool-fired timers. Sample timer reads the COM peak off the UI thread; render timer
+    // BeginInvokes the lerp advancement onto the dispatcher. Mirrors EarTrumpet exactly:
+    // running the render timer at FPS > SampleRate is what keeps the lerp visiting intermediate
+    // step-counter values between samples - dispatcher updates 180/s, screen vsyncs at the monitor
+    // rate, so each painted frame catches a smoothly-stepped value instead of a snap-to-sample.
     private readonly System.Timers.Timer _peakSampleTimer;
     private readonly System.Timers.Timer _peakRenderTimer;
     private readonly ObservableCollection<AudioDevice> _devices = [];
@@ -72,7 +73,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
 
         // Sample timer's Elapsed fires on the threadpool and does the COM peak read off the UI
-        // thread; render timer's Elapsed marshals the lerp advancement onto the dispatcher.
+        // thread; render timer's Elapsed BeginInvokes the lerp advancement onto the dispatcher.
         // SynchronizingObject left null on purpose so Elapsed runs on the threadpool rather than
         // any captured sync context.
         _peakSampleTimer = new System.Timers.Timer(ResolveSampleIntervalMs())
@@ -149,26 +150,31 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Bg-thread sample tick. Snapshots the device list under try/catch (UI mutations can tear
-    /// ToArray's enumerator), reads each device's COM peak off the UI thread, then dispatches
-    /// the UI-thread interpolation arming through <see cref="OnNewSample"/>. Mirrors EarTrumpet:
-    /// the dispatcher only sees the lerp work, never the COM call.
+    /// ToArray's enumerator), reads each device's COM peak off the UI thread, then dispatches the
+    /// UI-thread lerp arming through <see cref="OnNewSample"/>. The dispatcher only sees the
+    /// arming work, never the COM call.
     /// </summary>
     private void OnPeakSampleElapsed(object? sender, ElapsedEventArgs e)
     {
         int steps = ResolveInterpolationSteps();
+        // Snapshot the unified-meter config once per tick so every device/session this sample
+        // touches sees a coherent (unified, bias) pair even if the user flips the toggle mid-tick.
+        bool unified = _settings?.UnifiedPeakMeter ?? false;
+        int biasMultiplier = _settings?.UnifiedMeterLowChannelBiasMultiplier
+            ?? AppSettings.UnifiedMeterLowChannelBiasMultiplierDefault;
 
         AudioDevice[] devices;
         try { devices = _devices.ToArray(); }
         catch
         {
             // Concurrent mutation of _devices on the UI thread tore the enumerator. Skip this
-            // tick - the next 33 ms tick will pick up the updated list.
+            // tick - the next sample will pick up the updated list.
             return;
         }
 
         for (int i = 0; i < devices.Length; i++)
         {
-            try { devices[i].UpdatePeakValueBackground(); }
+            try { devices[i].UpdatePeakValueBackground(unified, biasMultiplier); }
             catch { /* device may have died between callbacks */ }
         }
 
@@ -185,7 +191,9 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Bg-thread render tick. Marshals the per-frame lerp advancement onto the dispatcher; the
     /// device.OnRenderTick walk and the PropertyChanged that drives the bound MeterPeak overlay
-    /// both run on the UI thread.
+    /// both run on the UI thread. Running this faster than SampleRate is what gives the meter
+    /// stepwise intermediate values between samples - the screen at vsync catches a smoothly
+    /// stepped sequence rather than a snap-to-latest-sample sequence.
     /// </summary>
     private void OnPeakRenderElapsed(object? sender, ElapsedEventArgs e)
     {

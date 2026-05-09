@@ -47,6 +47,36 @@ public partial class GeneralPage : UserControl
             LogarithmicVolumeScaleToggle.IsChecked = settings.UseLogarithmicVolumeScale;
             PlayDeviceVolumeChangeSoundToggle.IsChecked = settings.PlayDeviceVolumeChangeSound;
             PlayAppVolumeChangeSoundToggle.IsChecked = settings.PlayAppVolumeChangeSound;
+
+            UnifiedPeakMeterToggle.IsChecked = settings.UnifiedPeakMeter;
+
+            SettingsBindings.BindSpinner(
+                UnifiedMeterBiasBox,
+                () => settings.UnifiedMeterLowChannelBiasMultiplier,
+                v => settings.UnifiedMeterLowChannelBiasMultiplier = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
+
+            SettingsBindings.BindSpinner(
+                MeterPeakFpsBox,
+                () => settings.MeterPeakFps,
+                v => settings.MeterPeakFps = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
+
+            SettingsBindings.BindSpinner(
+                MeterPeakSampleRateBox,
+                () => settings.MeterPeakSampleRate,
+                v => settings.MeterPeakSampleRate = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
+
+            SettingsBindings.BindSpinner(
+                MeterPeakChangeCeilingBox,
+                () => settings.MeterPeakChangeCeiling,
+                v => settings.MeterPeakChangeCeiling = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
         }
         finally
         {
@@ -110,6 +140,15 @@ public partial class GeneralPage : UserControl
 
         _settings.PlayAppVolumeChangeSound = PlayAppVolumeChangeSoundToggle.IsChecked == true;
         SaveAndNotify();
+    }
+
+    // Tag-based bool toggle dispatcher for the peak-meter subsection. The unified-peak-meter
+    // toggle carries Tag="UnifiedPeakMeter" so SettingsBindings can apply the mutation through
+    // the shared BoolToggleSetters table without a per-toggle handler.
+    private void BoolToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_settings == null) return;
+        SettingsBindings.HandleBoolToggle(sender, _settings, SaveAndNotify, () => _suppressChangeEvents);
     }
 
     /// <summary>

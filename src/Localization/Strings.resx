@@ -220,6 +220,9 @@
   <data name="Settings_General_Installation_Header" xml:space="preserve">
     <value>Installation</value>
   </data>
+  <data name="Settings_General_PeakMeter_Header" xml:space="preserve">
+    <value>Peak meter</value>
+  </data>
   <data name="Settings_General_InstalledOlderBuild_Format" xml:space="preserve">
     <value>Installed (older build) at "{0}".{1}</value>
   </data>
@@ -243,6 +246,9 @@
   </data>
   <data name="Settings_General_NotInstalled_Format" xml:space="preserve">
     <value>Not installed. Will be placed at "{0}".{1}</value>
+  </data>
+  <data name="Settings_General_Notifications_Header" xml:space="preserve">
+    <value>Notifications</value>
   </data>
   <data name="Settings_General_PlayAppVolumeChangeSound_Description" xml:space="preserve">
     <value>Play a Windows notification sound when you change a per-app slider, scaled to the app's mixed volume so quieter apps preview quieter.</value>
@@ -419,6 +425,15 @@ Target: {1}</value>
   <data name="Settings_Theme_MeterPeakColor_Tooltip" xml:space="preserve">
     <value>Edit peak meter color</value>
   </data>
+  <data name="Settings_Theme_MeterPeakStereoColor_Description" xml:space="preserve">
+    <value>Color of the stereo overlay drawn on top of the base bar to the loudest channel. Translucent by default so the channel mismatch reads as a halo extending past the base.</value>
+  </data>
+  <data name="Settings_Theme_MeterPeakStereoColor_Title" xml:space="preserve">
+    <value>Peak meter stereo color</value>
+  </data>
+  <data name="Settings_Theme_MeterPeakStereoColor_Tooltip" xml:space="preserve">
+    <value>Edit peak meter stereo color</value>
+  </data>
   <data name="Settings_Theme_MeterPeakFps_Description" xml:space="preserve">
     <value>How often the meter is redrawn. Higher than the sample rate buys smoothness via linear interpolation between samples; equal to the sample rate snaps with no interpolation.</value>
   </data>
@@ -430,6 +445,24 @@ Target: {1}</value>
   </data>
   <data name="Settings_Theme_MeterPeakSampleRate_Title" xml:space="preserve">
     <value>Peak meter sample rate</value>
+  </data>
+  <data name="Settings_Theme_MeterPeakChangeCeiling_Description" xml:space="preserve">
+    <value>Maximum amount, in volume units (0 to 100), that the peak meter can move in a single redraw. Caps single-frame jumps so a sudden silence-to-loud transition ramps over a few frames. 0 freezes the meter; 100 disables the cap.</value>
+  </data>
+  <data name="Settings_Theme_MeterPeakChangeCeiling_Title" xml:space="preserve">
+    <value>Peak meter change ceiling</value>
+  </data>
+  <data name="Settings_Theme_UnifiedPeakMeter_Description" xml:space="preserve">
+    <value>Combine the left and right channels into a single weighted bar instead of drawing the stereo overlay on top of the base meter.</value>
+  </data>
+  <data name="Settings_Theme_UnifiedPeakMeter_Title" xml:space="preserve">
+    <value>Unified peak meter</value>
+  </data>
+  <data name="Settings_Theme_UnifiedMeterBias_Description" xml:space="preserve">
+    <value>How strongly the quieter channel weights the combined value. 0 keeps the louder channel; 1 averages the channels; higher values dampen stereo flutter by biasing the result toward the quieter channel.</value>
+  </data>
+  <data name="Settings_Theme_UnifiedMeterBias_Title" xml:space="preserve">
+    <value>Unified meter low channel bias multiplier</value>
   </data>
   <data name="Settings_Theme_PickerTitle_DarkVariant" xml:space="preserve">
     <value>dark</value>
@@ -484,6 +517,60 @@ Target: {1}</value>
   </data>
   <data name="Settings_Theme_ThemeStyle_Title" xml:space="preserve">
     <value>Theme style</value>
+  </data>
+  <data name="Settings_TrayIcon_AltDoubleLeftClick_Title" xml:space="preserve">
+    <value>Alt + double left click</value>
+  </data>
+  <data name="Settings_TrayIcon_AltLeftClick_Title" xml:space="preserve">
+    <value>Alt + left click</value>
+  </data>
+  <data name="Settings_TrayIcon_AltRightClick_Title" xml:space="preserve">
+    <value>Alt + right click</value>
+  </data>
+  <data name="Settings_TrayIcon_ClickAction_Nothing" xml:space="preserve">
+    <value>Nothing</value>
+  </data>
+  <data name="Settings_TrayIcon_ContextMenu_Header" xml:space="preserve">
+    <value>Context menu</value>
+  </data>
+  <data name="Settings_TrayIcon_CtrlDoubleLeftClick_Title" xml:space="preserve">
+    <value>Ctrl + double left click</value>
+  </data>
+  <data name="Settings_TrayIcon_CtrlLeftClick_Title" xml:space="preserve">
+    <value>Ctrl + left click</value>
+  </data>
+  <data name="Settings_TrayIcon_CtrlRightClick_Title" xml:space="preserve">
+    <value>Ctrl + right click</value>
+  </data>
+  <data name="Settings_TrayIcon_DoubleLeftClick_Title" xml:space="preserve">
+    <value>Double left click</value>
+  </data>
+  <data name="Settings_TrayIcon_MenuPosition_Classic" xml:space="preserve">
+    <value>Classic</value>
+  </data>
+  <data name="Settings_TrayIcon_MenuPosition_Description" xml:space="preserve">
+    <value>Classic opens at the cursor. Modern docks the menu above the taskbar like the Windows 11 system flyouts.</value>
+  </data>
+  <data name="Settings_TrayIcon_MenuPosition_Modern" xml:space="preserve">
+    <value>Modern</value>
+  </data>
+  <data name="Settings_TrayIcon_MenuPosition_Title" xml:space="preserve">
+    <value>Menu position</value>
+  </data>
+  <data name="Settings_TrayIcon_ModifiedActions_Description" xml:space="preserve">
+    <value>Assign actions to modified clicks on the tray icon. Entries set to Nothing fall back to the default behavior.</value>
+  </data>
+  <data name="Settings_TrayIcon_ModifiedActions_Header" xml:space="preserve">
+    <value>Modified actions</value>
+  </data>
+  <data name="Settings_TrayIcon_MouseWheel_Description" xml:space="preserve">
+    <value>Scroll the mouse wheel over the tray icon to adjust the default device's volume. Does *not* use an always-active global mouse hook.</value>
+  </data>
+  <data name="Settings_TrayIcon_MouseWheel_Title" xml:space="preserve">
+    <value>Mouse wheel</value>
+  </data>
+  <data name="Settings_TrayIcon_SectionHeader" xml:space="preserve">
+    <value>Tray Icon</value>
   </data>
   <data name="Tray_Bluetooth" xml:space="preserve">
     <value>Bluetooth</value>

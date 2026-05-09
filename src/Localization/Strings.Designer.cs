@@ -457,6 +457,15 @@ namespace VolumeTrayAppWPF.Localization {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to Peak meter.
+        /// </summary>
+        public static string Settings_General_PeakMeter_Header {
+            get {
+                return ResourceManager.GetString("Settings_General_PeakMeter_Header", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to Installed (older build) at "{0}".{1}.
         /// </summary>
         public static string Settings_General_InstalledOlderBuild_Format {
@@ -525,6 +534,15 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_General_NotInstalled_Format {
             get {
                 return ResourceManager.GetString("Settings_General_NotInstalled_Format", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Notifications.
+        /// </summary>
+        public static string Settings_General_Notifications_Header {
+            get {
+                return ResourceManager.GetString("Settings_General_Notifications_Header", resourceCulture);
             }
         }
 
@@ -1051,6 +1069,33 @@ namespace VolumeTrayAppWPF.Localization {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to Color of the stereo overlay drawn on top of the base bar to the loudest channel. Translucent by default so the channel mismatch reads as a halo extending past the base.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakStereoColor_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Peak meter stereo color.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakStereoColor_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Edit peak meter stereo color.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakStereoColor_Tooltip {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Tooltip", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to How often the meter is redrawn. Higher than the sample rate buys smoothness via linear interpolation between samples; equal to the sample rate snaps with no interpolation.
         /// </summary>
         public static string Settings_Theme_MeterPeakFps_Description {
@@ -1083,6 +1128,60 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Theme_MeterPeakSampleRate_Title {
             get {
                 return ResourceManager.GetString("Settings_Theme_MeterPeakSampleRate_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Maximum amount, in volume units (0 to 100), that the peak meter can move in a single redraw. Caps single-frame jumps so a sudden silence-to-loud transition ramps over a few frames. 0 freezes the meter; 100 disables the cap.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakChangeCeiling_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakChangeCeiling_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Peak meter change ceiling.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakChangeCeiling_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakChangeCeiling_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Combine the left and right channels into a single weighted bar instead of drawing the stereo overlay on top of the base meter.
+        /// </summary>
+        public static string Settings_Theme_UnifiedPeakMeter_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedPeakMeter_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Unified peak meter.
+        /// </summary>
+        public static string Settings_Theme_UnifiedPeakMeter_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedPeakMeter_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to How strongly the quieter channel weights the combined value. 0 keeps the louder channel; 1 averages the channels; higher values dampen stereo flutter by biasing the result toward the quieter channel.
+        /// </summary>
+        public static string Settings_Theme_UnifiedMeterBias_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedMeterBias_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Unified meter low channel bias multiplier.
+        /// </summary>
+        public static string Settings_Theme_UnifiedMeterBias_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedMeterBias_Title", resourceCulture);
             }
         }
 
@@ -1245,6 +1344,168 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Theme_ThemeStyle_Title {
             get {
                 return ResourceManager.GetString("Settings_Theme_ThemeStyle_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Alt + double left click.
+        /// </summary>
+        public static string Settings_TrayIcon_AltDoubleLeftClick_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_AltDoubleLeftClick_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Alt + left click.
+        /// </summary>
+        public static string Settings_TrayIcon_AltLeftClick_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_AltLeftClick_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Alt + right click.
+        /// </summary>
+        public static string Settings_TrayIcon_AltRightClick_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_AltRightClick_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Nothing.
+        /// </summary>
+        public static string Settings_TrayIcon_ClickAction_Nothing {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_ClickAction_Nothing", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Context menu.
+        /// </summary>
+        public static string Settings_TrayIcon_ContextMenu_Header {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_ContextMenu_Header", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Ctrl + double left click.
+        /// </summary>
+        public static string Settings_TrayIcon_CtrlDoubleLeftClick_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_CtrlDoubleLeftClick_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Ctrl + left click.
+        /// </summary>
+        public static string Settings_TrayIcon_CtrlLeftClick_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_CtrlLeftClick_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Ctrl + right click.
+        /// </summary>
+        public static string Settings_TrayIcon_CtrlRightClick_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_CtrlRightClick_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Double left click.
+        /// </summary>
+        public static string Settings_TrayIcon_DoubleLeftClick_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_DoubleLeftClick_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Classic.
+        /// </summary>
+        public static string Settings_TrayIcon_MenuPosition_Classic {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Classic", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Classic opens at the cursor. Modern docks the menu above the taskbar like the Windows 11 system flyouts.
+        /// </summary>
+        public static string Settings_TrayIcon_MenuPosition_Description {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Modern.
+        /// </summary>
+        public static string Settings_TrayIcon_MenuPosition_Modern {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Modern", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Menu position.
+        /// </summary>
+        public static string Settings_TrayIcon_MenuPosition_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Assign actions to modified clicks on the tray icon. Entries set to Nothing fall back to the default behavior.
+        /// </summary>
+        public static string Settings_TrayIcon_ModifiedActions_Description {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_ModifiedActions_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Modified actions.
+        /// </summary>
+        public static string Settings_TrayIcon_ModifiedActions_Header {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_ModifiedActions_Header", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Scroll the mouse wheel over the tray icon to adjust the default device&apos;s volume. Does *not* use an always-active global mouse hook.
+        /// </summary>
+        public static string Settings_TrayIcon_MouseWheel_Description {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_MouseWheel_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Mouse wheel.
+        /// </summary>
+        public static string Settings_TrayIcon_MouseWheel_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_MouseWheel_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Tray Icon.
+        /// </summary>
+        public static string Settings_TrayIcon_SectionHeader {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_SectionHeader", resourceCulture);
             }
         }
 

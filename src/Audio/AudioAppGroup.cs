@@ -21,7 +21,8 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
     private readonly List<AudioSession> _sessions = [];
     private readonly Dispatcher _dispatcher;
 
-    private float _peakValue;
+    private float _peakValueMin;
+    private float _peakValueMax;
     private bool _disposed;
 
     public string AppId { get; }
@@ -72,11 +73,18 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
         }
     }
 
-    /// <summary>Loudest peak across the grouped sessions. Driven by AudioSession.PeakValue change events.</summary>
-    public float PeakValue
+    /// <summary>Loudest min(L, R) peak across the grouped sessions; drives the base meter bar.</summary>
+    public float PeakValueMin
     {
-        get => _peakValue;
-        private set { if (Math.Abs(value - _peakValue) > 0.001f) { _peakValue = value; OnPropertyChanged(); } }
+        get => _peakValueMin;
+        private set { if (Math.Abs(value - _peakValueMin) > 0.001f) { _peakValueMin = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>Loudest max(L, R) peak across the grouped sessions; drives the stereo overlay.</summary>
+    public float PeakValueMax
+    {
+        get => _peakValueMax;
+        private set { if (Math.Abs(value - _peakValueMax) > 0.001f) { _peakValueMax = value; OnPropertyChanged(); } }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -149,8 +157,10 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
     /// are populated in parallel off the UI thread. Snapshots the session list under try/catch
     /// because UI-thread Add/RemoveSession could otherwise tear the enumerator; a torn frame
     /// just means we miss one 33 ms tick for the affected group.
+    /// The (unified, biasMultiplier) pair flows down unchanged so per-session bars collapse
+    /// in lockstep with the device bar when unified mode is on.
     /// </summary>
-    internal void UpdatePeakValueBackground()
+    internal void UpdatePeakValueBackground(bool unified, int biasMultiplier)
     {
         if (_disposed) return;
 
@@ -160,7 +170,7 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
 
         for (int i = 0; i < sessions.Length; i++)
         {
-            try { sessions[i].UpdatePeakValueBackground(); }
+            try { sessions[i].UpdatePeakValueBackground(unified, biasMultiplier); }
             catch { /* session may have died between callbacks */ }
         }
     }
@@ -201,7 +211,8 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
                 if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
                     OnPropertyChanged(nameof(IsMuted));
                 break;
-            case nameof(AudioSession.PeakValue):
+            case nameof(AudioSession.PeakValueMin):
+            case nameof(AudioSession.PeakValueMax):
                 RefreshAggregatePeak();
                 break;
             case nameof(AudioSession.Icon):
@@ -220,13 +231,17 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
 
     private void RefreshAggregatePeak()
     {
-        float max = 0f;
+        float maxOfMins = 0f;
+        float maxOfMaxes = 0f;
         for (int i = 0; i < _sessions.Count; i++)
         {
-            float p = _sessions[i].PeakValue;
-            if (p > max) max = p;
+            float pMin = _sessions[i].PeakValueMin;
+            float pMax = _sessions[i].PeakValueMax;
+            if (pMin > maxOfMins) maxOfMins = pMin;
+            if (pMax > maxOfMaxes) maxOfMaxes = pMax;
         }
-        PeakValue = max;
+        PeakValueMin = maxOfMins;
+        PeakValueMax = maxOfMaxes;
     }
 
     public void Dispose()

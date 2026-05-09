@@ -47,17 +47,19 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private bool _isDefault;
     private bool _disposed;
 
-    // Linear-interpolation state for the peak meter. The sample timer's bg-thread half writes
-    // _rawPeakValue from a COM call; the dispatched UI half (OnNewSample) copies _rawPeakValue
-    // into _targetPeakValue and snapshots the current display as _prevPeakValue. The render timer
-    // advances _interpolationStep and recomputes _displayPeakValue as a lerp between _prevPeakValue
-    // and _targetPeakValue across _interpolationSteps frames - so a FPS > SampleRate config buys
-    // real visual smoothness rather than just polling COM faster. Keeping COM off the UI thread
-    // is what keeps the dispatcher responsive at high sample rates.
-    private float _rawPeakValue;
-    private float _displayPeakValue;
-    private float _prevPeakValue;
-    private float _targetPeakValue;
+    // Step-counter linear-interpolation state for the stereo peak meter. The sample timer's
+    // bg-thread half writes _rawPeakMin / _rawPeakMax from one IAudioMeterInformation call (min
+    // and max over the first two channels). The dispatched UI half (OnNewSample) copies them into
+    // the _target* fields, snapshots the current display values as _prev*, and resets the step
+    // counter. The render timer's UI tick advances _interpolationStep and lerps both display
+    // values across _interpolationSteps frames; min and max share the step counter so they
+    // advance together. With Fps > SampleRate, the dispatcher updates the lerps multiple times
+    // per sample interval - the screen at vsync catches a stepped sequence of intermediate values
+    // rather than a snap-to-latest sequence, which is what gives the meter its smoothness.
+    private float _rawPeakMin, _rawPeakMax;
+    private float _displayPeakMin, _displayPeakMax;
+    private float _prevPeakMin, _prevPeakMax;
+    private float _targetPeakMin, _targetPeakMax;
     private int _interpolationStep;
     private int _interpolationSteps = 1;
 
@@ -154,11 +156,16 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Smoothed peak value driven by the render timer. Updated every render tick (which fires
-    /// PropertyChanged unconditionally on change, no min-delta filter, so the lerp's small per-frame
-    /// deltas reach the bound UI). Sourced from <see cref="OnRenderTick"/>; never set externally.
+    /// Smoothed min(L, R) peak. Drives the base meter bar (the level guaranteed in both
+    /// channels). Updated every render tick from <see cref="OnRenderTick"/>; never set externally.
     /// </summary>
-    public float PeakValue => _displayPeakValue;
+    public float PeakValueMin => _displayPeakMin;
+
+    /// <summary>
+    /// Smoothed max(L, R) peak. Drives the stereo overlay bar that paints on top of the base bar
+    /// and extends to the loudest channel. For mono streams this equals <see cref="PeakValueMin"/>.
+    /// </summary>
+    public float PeakValueMax => _displayPeakMax;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -201,24 +208,27 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Bg-thread half of the sample tick. Reads the endpoint peak via COM into
-    /// <see cref="_rawPeakValue"/> and cascades the same call into every group so per-session
-    /// raw peaks are filled in parallel - all off the UI thread. The groups list is snapshotted
-    /// under try/catch since UI-thread mutations could otherwise tear the enumerator; a torn
-    /// frame just means we miss one 33 ms tick for the affected device.
+    /// Bg-thread half of the sample tick. Reads the endpoint per-channel peaks via COM into
+    /// <see cref="_rawPeakMin"/> / <see cref="_rawPeakMax"/> and cascades into every group so
+    /// per-session raw peaks are filled in parallel - all off the UI thread. The groups list is
+    /// snapshotted under try/catch since UI-thread mutations could otherwise tear the enumerator;
+    /// a torn frame just means we miss one tick for the affected device.
+    /// The (unified, biasMultiplier) pair is forwarded into <see cref="MeterReader.ReadStereoPeaks"/>
+    /// so unified mode collapses the per-channel result before it lands in the lerp targets.
     /// </summary>
-    internal void UpdatePeakValueBackground()
+    internal void UpdatePeakValueBackground(bool unified, int biasMultiplier)
     {
         if (_disposed) return;
 
         try
         {
-            _endpointMeter.GetPeakValue(out float peak);
-            _rawPeakValue = peak;
+            MeterReader.ReadStereoPeaks(_endpointMeter, unified, biasMultiplier, out float minPeak, out float maxPeak);
+            _rawPeakMin = minPeak;
+            _rawPeakMax = maxPeak;
         }
         catch
         {
-            // Endpoint disconnect race - leave previous raw value in place; next sample reconciles.
+            // Endpoint disconnect race - leave previous raw values in place; next sample reconciles.
         }
 
         AudioAppGroup[] groups;
@@ -227,24 +237,26 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         for (int i = 0; i < groups.Length; i++)
         {
-            try { groups[i].UpdatePeakValueBackground(); }
+            try { groups[i].UpdatePeakValueBackground(unified, biasMultiplier); }
             catch { /* group / session may have died between callbacks */ }
         }
     }
 
     /// <summary>
-    /// UI-thread half of the sample tick. Snapshots the current display value as the new lerp
-    /// origin, copies the most recent <see cref="_rawPeakValue"/> (filled by
-    /// <see cref="UpdatePeakValueBackground"/>) into <see cref="_targetPeakValue"/>, and arms
-    /// the interpolation step counter. Forwards the same call into every
-    /// <see cref="AudioAppGroup"/> so per-app session sliders interpolate too.
+    /// UI-thread half of the sample tick. Snapshots the current display values as the new lerp
+    /// origins, copies the most recent <see cref="_rawPeakMin"/> / <see cref="_rawPeakMax"/>
+    /// (filled by <see cref="UpdatePeakValueBackground"/>) into the target fields, and arms the
+    /// step counter at the supplied span (typically Fps / SampleRate). Forwards the same call
+    /// into every <see cref="AudioAppGroup"/> so per-app session sliders interpolate too.
     /// </summary>
     internal void OnNewSample(int interpolationSteps)
     {
         if (_disposed) return;
 
-        _prevPeakValue = _displayPeakValue;
-        _targetPeakValue = _rawPeakValue;
+        _prevPeakMin = _displayPeakMin;
+        _prevPeakMax = _displayPeakMax;
+        _targetPeakMin = _rawPeakMin;
+        _targetPeakMax = _rawPeakMax;
         _interpolationStep = 0;
         _interpolationSteps = interpolationSteps < 1 ? 1 : interpolationSteps;
 
@@ -252,9 +264,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Render-timer callback. Advances the interpolation step and writes the lerped value into
-    /// <see cref="_displayPeakValue"/>, firing PropertyChanged when the lerped value moved at all so
-    /// the bound MeterPeak overlay redraws every frame. UI-thread.
+    /// Render-timer callback. Advances the shared step counter and writes the lerped min/max
+    /// peaks into the display fields, firing PropertyChanged on actual change so both bound
+    /// meter borders redraw every frame. UI-thread.
     /// </summary>
     internal void OnRenderTick()
     {
@@ -262,23 +274,30 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         _interpolationStep++;
 
-        float newDisplay;
+        float newMin, newMax;
         if (_interpolationStep >= _interpolationSteps)
         {
-            // Reached or passed the target - snap so a long render-only burst (e.g. paused samples)
-            // can't drift past the most recent sample.
-            newDisplay = _targetPeakValue;
+            // Reached or passed the targets - snap so a long render-only burst (e.g. paused
+            // samples) can't drift past the most recent sample.
+            newMin = _targetPeakMin;
+            newMax = _targetPeakMax;
         }
         else
         {
             float t = (float)_interpolationStep / _interpolationSteps;
-            newDisplay = _prevPeakValue + (_targetPeakValue - _prevPeakValue) * t;
+            newMin = _prevPeakMin + (_targetPeakMin - _prevPeakMin) * t;
+            newMax = _prevPeakMax + (_targetPeakMax - _prevPeakMax) * t;
         }
 
-        if (newDisplay != _displayPeakValue)
+        if (newMin != _displayPeakMin)
         {
-            _displayPeakValue = newDisplay;
-            OnPropertyChanged(nameof(PeakValue));
+            _displayPeakMin = newMin;
+            OnPropertyChanged(nameof(PeakValueMin));
+        }
+        if (newMax != _displayPeakMax)
+        {
+            _displayPeakMax = newMax;
+            OnPropertyChanged(nameof(PeakValueMax));
         }
 
         for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnRenderTick();

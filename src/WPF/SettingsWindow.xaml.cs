@@ -56,11 +56,72 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
 
     /// <summary>
     /// Returns true when this window's HWND is the OS-level foreground window.
+    /// Mirrors <see cref="VolumeFlyout.HasFocus"/> - used by the flyout's deactivation handler
+    /// to tell whether focus is moving to settings (keep flyout open) versus to an unrelated window (hide flyout).
     /// </summary>
     public bool HasFocus()
     {
         IntPtr hwnd = new WindowInteropHelper(this).Handle;
         return hwnd != IntPtr.Zero && hwnd == User32.GetForegroundWindow();
+    }
+
+    /// <summary>
+    /// Pair the flyout's visibility with this window's focus:
+    /// bring it back when settings is activated, hide it when settings is deactivated.
+    /// The flyout is opened via <see cref="VolumeFlyout.ShowWithoutActivating"/> so it doesn't steal focus
+    /// from settings (which would immediately trigger the deactivation hide and flicker).
+    /// </summary>
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        foreach (Window window in System.Windows.Application.Current.Windows)
+        {
+            if (window is VolumeFlyout { IsVisible: false } flyout)
+            {
+                flyout.ShowWithoutActivating();
+                break;
+            }
+        }
+    }
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+
+        VolumeFlyout? flyout = null;
+        foreach (Window window in System.Windows.Application.Current.Windows)
+            if (window is VolumeFlyout { IsVisible: true } f) { flyout = f; break; }
+
+        if (flyout == null) return;
+
+        // Undocked flyout is a free-floating user-positioned window; it isn't paired to settings' visibility,
+        // so closing settings (or just clicking elsewhere) must not pull it offscreen.
+        if (flyout.IsUndocked) return;
+
+        // Fast path:
+        // the OS foreground HWND has already settled on the flyout (user clicked the flyout itself) - nothing to do.
+        if (flyout.HasFocus()) return;
+
+        // Otherwise the activation transition is still in flight.
+        // Race the flyout's Activated event against a single Input-priority dispatcher tick.
+        // Input runs after all WM_ACTIVATE currently queued,
+        // so by then Activated would have fired if focus was going to land on the flyout.
+        // Whichever signal arrives first decides - no Background-priority idle wait,
+        // no risk of getting wedged behind unrelated dispatcher work.
+        bool keep = false;
+        EventHandler? onActivated = null;
+        onActivated = (_, _) =>
+        {
+            flyout.Activated -= onActivated;
+            keep = true;
+        };
+        flyout.Activated += onActivated;
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            flyout.Activated -= onActivated;
+            if (!keep && !flyout.HasFocus()) flyout.Hide();
+        }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
     /// <summary>

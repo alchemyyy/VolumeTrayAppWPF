@@ -252,20 +252,56 @@ public class AppSettings
 
     // Peak meter overlay drawn on top of the volume slider track.
     // Two-rate model mirroring EarTrumpet: SampleRate is how often we COM-read the raw peak from
-    // IAudioMeterInformation (off the UI thread); Fps is how often we render the meter to screen.
-    // Between samples, the display value is linearly interpolated from the previous sample to the
-    // new target over (Fps / SampleRate) render frames, so cranking Fps above SampleRate buys
-    // smoothness rather than just polling COM faster. Fps=SampleRate falls back to no interpolation
-    // (one render per sample, snap to target).
-    // Defaults: SampleRate=30, Fps=30 -> 1 step (snap on every render). Matches EarTrumpet's defaults
-    // and the rate-doesn't-saturate-the-UI-thread feel users expect from the OS volume mixer.
+    // IAudioMeterInformation (off the UI thread); Fps is how often the render timer advances the
+    // step-counter lerp toward the most recent sample. Running Fps > SampleRate is what gives the
+    // meter visible smoothness - dispatcher updates the lerp multiple times per sample interval,
+    // and the screen at vsync catches a stepped sequence of intermediate values rather than a
+    // snap-to-latest sequence.
+    // Defaults: SampleRate=90, Fps=180 -> 2 interpolation steps per sample.
     // Both clamped 1..1000 so a corrupt settings.xml can't push either timer to insane rates.
     // ColorHex is a single solid color (no light/dark variant) - default opaque white.
     // TemporaryMeterPeakColor is the live-preview slot the color picker writes during a drag;
     // never serialized, mirrors NullableThemeColor.Temporary*.
+    // Meter is two stacked overlays driven by the first two channels of IAudioMeterInformation:
+    // MeterPeakColor paints the bar to min(L, R) (the level guaranteed in both channels), and
+    // MeterPeakStereoColor paints on top to max(L, R). With a translucent stereo color the
+    // mismatch between channels reads as a halo extending past the solid base bar; for mono
+    // streams (or when L==R) the two bars coincide.
     public const string MeterPeakColorDefaultHex = "#FFFFFFFF";
-    public const int MeterPeakFpsDefault = 30;
-    public const int MeterPeakSampleRateDefault = 30;
+    public const string MeterPeakStereoColorDefaultHex = "#80FFFFFF";
+    public const int MeterPeakFpsDefault = 180;
+    public const int MeterPeakSampleRateDefault = 90;
+
+    // Per-redraw ceiling, in 0-100 volume units, on how far VolumeSlider's rendered peak can move
+    // toward the incoming smoothed target. Caps single-frame jumps so a sudden silence-to-loud
+    // (or loud-to-silence) transition ramps over a few frames instead of teleporting. 0 freezes
+    // the meter; 100 disables the clamp (one-tick catch-up).
+    public const int MeterPeakChangeCeilingDefault = 10;
+    public const int MeterPeakChangeCeilingMax = 100;
+
+    // Unified peak meter collapses min(L, R) and max(L, R) into a single weighted value so the
+    // base bar and stereo overlay coincide and read as one solid bar. The weighting favors the
+    // quieter channel by the bias multiplier: combined = (low * M + high) / (M + 1). A multiplier
+    // of 0 falls back to plain max(L, R); 1 averages the channels; the default of 3 dampens
+    // moment-to-moment stereo flutter without fully collapsing to min(L, R).
+    public const int UnifiedMeterLowChannelBiasMultiplierDefault = 3;
+    public const int UnifiedMeterLowChannelBiasMultiplierMax = 100;
+
+    public bool UnifiedPeakMeter { get; set; } = false;
+
+    private int _unifiedMeterLowChannelBiasMultiplier = UnifiedMeterLowChannelBiasMultiplierDefault;
+
+    [XmlElement]
+    public int UnifiedMeterLowChannelBiasMultiplier
+    {
+        get => _unifiedMeterLowChannelBiasMultiplier;
+        set
+        {
+            int clamped = Math.Max(0, Math.Min(UnifiedMeterLowChannelBiasMultiplierMax, value));
+            if (_unifiedMeterLowChannelBiasMultiplier == clamped) return;
+            _unifiedMeterLowChannelBiasMultiplier = clamped;
+        }
+    }
 
     private int _meterPeakFps = MeterPeakFpsDefault;
 
@@ -294,6 +330,20 @@ public class AppSettings
             if (_meterPeakSampleRate == clamped) return;
             _meterPeakSampleRate = clamped;
             MeterPeakSampleRateChanged?.Invoke();
+        }
+    }
+
+    private int _meterPeakChangeCeiling = MeterPeakChangeCeilingDefault;
+
+    [XmlElement]
+    public int MeterPeakChangeCeiling
+    {
+        get => _meterPeakChangeCeiling;
+        set
+        {
+            int clamped = Math.Max(0, Math.Min(MeterPeakChangeCeilingMax, value));
+            if (_meterPeakChangeCeiling == clamped) return;
+            _meterPeakChangeCeiling = clamped;
         }
     }
 
@@ -331,6 +381,43 @@ public class AppSettings
     /// </summary>
     public Color EffectiveMeterPeakColor =>
         TemporaryMeterPeakColor ?? NullableThemeColor.ParseHexOrDefault(MeterPeakColorHex, Colors.White);
+
+    private string _meterPeakStereoColorHex = MeterPeakStereoColorDefaultHex;
+
+    [XmlElement]
+    public string MeterPeakStereoColorHex
+    {
+        get => _meterPeakStereoColorHex;
+        set
+        {
+            string normalized = string.IsNullOrWhiteSpace(value) ? MeterPeakStereoColorDefaultHex : value;
+            if (_meterPeakStereoColorHex == normalized) return;
+            _meterPeakStereoColorHex = normalized;
+        }
+    }
+
+    private Color? _tempMeterPeakStereoColor;
+
+    [XmlIgnore]
+    public Color? TemporaryMeterPeakStereoColor
+    {
+        get => _tempMeterPeakStereoColor;
+        set
+        {
+            if (_tempMeterPeakStereoColor == value) return;
+            _tempMeterPeakStereoColor = value;
+            RaiseChanged();
+        }
+    }
+
+    /// <summary>
+    /// Resolved stereo overlay color (drawn on top of the base bar to max(L, R)). Live preview
+    /// wins over the persisted hex; both fall back to half-alpha white so consumers always see a
+    /// real color.
+    /// </summary>
+    public Color EffectiveMeterPeakStereoColor =>
+        TemporaryMeterPeakStereoColor
+        ?? NullableThemeColor.ParseHexOrDefault(MeterPeakStereoColorHex, Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF));
 
     /// <summary>Raised when MeterPeakFps changes so AudioDeviceManager can retune its render interval.</summary>
     public event Action? MeterPeakFpsChanged;

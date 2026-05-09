@@ -37,13 +37,15 @@ public partial class ThemePage : UserControl
     // Pickers persist across tab switches; they close when the user X's them or the owning settings window closes.
     private readonly Dictionary<(NullableThemeColor Target, bool IsLight), TAWPFColorPicker> _openPickers = [];
 
-    // Singleton picker for the meter-peak color (single solid value, no light/dark split).
-    // Re-clicking the swatch focuses the existing picker rather than stacking duplicates.
+    // Singleton pickers for the meter-peak colors (single solid values, no light/dark split).
+    // Re-clicking a swatch focuses the existing picker rather than stacking duplicates.
     private TAWPFColorPicker? _openMeterPeakPicker;
+    private TAWPFColorPicker? _openMeterPeakStereoPicker;
 
-    // Default meter peak color used as the picker's Default seed and the Reset target.
-    // Mirrors AppSettings.MeterPeakColorDefaultHex - kept in sync as a Color so we don't reparse on every reset.
+    // Default meter peak colors used as the picker's Default seed and the Reset target.
+    // Kept in sync with the *DefaultHex consts in AppSettings so we don't reparse on every reset.
     private static readonly Color MeterPeakDefaultColor = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+    private static readonly Color MeterPeakStereoDefaultColor = Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF);
 
     private static readonly Dictionary<string, Action<ThemePage>> EnumComboPostActions = new()
     {
@@ -79,20 +81,6 @@ public partial class ThemePage : UserControl
                 () => _suppressChangeEvents,
                 SaveAndNotify);
 
-            SettingsBindings.BindSpinner(
-                MeterPeakFpsBox,
-                () => settings.MeterPeakFps,
-                v => settings.MeterPeakFps = v,
-                () => _suppressChangeEvents,
-                SaveAndNotify);
-
-            SettingsBindings.BindSpinner(
-                MeterPeakSampleRateBox,
-                () => settings.MeterPeakSampleRate,
-                v => settings.MeterPeakSampleRate = v,
-                () => _suppressChangeEvents,
-                SaveAndNotify);
-
             SettingsBindings.SelectComboByTag(ThemeModeCombo, settings.ThemeMode.ToString());
             RoundedCornersToggle.IsChecked = settings.EnableRoundedCorners;
 
@@ -106,6 +94,7 @@ public partial class ThemePage : UserControl
             UpdateColorSwatches();
             UpdateColorSwatchVisibility();
             UpdateMeterPeakSwatch();
+            UpdateMeterPeakStereoSwatch();
         }
         finally
         {
@@ -376,6 +365,72 @@ public partial class ThemePage : UserControl
         if (_settings == null) return;
         MeterPeakColorSwatch.Background = new SolidColorBrush(_settings.EffectiveMeterPeakColor);
         MeterPeakColorSwatch.Opacity = 1.0;
+    }
+
+    // Stereo overlay color. Mirrors MeterPeakColor_Click but writes to the *Stereo* settings slots
+    // so the secondary brush (drawn on top of the base bar to max(L, R)) updates independently.
+    private void MeterPeakStereoColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_settings == null) return;
+
+        if (_openMeterPeakStereoPicker != null)
+        {
+            if (_openMeterPeakStereoPicker.WindowState == WindowState.Minimized)
+                _openMeterPeakStereoPicker.WindowState = WindowState.Normal;
+            _openMeterPeakStereoPicker.Activate();
+            return;
+        }
+
+        Color initial = _settings.EffectiveMeterPeakStereoColor;
+        string title = LocalizationManager.Instance["Settings_Theme_MeterPeakStereoColor_Title"];
+
+        TAWPFColorPicker picker = new(title, hasAlpha: true, initial, defaultColor: MeterPeakStereoDefaultColor)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        picker.ColorChanged += (_, editedColor) =>
+        {
+            if (_settings == null) return;
+            _settings.TemporaryMeterPeakStereoColor = editedColor;
+            UpdateMeterPeakStereoSwatch();
+        };
+
+        picker.Closed += (s, _) =>
+        {
+            _openMeterPeakStereoPicker = null;
+            if (_settings == null) return;
+
+            TAWPFColorPicker closed = (TAWPFColorPicker)s!;
+            if (closed.IsDirty)
+            {
+                _settings.MeterPeakStereoColorHex = NullableThemeColor.ToHex(closed.CurrentColor);
+                _settings.Save();
+            }
+
+            _settings.TemporaryMeterPeakStereoColor = null;
+            UpdateMeterPeakStereoSwatch();
+        };
+
+        _openMeterPeakStereoPicker = picker;
+        picker.Show();
+    }
+
+    private void MeterPeakStereoColorReset_Click(object sender, RoutedEventArgs e)
+    {
+        if (_settings == null) return;
+
+        _settings.MeterPeakStereoColorHex = AppSettings.MeterPeakStereoColorDefaultHex;
+        _settings.TemporaryMeterPeakStereoColor = null;
+        UpdateMeterPeakStereoSwatch();
+        SaveAndNotify();
+    }
+
+    private void UpdateMeterPeakStereoSwatch()
+    {
+        if (_settings == null) return;
+        MeterPeakStereoColorSwatch.Background = new SolidColorBrush(_settings.EffectiveMeterPeakStereoColor);
+        MeterPeakStereoColorSwatch.Opacity = 1.0;
     }
 
     private void UpdateColorSwatches()

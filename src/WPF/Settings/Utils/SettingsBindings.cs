@@ -25,6 +25,7 @@ public static class SettingsBindings
         ["EnableRoundedCorners"] = (s, v) => s.EnableRoundedCorners = v,
         ["AllowFlyoutUndock"] = (s, v) => s.AllowFlyoutUndock = v,
         ["RestoreFlyoutUndockedOnStartup"] = (s, v) => s.RestoreFlyoutUndockedOnStartup = v,
+        ["UnifiedPeakMeter"] = (s, v) => s.UnifiedPeakMeter = v,
     };
 
     /// <summary>Setter + parser pair for an enum-bound ComboBox.</summary>
