@@ -240,6 +240,8 @@
                 <Grid x:Name="AppIconRoot" Grid.Column="0" Width="22" Height="22"
                       Margin="0,0,10,0" VerticalAlignment="Center"
                       Background="Transparent" Cursor="Hand"
+                      ToolTip="{Binding DisplayName}"
+                      ToolTipService.InitialShowDelay="1000"
                       PreviewMouseLeftButtonUp="AppIcon_PreviewMouseLeftButtonUp">
                     <Image Source="{Binding Icon}" Width="22" Height="22"
                            RenderOptions.BitmapScalingMode="HighQuality">
@@ -385,7 +387,7 @@
                             Click="DeviceMute_Click"
                             ToolTip="Mute"
                             Width="32" Height="32"
-                            Margin="0,-12,4,-12">
+                            Margin="-8,-12,4,-12">
                         <!-- Wrapping Grid pins the content slot to 32x32 so the button's hit area stays
                                  constant regardless of which glyph is shown. The inner TextBlock auto-sizes
                                  to its glyph; HorizontalAlignment on it positions the glyph-sized box within
