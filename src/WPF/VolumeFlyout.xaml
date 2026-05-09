@@ -420,7 +420,7 @@
                                          and a shared HorizontalAlignment for every playback (speaker tier)
                                          glyph. Tune any value here and every matching trigger picks it up. -->
                                     <Style.Resources>
-                      <sys:Double x:Key="MicGlyphFontSize">19</sys:Double>
+                      <sys:Double x:Key="MicGlyphFontSize">21</sys:Double>
                                         <FontWeight x:Key="MicGlyphFontWeight">ExtraBold</FontWeight>
                                         <TranslateTransform x:Key="MicGlyphOffset" X="0" Y="0"/>
                                         <HorizontalAlignment x:Key="PlaybackGlyphAlignment">Right</HorizontalAlignment>
@@ -561,6 +561,38 @@
             </Grid>
         </ControlTemplate>
 
+        <!-- Apps row content. Per-device session list lifted into the same footer-color band as
+             DeviceRowTemplate so a device and its apps read as a stacked pair. Used by both
+             CellAppsAboveTemplate and CellAppsBelowTemplate; DataContext is the VolumeFlyoutCell.
+             Padding-bottom is 0 because the last session row's own Margin.Bottom already supplies
+             the breathing space inside the colored band. -->
+        <ControlTemplate x:Key="AppsRowTemplate" TargetType="ContentControl">
+            <Border Background="{DynamicResource ThemeFooterBackground}"
+                    Padding="14,10,12,0"
+                    Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
+                <Border.Style>
+                    <!-- Round the bottom corners only when the apps cell sits flush against the
+                         flyout's outer rounded bottom: AppsBelow layout (host signals via Tag=True)
+                         on the last cell. Defaults to square corners otherwise so apps cells stacked
+                         above device rows don't notch their bottoms. -->
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="0"/>
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsLast}" Value="True"/>
+                                    <Condition Binding="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <ItemsControl ItemsSource="{Binding VisibleGroups}"
+                              ItemTemplate="{StaticResource SessionRowTemplate}"/>
+            </Border>
+        </ControlTemplate>
+
         <!-- Cell template: apps above, device row below in the footer band. Mirrors EarTrumpet
              and the screenshot. The bottom-most cell rounds its device-row bottom corners through
              IsLastToFooterCorner so the flyout's outer rounded corners read correctly. -->
@@ -571,16 +603,12 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <ItemsControl Grid.Row="0"
-                              ItemsSource="{Binding VisibleGroups}"
-                              ItemTemplate="{StaticResource SessionRowTemplate}"
-                              Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}"
-                              Margin="14,10,12,0"/>
+                <ContentControl Grid.Row="0" Template="{StaticResource AppsRowTemplate}"/>
 
                 <Border Grid.Row="1"
                         Background="{DynamicResource ThemeFooterBackground}"
                         CornerRadius="{Binding IsLast, Converter={StaticResource IsLastToFooterCorner}}"
-                        Padding="14,10,12,12">
+                        Padding="14,0,12,12">
                     <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
                 </Border>
             </Grid>
@@ -618,11 +646,10 @@
                     <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
                 </Border>
 
-                <ItemsControl Grid.Row="1"
-                              ItemsSource="{Binding VisibleGroups}"
-                              ItemTemplate="{StaticResource SessionRowTemplate}"
-                              Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}"
-                              Margin="14,10,12,4"/>
+                <!-- Tag=True signals to AppsRowTemplate that this apps cell is the one that sits at
+                     the flyout's bottom edge in the AppsBelow layout, so it can round its bottom
+                     corners when IsLast. -->
+                <ContentControl Grid.Row="1" Tag="True" Template="{StaticResource AppsRowTemplate}"/>
             </Grid>
         </DataTemplate>
 
