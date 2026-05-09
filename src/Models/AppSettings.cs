@@ -267,6 +267,18 @@ public class AppSettings
     public bool ShowDefaultRecordingDeviceEvenIfDisabled { get; set; } = true;
     public bool ShowDefaultCommsRecordingDeviceEvenIfDisabled { get; set; } = true;
 
+    // Persisted "last-seen active default" id per role / flow. AudioDeviceManager writes these
+    // every time GetDefaultAudioEndpoint returns a real device, and reads them as a fallback
+    // when the same lookup later comes back null - that null result, while a previously-default
+    // device still exists in the device list, means the user disabled the active default and
+    // Windows had no other active device of that role / flow to promote. The fallback restores
+    // IsDefault on the disabled wrapper so the visibility filter under the
+    // ShowDefault*EvenIfDisabled toggles has a target to act on.
+    public string? LastKnownDefaultPlaybackDeviceId { get; set; }
+    public string? LastKnownDefaultCommsPlaybackDeviceId { get; set; }
+    public string? LastKnownDefaultRecordingDeviceId { get; set; }
+    public string? LastKnownDefaultCommsRecordingDeviceId { get; set; }
+
     // Registry-only ghost endpoints surfaced via DeviceState.NotPresent: every USB DAC port the user
     // has ever plugged into, every previous GPU's HDMI outputs, every paired Bluetooth headset that
     // accumulated in the audio device registry. Off by default so the tray / flyout don't drown in

@@ -446,6 +446,16 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// Re-evaluates every default-role binding (render multimedia + render comms + capture
     /// multimedia + capture comms) against the current device list. Cheap to call - four
     /// GetDefaultAudioEndpoint COM hits and a flag-by-flag toggle on each wrapper.
+    /// Also persists the active default id per role / flow into AppSettings, and falls back
+    /// onto the persisted id when GetDefaultAudioEndpoint returns null. A null result means
+    /// no active device of that role / flow exists - typically the user just disabled the
+    /// default and there's no replacement to promote. Treating the persisted id as the
+    /// logical default in that window is what gives the ShowDefault*EvenIfDisabled toggles
+    /// a target to act on; without it, IsDefault flips off the disabled wrapper before the
+    /// visibility filter ever sees it.
+    /// Manager-level Default* properties stay strictly the active default - hotkeys, the
+    /// tray icon attach, and the flyout's primary-device binding shouldn't track a disabled
+    /// fallback.
     /// </summary>
     private void UpdateAllDefaults()
     {
@@ -454,16 +464,26 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         AudioDevice? captureDefault = LookupDefault(EDataFlow.eCapture, ERole.eMultimedia);
         AudioDevice? captureComms = LookupDefault(EDataFlow.eCapture, ERole.eCommunications);
 
+        PersistLastKnownDefaults(renderDefault, renderComms, captureDefault, captureComms);
+
+        // Effective defaults: the active result when present, otherwise the persisted-id wrapper.
+        // Returns null when the persisted id is empty or points to a device that's been removed.
+        AudioDevice? renderEffective = renderDefault ?? FindFallbackDefault(_settings?.LastKnownDefaultPlaybackDeviceId);
+        AudioDevice? renderCommsEffective = renderComms ?? FindFallbackDefault(_settings?.LastKnownDefaultCommsPlaybackDeviceId);
+        AudioDevice? captureEffective = captureDefault ?? FindFallbackDefault(_settings?.LastKnownDefaultRecordingDeviceId);
+        AudioDevice? captureCommsEffective = captureComms ?? FindFallbackDefault(_settings?.LastKnownDefaultCommsRecordingDeviceId);
+
         // IsDefault tracks the multimedia-role default for the device's flow. IsDefaultCommunications
-        // tracks the comms-role default. The flyout already binds DefaultDevice to the render path.
+        // tracks the comms-role default. Both honor the fallback so a disabled last-known-default
+        // retains the logical-default status the visibility filter checks.
         foreach (AudioDevice d in _devices)
         {
             bool flowDefault = d.DataFlow == EDataFlow.eRender
-                ? ReferenceEquals(d, renderDefault)
-                : ReferenceEquals(d, captureDefault);
+                ? ReferenceEquals(d, renderEffective)
+                : ReferenceEquals(d, captureEffective);
             bool flowComms = d.DataFlow == EDataFlow.eRender
-                ? ReferenceEquals(d, renderComms)
-                : ReferenceEquals(d, captureComms);
+                ? ReferenceEquals(d, renderCommsEffective)
+                : ReferenceEquals(d, captureCommsEffective);
             d.IsDefault = flowDefault;
             d.IsDefaultCommunications = flowComms;
         }
@@ -472,6 +492,47 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         DefaultCommunicationsDevice = renderComms;
         DefaultCaptureDevice = captureDefault;
         DefaultCommunicationsCaptureDevice = captureComms;
+    }
+
+    /// <summary>
+    /// Writes the active-default id per role / flow into AppSettings whenever the lookup
+    /// returned a real device. A null result is intentionally ignored so a transient
+    /// "no default" window during a disable doesn't wipe the memory the fallback path
+    /// depends on. Saves to disk only when at least one id actually changed.
+    /// </summary>
+    private void PersistLastKnownDefaults(AudioDevice? renderDefault, AudioDevice? renderComms,
+        AudioDevice? captureDefault, AudioDevice? captureComms)
+    {
+        if (_settings == null) return;
+
+        bool dirty = false;
+        if (renderDefault != null && _settings.LastKnownDefaultPlaybackDeviceId != renderDefault.Id)
+        {
+            _settings.LastKnownDefaultPlaybackDeviceId = renderDefault.Id;
+            dirty = true;
+        }
+        if (renderComms != null && _settings.LastKnownDefaultCommsPlaybackDeviceId != renderComms.Id)
+        {
+            _settings.LastKnownDefaultCommsPlaybackDeviceId = renderComms.Id;
+            dirty = true;
+        }
+        if (captureDefault != null && _settings.LastKnownDefaultRecordingDeviceId != captureDefault.Id)
+        {
+            _settings.LastKnownDefaultRecordingDeviceId = captureDefault.Id;
+            dirty = true;
+        }
+        if (captureComms != null && _settings.LastKnownDefaultCommsRecordingDeviceId != captureComms.Id)
+        {
+            _settings.LastKnownDefaultCommsRecordingDeviceId = captureComms.Id;
+            dirty = true;
+        }
+        if (dirty) _settings.Save();
+    }
+
+    private AudioDevice? FindFallbackDefault(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        return FindDeviceById(id);
     }
 
     private AudioDevice? LookupDefault(EDataFlow flow, ERole role)

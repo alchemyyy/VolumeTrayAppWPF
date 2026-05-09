@@ -48,6 +48,12 @@ public static class TimeConstants
     // catch the trailing role-change notifications.
     public const int DefaultsRefreshCoalesceDwellMs = 50;
 
+    // Trailing-edge debounce window for the volume-change ding. Each scroll/wheel event resets this
+    // timer; the ding only fires once the timer elapses with no fresh event arriving. Keeps a fast
+    // wheel spin (or rapid slider drag releases) from machine-gunning the beep. 150ms is long enough
+    // to cover a normal scroll cadence and short enough that the ding still feels coupled to the gesture.
+    public const int VolumeFeedbackDingDelayMs = 150;
+
     // Logging
     // 7 days in ms = 7 * 24 * 60 * 60 * 1000 = 604_800_000.
     public const int LogMaxAgeMs = 604_800_000;

@@ -64,7 +64,6 @@ internal static class GlyphCatalog
     public const string PLAYBACK_DEVICE_ENABLED = "\uF138";  // Status Circle Ring
     public const string PLAYBACK_DEVICE_DISABLED = "\uF13D";  // Status Circle Error X
     public const string PLAYBACK_DEVICE_DEFAULT_COMMS = "\uE626";  // Phone (per spec for default comms device)
-    public const string PLAYBACK_DEVICE_HOVER_MUTED = "\uE74F";  // Mute (hover preview = "click disables")
     public const string APP_MUTE_OVERLAY = "\uE74F";  // Block (50% overlay on app icons for mute)
 
     // ===========================================================================

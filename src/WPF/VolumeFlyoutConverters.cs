@@ -18,9 +18,12 @@ internal sealed class ScalarToPercentConverter : IValueConverter
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        if (value is float f) return Math.Round(f * 100.0);
-        if (value is double d) return Math.Round(d * 100.0);
-        return 0.0;
+        return value switch
+        {
+            float f => Math.Round(f * 100.0),
+            double d => Math.Round(d * 100.0),
+            _ => 0.0
+        };
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -28,8 +31,12 @@ internal sealed class ScalarToPercentConverter : IValueConverter
         // Slider.Value comes through as double; clamp before division so a runaway DP value
         // can't push the underlying ISimpleAudioVolume call out of [0,1] and trip an HRESULT.
         double v = System.Convert.ToDouble(value, culture) / 100.0;
-        if (v < 0) v = 0;
-        else if (v > 1) v = 1;
+        v = v switch
+        {
+            < 0 => 0,
+            > 1 => 1,
+            _ => v
+        };
         return (float)v;
     }
 }
@@ -37,15 +44,16 @@ internal sealed class ScalarToPercentConverter : IValueConverter
 /// <summary>
 /// Selects the glyph shown on the per-row mute button.
 ///
-/// Render endpoints: speaker tier from <see cref="GlyphCatalog.GetVolumeTier"/> so the tray icon
-/// and the device-row icon stay visually in sync.
+/// Render endpoints: muted shows PLAYBACK_VOLUME_MUTE; otherwise stays on a fixed
+/// PLAYBACK_VOLUME_LOW. Volume-tier-aware selection is intentionally skipped here so the mute
+/// button doesn't visually re-flow through tiers as the user drags the slider - GetVolumeTier
+/// is reserved for the tray icon.
 /// Capture endpoints: microphone-themed glyphs - muted wins, then "Listen to this device", else
-/// the plain mic. Volume level is ignored on capture rows (no tiered mic glyph in the catalog).
+/// the plain mic.
 ///
 /// MultiBinding inputs (in declared order):
 ///   [0]=Volume(scalar), [1]=IsMuted, [2]=IsCaptureDevice, [3]=IsListeningToThisDevice.
-/// The capture / listening inputs are optional - omit them and the converter behaves like the
-/// pre-capture render-only version.
+/// Volume is bound for parity with the binding contract but is not consulted in the conversion.
 /// </summary>
 internal sealed class VolumeGlyphConverter : IMultiValueConverter
 {
@@ -66,13 +74,7 @@ internal sealed class VolumeGlyphConverter : IMultiValueConverter
             return GlyphCatalog.MICROPHONE;
         }
 
-        float scalar = values[0] switch
-        {
-            float f => f,
-            double d => (float)d,
-            _ => 0f,
-        };
-        return GlyphCatalog.PLAYBACK_VOLUME_LOW; //GlyphCatalog.GetVolumeTier(scalar, muted);
+        return muted ? GlyphCatalog.PLAYBACK_VOLUME_MUTE : GlyphCatalog.PLAYBACK_VOLUME_LOW;
     }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)

@@ -226,6 +226,9 @@
                             <DataTrigger Binding="{Binding DataContext.Device.IsMuted, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding DataContext.Device.IsActive, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Grid.Style>
@@ -383,11 +386,25 @@
                     </Grid.ColumnDefinitions>
 
                     <Button x:Name="DeviceMuteButton" Grid.Column="0"
-                            Style="{StaticResource DeviceIconButtonStyle}"
                             Click="DeviceMute_Click"
                             ToolTip="Mute"
                             Width="32" Height="32"
                             Margin="-8,-12,4,-12">
+                        <!-- BasedOn the shared icon-button style, plus mute / disabled dim triggers
+                             that match the slider / percent-text dim so the whole row reads as
+                             "muted" or "disabled" together. -->
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                         <!-- Wrapping Grid pins the content slot to 32x32 so the button's hit area stays
                                  constant regardless of which glyph is shown. The inner TextBlock auto-sizes
                                  to its glyph; HorizontalAlignment on it positions the glyph-sized box within
@@ -403,15 +420,16 @@
                                          and a shared HorizontalAlignment for every playback (speaker tier)
                                          glyph. Tune any value here and every matching trigger picks it up. -->
                                     <Style.Resources>
-                                        <sys:Double x:Key="MicGlyphFontSize">20</sys:Double>
+                      <sys:Double x:Key="MicGlyphFontSize">19</sys:Double>
                                         <FontWeight x:Key="MicGlyphFontWeight">ExtraBold</FontWeight>
                                         <TranslateTransform x:Key="MicGlyphOffset" X="0" Y="0"/>
                                         <HorizontalAlignment x:Key="PlaybackGlyphAlignment">Right</HorizontalAlignment>
+                                        <TranslateTransform x:Key="PlaybackGlyphOffset" X="0" Y="0"/>
                                     </Style.Resources>
                                     <!-- FontSize and HorizontalAlignment live in the style (not as local
                                          values on the TextBlock) so the per-glyph triggers below can override
                                          them. Local values beat style triggers in WPF DP precedence. -->
-                                    <Setter Property="FontSize" Value="24"/>
+                                    <Setter Property="FontSize" Value="26"/>
                                     <Setter Property="HorizontalAlignment" Value="Center"/>
                                     <Setter Property="Text">
                                         <Setter.Value>
@@ -445,23 +463,29 @@
                                         </Trigger>
                                         <!-- Speaker tier glyphs share the PlaybackGlyphAlignment HorizontalAlignment
                                              so the glyph-sized TextBlock anchors to one edge of the 32x32 slot
-                                             regardless of how close the natural glyph width is to the slot. The mute
-                                             hover preview lands on PLAYBACK_VOLUME_MUTE too, so it picks this up
-                                             automatically. -->
+                                             regardless of how close the natural glyph width is to the slot, and
+                                             share PlaybackGlyphOffset to nudge the ink off the anchored edge.
+                                             The mute hover preview lands on PLAYBACK_VOLUME_MUTE too, so it picks
+                                             this up automatically. -->
                                         <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MUTE}">
                                             <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
                                         </Trigger>
                                         <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_SILENT}">
                                             <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
                                         </Trigger>
                                         <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_LOW}">
                                             <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
                                         </Trigger>
                                         <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MID}">
                                             <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
                                         </Trigger>
                                         <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_HIGH}">
                                             <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
                                         </Trigger>
                                         <!-- Hover preview = "click mutes". Render rows preview the speaker mute glyph;
                                              capture rows preview MICROPHONE_OFF so the gesture reads correctly on a mic. -->
@@ -470,7 +494,7 @@
                                                 <Condition Binding="{Binding IsMouseOver, ElementName=DeviceMuteButton}" Value="True"/>
                                                 <Condition Binding="{Binding IsCaptureDevice}" Value="False"/>
                                             </MultiDataTrigger.Conditions>
-                                            <Setter Property="Text" Value="&#xE74F;"/>
+                                            <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MUTE}"/>
                                         </MultiDataTrigger>
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
@@ -504,6 +528,9 @@
                                     <DataTrigger Binding="{Binding IsMuted}" Value="True">
                                         <Setter Property="Opacity" Value="0.4"/>
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </wpf:VolumeSlider.Style>
@@ -521,6 +548,9 @@
                             <Style TargetType="TextBlock">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
                                         <Setter Property="Opacity" Value="0.4"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -626,7 +656,7 @@
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Top"
-                            Margin="5,6,0,0">
+                            Margin="3,6,0,0">
                     <Button Style="{StaticResource HeaderIconButtonStyle}"
                             Click="SettingsButton_Click"
                             ToolTip="{loc:Loc Flyout_Settings_Tooltip}">

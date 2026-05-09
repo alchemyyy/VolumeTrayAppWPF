@@ -9,9 +9,11 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio;
 using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;
+using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.WPF.Utils;
 
 namespace VolumeTrayAppWPF.WPF;
@@ -96,6 +98,18 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // Held across plays so the byte[] backing the in-flight async PlaySound isn't GC'd mid-playback,
     // and so a follow-up play disposes the prior player (which preempts its still-playing sound).
     private System.Media.SoundPlayer? _currentAppSound;
+
+    // Trailing-edge debouncer for the volume-change ding. Each scroll/wheel/drag-end calls RunAsync;
+    // the payload polls HasReplacement during its dwell and bails the moment a fresher event lands,
+    // so the ding only fires once the dwell elapses with no new event arriving. Cooldown is 0 because
+    // the dwell itself IS the rate-limit. Two keys keep device and per-app feedback independent.
+    private readonly AsyncThrottler<string> _feedbackThrottler = new(0, StringComparer.Ordinal);
+    private const string DeviceDingThrottleKey = "device";
+    private const string AppDingThrottleKey = "app";
+
+    // Slice size for the dwell's HasReplacement poll. Smaller = ding fires closer to "exactly 150ms
+    // after the last event"; larger = fewer wakeups. 10ms is well below human perception.
+    private const int DingDwellPollSliceMs = 10;
 
     // Snapshot of the docked screen-space coordinate, refreshed on every Show / size change.
     // Stored so SizeChanged re-anchoring re-uses a stable value if WorkArea shifts mid-flight.
@@ -241,6 +255,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         foreach (VolumeFlyoutCell cell in _cellsByDevice.Values) cell.Dispose();
         _cellsByDevice.Clear();
         _cells.Clear();
+
+        // Dispose the throttler before the SoundPlayer so any in-flight dwell exits via its
+        // shutdown token before the payload tries to dispatch a play onto a torn-down dispatcher.
+        try { _feedbackThrottler.Dispose(); }
+        catch { /* shutdown best-effort */ }
 
         if (_currentAppSound != null)
         {
@@ -675,8 +694,21 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private void PlayDeviceVolumeFeedback()
     {
         if (_appSettings?.PlayDeviceVolumeChangeSound != true) return;
-        try { System.Media.SystemSounds.Beep.Play(); }
-        catch { /* sound playback is best-effort */ }
+
+        Dispatcher uiDispatcher = Dispatcher;
+        _ = _feedbackThrottler.RunAsync(DeviceDingThrottleKey, async ctx =>
+        {
+            if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+            try
+            {
+                await uiDispatcher.InvokeAsync(static () =>
+                {
+                    try { System.Media.SystemSounds.Beep.Play(); }
+                    catch { /* sound playback is best-effort */ }
+                });
+            }
+            catch { /* dispatcher torn down */ }
+        });
     }
 
     private void PlayAppVolumeFeedback(float scalarVolume)
@@ -684,6 +716,22 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         if (_appSettings?.PlayAppVolumeChangeSound != true) return;
 
         EnsureAppFeedbackData();
+        if (_wavTemplate == null) return;
+
+        // Capture scalarVolume in the closure: latest-pending-wins on the throttler means the payload
+        // that ultimately runs is the most recent one queued, so the played volume reflects the user's
+        // latest position rather than whatever it was when the gesture started.
+        Dispatcher uiDispatcher = Dispatcher;
+        _ = _feedbackThrottler.RunAsync(AppDingThrottleKey, async ctx =>
+        {
+            if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+            try { await uiDispatcher.InvokeAsync(() => PlayAppFeedbackNow(scalarVolume)); }
+            catch { /* dispatcher torn down */ }
+        });
+    }
+
+    private void PlayAppFeedbackNow(float scalarVolume)
+    {
         if (_wavTemplate == null) return;
 
         try
@@ -700,6 +748,23 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             _currentAppSound = player;
         }
         catch { /* feedback is best-effort */ }
+    }
+
+    // Waits up to <paramref name="totalMs"/> in poll-sized slices, returning false the moment a fresher
+    // payload is queued for the same key OR cancellation is signalled. Returns true only when the full
+    // dwell elapses without a replacement -- the caller treats that as "ok to fire the ding".
+    private static async Task<bool> DwellWithReplacementBailAsync(IThrottlerContext ctx, int totalMs)
+    {
+        int waited = 0;
+        while (waited < totalMs)
+        {
+            if (ctx.HasReplacement) return false;
+            int slice = Math.Min(DingDwellPollSliceMs, totalMs - waited);
+            try { await Task.Delay(slice, ctx.CancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return false; }
+            waited += slice;
+        }
+        return !ctx.HasReplacement;
     }
 
     private void EnsureAppFeedbackData()

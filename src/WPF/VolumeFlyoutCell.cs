@@ -20,7 +20,7 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 {
     private readonly string? _ownAppId;
     private readonly ObservableCollection<AudioAppGroup> _visibleGroups = [];
-    private readonly HashSet<AudioAppGroup> _subscribedGroups = new();
+    private readonly HashSet<AudioAppGroup> _subscribedGroups = [];
 
     private bool _isFirst;
     private bool _isLast;
