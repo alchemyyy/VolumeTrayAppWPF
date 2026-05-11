@@ -90,6 +90,20 @@ public enum FlyoutDeviceSortOrder
 }
 
 /// <summary>
+/// Visual treatment that flags which apps in a recording device's drawer are currently capturing
+/// from the microphone (their session State is Active).
+/// DimInactive (default): icons of non-capturing apps are dimmed, matching how disabled devices are dimmed.
+/// ActiveGlyph: a small overlay glyph is stamped on the icons of actively capturing apps; non-capturers untouched.
+/// None: no visual indication.
+/// </summary>
+public enum CaptureActivityIndicator
+{
+    DimInactive,
+    ActiveGlyph,
+    None,
+}
+
+/// <summary>
 /// A selectable volume-slider thumb glyph, stored with its own display properties
 /// (font family, font size, width, height, horizontal scale) so that differently-proportioned glyphs
 /// render correctly both in the dropdown preview and on the slider itself.
@@ -460,6 +474,54 @@ public class AppSettings
         }
     }
 
+    // App icon retry. AppIconResolver.Acquire() can return null for transient reasons - the most
+    // common one is a cold shell-icon cache when a session is enumerated before Explorer has had
+    // a chance to extract the app's icon at our target raster size. AudioSession retries up to
+    // IconRetryAttempts times after the initial resolution; the wait between attempts grows
+    // linearly: wait_n = n * IconRetryIntervalMs. With the default (250ms, 4 attempts) the worst-
+    // case schedule is 0ms, +250ms, +500ms, +750ms - total ~1.5s before giving up.
+    public const int IconRetryIntervalMsDefault = 250;
+    public const int IconRetryIntervalMsMin = 50;
+    public const int IconRetryIntervalMsMax = 5000;
+    public const int IconRetryAttempts = 4;
+
+    private int _iconRetryIntervalMs = IconRetryIntervalMsDefault;
+
+    [XmlElement]
+    public int IconRetryIntervalMs
+    {
+        get => _iconRetryIntervalMs;
+        set
+        {
+            int clamped = Math.Max(IconRetryIntervalMsMin, Math.Min(IconRetryIntervalMsMax, value));
+            if (_iconRetryIntervalMs == clamped) return;
+            _iconRetryIntervalMs = clamped;
+        }
+    }
+
+    // Bound for the icon-resolver's LRU "limbo" queue. When a cached icon's refcount drops to zero
+    // (its last AudioSession is disposed) it sits in this queue and can be revived on the next
+    // Acquire for the same app. When the queue overflows, the oldest dead entry is dropped from the
+    // cache entirely. Default 10 keeps a small set of recently-departed apps warm so flipping
+    // between apps in a session doesn't pay re-extraction. 0 = evict immediately.
+    public const int IconLruLimitDefault = 10;
+    public const int IconLruLimitMin = 0;
+    public const int IconLruLimitMax = 1000;
+
+    private int _iconLruLimit = IconLruLimitDefault;
+
+    [XmlElement]
+    public int IconLruLimit
+    {
+        get => _iconLruLimit;
+        set
+        {
+            int clamped = Math.Max(IconLruLimitMin, Math.Min(IconLruLimitMax, value));
+            if (_iconLruLimit == clamped) return;
+            _iconLruLimit = clamped;
+        }
+    }
+
     private string _meterPeakColorHex = MeterPeakColorDefaultHex;
 
     [XmlElement]
@@ -595,6 +657,9 @@ public class AppSettings
     public bool ShowRecordingDevicesInFlyout { get; set; } = true;
     public bool IntermixRecordingWithPlaybackInFlyout { get; set; } = false;
     public bool ShowListenButtonInFlyout { get; set; } = true;
+
+    // How the flyout marks actively-capturing app sessions inside a recording device's drawer.
+    public CaptureActivityIndicator CaptureActivityIndicator { get; set; } = CaptureActivityIndicator.DimInactive;
 
     // Empty by default; defaults are seeded by EnsureDefaultHotkeys() after construction or load.
     // The previous in-place initializer collided with XmlSerializer's "append to existing list" behavior:

@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
+using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
 
 namespace VolumeTrayAppWPF.Audio;
@@ -40,6 +41,9 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     private string _displayName;
     private AudioSessionState _state;
     private ImageSource? _icon;
+    // Refcounted reference to the cached icon entry. Owned by this session; disposed on session
+    // teardown or replaced (via ApplyIconHandle) when a re-resolution lands on a different bitmap.
+    private AppIconResolver.IconHandle? _iconHandle;
     private bool _disposed;
     private bool _disconnected;
 
@@ -242,24 +246,22 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     /// UI thread and dispatches the results back. Called from the constructor after the cheap
     /// fields are populated; running on the threadpool keeps a session-migration burst from
     /// stalling the dispatcher.
+    /// Icon extraction is retried up to <see cref="AppSettings.IconRetryAttempts"/> times with
+    /// a linear backoff (waits grow as 1x, 2x, 3x the user-configured interval) - the first
+    /// resolution often loses the race with the shell icon cache when an app has just launched.
+    /// Display-name resolution runs once: FileVersionInfo doesn't have the same transient
+    /// failure mode and rerunning it on every retry would chew through process handles.
     /// </summary>
     private void ScheduleAsyncMetadata(uint pid)
     {
         bool isSystemSounds = IsSystemSounds;
-        _ = Task.Run(() =>
+        _ = Task.Run(async () =>
         {
             // Each resolution can throw if the session is torn down between scheduling and run -
             // the AppIconResolver / ProcessHelper calls already swallow most failures; outer catch
             // is the belt that catches anything (e.g. RCW released).
-            ImageSource? icon = null;
+            AppIconResolver.IconHandle? icon = TryAcquireIcon(pid, isSystemSounds);
             string? resolvedName = null;
-
-            try
-            {
-                if (_disposed || _disconnected) return;
-                icon = AppIconResolver.Resolve(_control, pid, isSystemSounds);
-            }
-            catch { /* RCW gone; leave icon null */ }
 
             // Display-name fallback only runs when the constructor's synchronous read landed on the
             // "Unknown" placeholder. Avoid FileVersionInfo for system sounds (pid 0 is unreachable
@@ -268,7 +270,9 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             {
                 try
                 {
-                    if (_disposed || _disconnected) return;
+                    // If the session was disposed while we were extracting the icon, release the
+                    // handle here so it ages out instead of leaking.
+                    if (_disposed || _disconnected) { icon?.Dispose(); return; }
                     if (string.Equals(_displayName, "Unknown", StringComparison.Ordinal))
                     {
                         resolvedName = ProcessHelper.GetDisplayNameForProcess(pid);
@@ -277,21 +281,92 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
                 catch { /* leave resolvedName null */ }
             }
 
-            try
+            DispatchMetadata(icon, resolvedName);
+
+            // Retry pass for the icon only. System sounds never miss (it's a hardcoded resource
+            // ordinal) and a successful first attempt skips the whole loop. Wait grows linearly:
+            // attempt 2 waits 1*interval, attempt 3 waits 2*interval, attempt 4 waits 3*interval.
+            if (icon != null || isSystemSounds) return;
+
+            int interval = AppServices.Settings?.IconRetryIntervalMs ?? AppSettings.IconRetryIntervalMsDefault;
+            int wait = 0;
+            for (int attempt = 2; attempt <= AppSettings.IconRetryAttempts; attempt++)
             {
-                _dispatcher.BeginInvoke(() =>
-                {
-                    if (_disposed || _disconnected) return;
-                    if (icon != null) Icon = icon;
-                    if (!string.IsNullOrEmpty(resolvedName)
-                        && !string.Equals(resolvedName, "Unknown", StringComparison.Ordinal))
-                    {
-                        DisplayName = resolvedName;
-                    }
-                });
+                wait += interval;
+                try { await Task.Delay(wait).ConfigureAwait(false); }
+                catch { return; }
+
+                if (_disposed || _disconnected) return;
+
+                AppIconResolver.IconHandle? retried = TryAcquireIcon(pid, isSystemSounds: false);
+                if (retried == null) continue;
+
+                DispatchMetadata(retried, null);
+                return;
             }
-            catch { /* dispatcher shut down */ }
         });
+    }
+
+    private AppIconResolver.IconHandle? TryAcquireIcon(uint pid, bool isSystemSounds)
+    {
+        if (_disposed || _disconnected) return null;
+        try { return AppIconResolver.Acquire(_control, pid, isSystemSounds); }
+        catch { return null; }
+    }
+
+    private void DispatchMetadata(AppIconResolver.IconHandle? handle, string? resolvedName)
+    {
+        if (handle == null && string.IsNullOrEmpty(resolvedName)) return;
+        try
+        {
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (_disposed || _disconnected)
+                {
+                    // Session torn down between extraction and dispatch - drop the acquired
+                    // ref so it can age out of the LRU rather than leaking as a strong root.
+                    handle?.Dispose();
+                    return;
+                }
+                if (handle != null) ApplyIconHandle(handle);
+                if (!string.IsNullOrEmpty(resolvedName)
+                    && !string.Equals(resolvedName, "Unknown", StringComparison.Ordinal))
+                {
+                    DisplayName = resolvedName;
+                }
+            });
+        }
+        catch
+        {
+            // Dispatcher shut down - release the acquired ref directly.
+            handle?.Dispose();
+        }
+    }
+
+    // UI-thread only. Swaps in the new handle and disposes the old one. The ReferenceEquals
+    // fast-path drops the freshly acquired handle when re-resolution lands on the same cached
+    // bitmap, keeping refcount churn balanced and skipping a no-op PropertyChanged notification.
+    private void ApplyIconHandle(AppIconResolver.IconHandle newHandle)
+    {
+        if (_iconHandle != null && ReferenceEquals(_iconHandle.Icon, newHandle.Icon))
+        {
+            newHandle.Dispose();
+            return;
+        }
+        AppIconResolver.IconHandle? old = _iconHandle;
+        _iconHandle = newHandle;
+        Icon = newHandle.Icon;
+        old?.Dispose();
+    }
+
+    // UI-thread only. Drops the current handle and clears Icon - used when re-resolution
+    // explicitly failed (e.g. OnIconPathChanged with an unresolvable new path).
+    private void ClearIconHandle()
+    {
+        AppIconResolver.IconHandle? old = _iconHandle;
+        _iconHandle = null;
+        Icon = null;
+        old?.Dispose();
     }
 
     /// <summary>
@@ -322,8 +397,8 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 
         if (stuckIcon)
         {
-            ImageSource? resolved = AppIconResolver.Resolve(_control, ProcessId, isSystemSounds: false);
-            if (resolved != null) Icon = resolved;
+            AppIconResolver.IconHandle? acquired = AppIconResolver.Acquire(_control, ProcessId, isSystemSounds: false);
+            if (acquired != null) ApplyIconHandle(acquired);
         }
     }
 
@@ -466,6 +541,11 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         try { _control.UnregisterAudioSessionNotification(_events); }
         catch { /* session may already be gone */ }
 
+        // Release the cached icon ref. With no more refs from any session, the entry parks in the
+        // LRU "limbo" queue and stays revivable until evicted by overflow.
+        _iconHandle?.Dispose();
+        _iconHandle = null;
+
         // The COM RCWs still hold native references; release them deterministically so the
         // session control's IUnknown ref count drops as soon as we abandon it.
         TryRelease(_simpleVolume);
@@ -502,12 +582,15 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         public int OnIconPathChanged(string newIconPath, ref Guid eventContext)
         {
             // Apps publish an updated icon path (Discord on theme change, browsers on tab change, etc.).
-            // Re-run the full resolution chain on the UI thread so AppIconResolver's session.GetIconPath()
-            // call sees the new value, then assign through the property setter to raise PropertyChanged.
+            // Re-run the full resolution chain on the UI thread and swap the handle. A null result
+            // wipes the icon, matching prior behavior where Resolve returning null cleared Icon.
             _owner._dispatcher.BeginInvoke(() =>
             {
                 if (_owner._disposed || _owner._disconnected) return;
-                _owner.Icon = AppIconResolver.Resolve(_owner._control, _owner.ProcessId, _owner.IsSystemSounds);
+                AppIconResolver.IconHandle? newHandle = AppIconResolver.Acquire(
+                    _owner._control, _owner.ProcessId, _owner.IsSystemSounds);
+                if (newHandle != null) _owner.ApplyIconHandle(newHandle);
+                else _owner.ClearIconHandle();
             });
             return 0;
         }

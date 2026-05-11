@@ -1,7 +1,7 @@
 // Uncomment to pad the flyout cell list with 40 dummy cells cloned from the first real device.
 // Verifies PositionNearTray / ClampTopForCriticalElement when the flyout overflows the work area.
 // Flip the sibling toggle at the top of App.xaml.cs to test the tray context menu too.
-#define DEBUG_OVERFLOW_DUMMIES
+// #define DEBUG_OVERFLOW_DUMMIES
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -169,6 +169,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // button stays visible when the settings instance hasn't been wired (test harness / early init).
     public bool ShowListenButtonInFlyout => _appSettings?.ShowListenButtonInFlyout ?? true;
 
+    // Drives the SessionRowTemplate triggers that flag actively-capturing apps inside a recording
+    // device's drawer. Defaults to DimInactive so early-init paths (no settings yet) match the
+    // shipped default rather than rendering as "no indicator".
+    public CaptureActivityIndicator CaptureActivityIndicator =>
+        _appSettings?.CaptureActivityIndicator ?? CaptureActivityIndicator.DimInactive;
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>Raised after the flyout finishes its hide cycle so the host can toggle scroll bindings, etc.</summary>
@@ -232,6 +238,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             if (_isUndocked && _appSettings?.AllowFlyoutUndock == false) Redock();
             OnPropertyChanged(nameof(AllowFlyoutUndock));
             OnPropertyChanged(nameof(ShowListenButtonInFlyout));
+            OnPropertyChanged(nameof(CaptureActivityIndicator));
 
             FlyoutDeviceLayoutStyle currentLayout = _appSettings?.FlyoutDeviceLayout
                 ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;

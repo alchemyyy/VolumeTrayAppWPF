@@ -497,6 +497,30 @@ Target: {1}</value>
   <data name="Settings_Theme_MeterPeakChangeCeiling_Title" xml:space="preserve">
     <value>Peak meter change ceiling</value>
   </data>
+  <data name="Settings_General_AppIcons_Header" xml:space="preserve">
+    <value>App icons</value>
+  </data>
+  <data name="Settings_General_IconRetryInterval_Title" xml:space="preserve">
+    <value>Icon retry interval (ms)</value>
+  </data>
+  <data name="Settings_General_IconRetryInterval_Description" xml:space="preserve">
+    <value>Wait between attempts when an app icon fails to resolve. Four attempts run with linear backoff (1x, 2x, 3x this value), so the worst case with the default is roughly 1.5 seconds before the fallback glyph stays.</value>
+  </data>
+  <data name="Settings_General_CaptureActivityIndicator_Title" xml:space="preserve">
+    <value>Visually indicate actively capturing apps</value>
+  </data>
+  <data name="Settings_General_CaptureActivityIndicator_Description" xml:space="preserve">
+    <value>How the flyout marks apps that currently have the microphone open inside a recording device's drawer.</value>
+  </data>
+  <data name="Settings_General_CaptureActivityIndicator_DimInactive" xml:space="preserve">
+    <value>Dim inactive</value>
+  </data>
+  <data name="Settings_General_CaptureActivityIndicator_ActiveGlyph" xml:space="preserve">
+    <value>Active glyph</value>
+  </data>
+  <data name="Settings_General_CaptureActivityIndicator_None" xml:space="preserve">
+    <value>Don't indicate</value>
+  </data>
   <data name="Settings_Theme_UnifiedPeakMeter_Description" xml:space="preserve">
     <value>Combine the left and right channels into a single weighted bar instead of drawing the stereo overlay on top of the base meter.</value>
   </data>

@@ -64,6 +64,7 @@ public static class SettingsBindings
         ["TrayIconStyle"] = Bind<TrayIconStyle>((s, v) => s.TrayIconStyle = v),
         ["FlyoutDeviceLayout"] = Bind<FlyoutDeviceLayoutStyle>((s, v) => s.FlyoutDeviceLayout = v),
         ["FlyoutDeviceSort"] = Bind<FlyoutDeviceSortOrder>((s, v) => s.FlyoutDeviceSort = v),
+        ["CaptureActivityIndicator"] = Bind<CaptureActivityIndicator>((s, v) => s.CaptureActivityIndicator = v),
         ["TrayMenuPlaybackDeviceNameStyle"] = Bind<TrayMenuDeviceNameStyle>(
             (s, v) => s.TrayMenuPlaybackDeviceNameStyle = v),
         ["TrayMenuRecordingDeviceNameStyle"] = Bind<TrayMenuDeviceNameStyle>(

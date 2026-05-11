@@ -7,22 +7,37 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using VolumeTrayAppWPF.Audio.Interop;
+using VolumeTrayAppWPF.Models;
 
 namespace VolumeTrayAppWPF.Audio;
 
-// Resolves an audio session's process to a frozen WPF icon, mirroring EarTrumpet's three-layer chain:
-//   1. System sounds (PID==0):        hardcoded audiosrv.dll resource 203, the same one the legacy mixer uses
-//   2. App-supplied icon path:        IAudioSessionControl.GetIconPath() - apps like Discord publish here
-//   3. UWP/AppX:                      GetApplicationUserModelId -> SHCreateItemInKnownFolder(AppsFolder, ...)
-//                                     -> IShellItemImageFactory.GetImage
-//   4. Win32 desktop:                 PathParseIconLocationW splits "exe.exe,N" -> PE-resource extraction;
-//                                     when no ordinal is present, falls back to SHCreateItemFromParsingName
-// Returns null on any failure - the flyout XAML renders a Segoe Fluent fallback glyph in that case.
+// Resolves an audio session's process to a refcounted, cached, frozen WPF icon. Three concerns:
+//
+//   1. Extraction. Three-layer chain mirrors EarTrumpet:
+//        System sounds (PID==0):     audiosrv.dll resource 203 (legacy mixer's speaker glyph)
+//        App-supplied icon path:     IAudioSessionControl.GetIconPath() (Discord, Teams, etc.)
+//        UWP/AppX:                   GetApplicationUserModelId -> SHCreateItemInKnownFolder
+//                                    (AppsFolder, ...) -> IShellItemImageFactory.GetImage
+//        Win32 desktop:              PathParseIconLocationW splits "exe.exe,N" -> PE-resource
+//                                    extraction; no ordinal -> SHCreateItemFromParsingName
+//
+//   2. Transparent-border crop. UWP Square44x44Logo.targetsize-* assets ship with internal
+//      padding around the glyph for taskbar consistency; desktop ICO frames typically fill
+//      edge-to-edge. After extraction we crop the alpha bounding box and re-square so WPF's
+//      Stretch=Uniform doesn't reintroduce letterbox padding. Bypassed when padding is small.
+//
+//   3. Refcounted cache with bounded LRU. Two tiers: (a) identity cache keyed by source identity
+//      (path+ordinal or AUMID); (b) content cache keyed by a 64-bit hash of the raw extracted
+//      pixels (catches different sources with identical icons). Every Acquire returns an
+//      IconHandle whose Dispose decrements the refcount. On refcount=0 the entry parks in the
+//      LRU "limbo" queue; a subsequent Acquire for the same icon revives it. Overflow of the
+//      queue (bound = AppSettings.IconLruLimit, default 10) evicts the oldest dead entry.
 internal static class AppIconResolver
 {
     // Target raster size for shell-icon-factory and PE-resource extraction. The flyout displays
-    // the icon at 22 device-independent pixels; 48 leaves headroom up to ~200% DPI without upscaling,
-    // and WPF's HighQuality scaling handles the down-sample.
+    // the icon at 22 device-independent pixels; 48 leaves headroom up to ~200% DPI without
+    // upscaling. After extraction we crop the alpha bounding box and re-square the result, then
+    // WPF's HighQuality scaling handles the down-sample.
     private const int ICON_SIZE = 48;
 
     // System-sounds resource: AudioSrv.dll's icon ordinal 203 is the speaker glyph the legacy
@@ -38,25 +53,85 @@ internal static class AppIconResolver
 
     private const string INVALID_ORDINAL_MARKER = ",-";
 
+    // Crop tuning. ALPHA_THRESHOLD ignores antialiased near-transparent pixels; MIN_OPAQUE_RUN
+    // requires a run of contiguous opaque pixels per row before that row contributes to the bbox
+    // (sparse AA noise won't anchor it); MIN_PAD_RATIO bypasses cropping when every side is
+    // already tight (typical desktop ICO frame).
+    private const int ALPHA_THRESHOLD = 16;
+    private const int MIN_OPAQUE_RUN = 2;
+    private const double MIN_PAD_RATIO = 0.10;
+
+    // Identity-key prefixes. Stable strings - changing them invalidates the cache invariants.
+    private const string KEY_SYS = "sys";
+    private const string KEY_PE = "pe";
+    private const string KEY_SHELL_UWP = "shell|uwp";
+    private const string KEY_SHELL_DESKTOP = "shell|desktop";
+
     private static readonly Guid ShellItem2Iid = typeof(IShellItem2).GUID;
 
+    // All cache state lives under one lock. Acquire is off the UI thread but called rarely (once
+    // per new session); single-lock contention is dwarfed by the shell-namespace call it guards.
+    private static readonly object s_cacheLock = new();
+    private static readonly Dictionary<string, CacheEntry> s_byIdentity = new(StringComparer.Ordinal);
+    private static readonly Dictionary<long, CacheEntry> s_byContent = new();
+    private static readonly LinkedList<CacheEntry> s_lru = new();
+
     /// <summary>
-    /// Resolves an icon for a session. Returns null on any failure; the caller should render a fallback.
+    /// One refcounted reference to a cached icon. Calling <see cref="Dispose"/> decrements
+    /// exactly once; double-dispose is a no-op. The wrapped <see cref="Icon"/> is frozen and
+    /// safe to bind from any thread.
     /// </summary>
-    public static ImageSource? Resolve(IAudioSessionControl control, uint processId, bool isSystemSounds)
+    public sealed class IconHandle : IDisposable
+    {
+        internal readonly CacheEntry Entry;
+        private int _disposed;
+
+        public ImageSource Icon => Entry.Bitmap;
+
+        internal IconHandle(CacheEntry entry) { Entry = entry; }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            ReleaseEntry(Entry);
+        }
+    }
+
+    // A single cached icon. One entry can be reachable under multiple identity keys (content
+    // dedup folds aliases onto the same entry), so identity keys are a list - eviction must
+    // remove every one of them. LruNode is non-null iff the entry sits in s_lru with RefCount=0.
+    internal sealed class CacheEntry
+    {
+        public BitmapSource Bitmap = null!;
+        public long ContentHash;
+        public List<string> IdentityKeys = new();
+        public int RefCount;
+        public LinkedListNode<CacheEntry>? LruNode;
+    }
+
+    /// <summary>
+    /// Resolves an icon for a session and returns a refcounted handle, or null on failure.
+    /// Callers MUST dispose the handle when the session no longer needs the icon; the resolver
+    /// keeps a small set of recently-dropped entries in an LRU queue so re-acquiring is free.
+    /// </summary>
+    public static IconHandle? Acquire(IAudioSessionControl control, uint processId, bool isSystemSounds)
     {
         try
         {
             if (isSystemSounds)
             {
+                IconHandle? hit = TryAcquireIdentity(KEY_SYS);
+                if (hit != null) return hit;
+
                 string sysAudioPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.System),
                     SYSTEM_SOUNDS_DLL);
-                return ExtractFromPEResource(sysAudioPath, SYSTEM_SOUNDS_ICON_ORDINAL);
+                BitmapSource? sysRaw = ExtractFromPEResource(sysAudioPath, SYSTEM_SOUNDS_ICON_ORDINAL);
+                return sysRaw == null ? null : MemoizeAndCrop(sysRaw, KEY_SYS);
             }
 
-            // App-supplied icon path takes precedence when present (and non-empty). This is what apps
-            // like Discord, Teams, and Spotify publish to identify themselves in the volume mixer.
+            // App-supplied icon path takes precedence when present (and non-empty) - apps like
+            // Discord, Teams, and Spotify publish here.
             string sessionIconPath = string.Empty;
             try { control.GetIconPath(out sessionIconPath); }
             catch { /* Session may already be torn down; fall back to process-based resolution. */ }
@@ -68,8 +143,15 @@ internal static class AppIconResolver
                 string aumid = GetApplicationUserModelId(processId);
                 if (!string.IsNullOrEmpty(aumid))
                 {
-                    BitmapSource? uwpIcon = ExtractFromShell(aumid, isUwp: true);
-                    if (uwpIcon != null) return uwpIcon;
+                    string canonical = string.Equals(aumid, CORTANA_BAD_AUMID, StringComparison.OrdinalIgnoreCase)
+                        ? CORTANA_GOOD_AUMID
+                        : aumid;
+                    string uwpKey = KEY_SHELL_UWP + "|" + canonical;
+                    IconHandle? hit = TryAcquireIdentity(uwpKey);
+                    if (hit != null) return hit;
+
+                    BitmapSource? uwpRaw = ExtractFromShell(canonical, isUwp: true);
+                    if (uwpRaw != null) return MemoizeAndCrop(uwpRaw, uwpKey);
                 }
             }
 
@@ -80,39 +162,286 @@ internal static class AppIconResolver
 
             if (string.IsNullOrEmpty(desktopPath)) return null;
 
-            return ExtractFromDesktop(desktopPath);
+            return ResolveDesktop(desktopPath);
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"AppIconResolver.Resolve failed: pid={processId} {ex}");
+            Trace.WriteLine($"AppIconResolver.Acquire failed: pid={processId} {ex}");
             return null;
         }
     }
 
     // Desktop branch: parse "path,N" first (PE resource by ordinal); fall through to the shell
-    // when the ordinal is absent or invalid.
-    private static BitmapSource? ExtractFromDesktop(string path)
+    // when the ordinal is absent or invalid. Cache key is computed before extraction so a hit
+    // short-circuits the whole pipeline.
+    private static IconHandle? ResolveDesktop(string path)
     {
         StringBuilder iconPath = new(path);
         int iconIndex = IconExtraction.PathParseIconLocationW(iconPath);
 
         if (iconIndex != 0)
         {
-            BitmapSource? peIcon = ExtractFromPEResource(iconPath.ToString(), Math.Abs(iconIndex));
-            if (peIcon != null) return peIcon;
+            int ordinal = Math.Abs(iconIndex);
+            string normalized = NormalizePath(iconPath.ToString());
+            string peKey = KEY_PE + "|" + normalized + "|" + ordinal.ToString();
+            IconHandle? hit = TryAcquireIdentity(peKey);
+            if (hit != null) return hit;
+
+            BitmapSource? peIcon = ExtractFromPEResource(iconPath.ToString(), ordinal);
+            if (peIcon != null) return MemoizeAndCrop(peIcon, peKey);
         }
 
-        // libmpv-based apps (e.g. Plex) sometimes publish "C:\foo\foo.exe,-IDI_ICON1" - an unparseable
-        // ordinal that produces 0 above. Strip the marker and fall through to the shell.
-        // Ref: https://github.com/mpv-player/mpv/issues/7269
+        // libmpv-based apps (e.g. Plex) sometimes publish "C:\foo\foo.exe,-IDI_ICON1" - an
+        // unparseable ordinal that produces 0 above. Strip the marker and fall through to the
+        // shell. Ref: https://github.com/mpv-player/mpv/issues/7269
         string shellPath = path;
         if (shellPath.Contains(INVALID_ORDINAL_MARKER))
         {
             shellPath = shellPath.Remove(shellPath.LastIndexOf(INVALID_ORDINAL_MARKER));
         }
 
-        return ExtractFromShell(shellPath, isUwp: false);
+        string shellKey = KEY_SHELL_DESKTOP + "|" + NormalizePath(shellPath);
+        IconHandle? shellHit = TryAcquireIdentity(shellKey);
+        if (shellHit != null) return shellHit;
+
+        BitmapSource? shellIcon = ExtractFromShell(shellPath, isUwp: false);
+        return shellIcon == null ? null : MemoizeAndCrop(shellIcon, shellKey);
     }
+
+    private static string NormalizePath(string path)
+    {
+        try { return Path.GetFullPath(path).ToLowerInvariant(); }
+        catch { return path.ToLowerInvariant(); }
+    }
+
+    // Tier-1 lookup. Revives an LRU-parked entry and returns a fresh handle on hit; null on miss.
+    private static IconHandle? TryAcquireIdentity(string identityKey)
+    {
+        lock (s_cacheLock)
+        {
+            if (!s_byIdentity.TryGetValue(identityKey, out CacheEntry? entry)) return null;
+            Revive(entry);
+            return new IconHandle(entry);
+        }
+    }
+
+    // Caller's freshly-extracted bitmap goes through content-dedup, crop, and double-insert.
+    // Returns a fresh handle.
+    private static IconHandle MemoizeAndCrop(BitmapSource raw, string identityKey)
+    {
+        long contentHash = HashPixels(raw);
+
+        lock (s_cacheLock)
+        {
+            // Re-check identity in case another thread filled it while we were extracting.
+            if (s_byIdentity.TryGetValue(identityKey, out CacheEntry? existing))
+            {
+                Revive(existing);
+                return new IconHandle(existing);
+            }
+
+            // Content dedup - different identity key, same pixel content. Attach this key to the
+            // existing entry rather than producing a duplicate.
+            if (s_byContent.TryGetValue(contentHash, out CacheEntry? byContent))
+            {
+                byContent.IdentityKeys.Add(identityKey);
+                s_byIdentity[identityKey] = byContent;
+                Revive(byContent);
+                return new IconHandle(byContent);
+            }
+
+            BitmapSource cropped = CropTransparentBorder(raw);
+            CacheEntry entry = new()
+            {
+                Bitmap = cropped,
+                ContentHash = contentHash,
+                RefCount = 1,
+            };
+            entry.IdentityKeys.Add(identityKey);
+            s_byIdentity[identityKey] = entry;
+            s_byContent[contentHash] = entry;
+            return new IconHandle(entry);
+        }
+    }
+
+    // Must run under s_cacheLock. Pulls the entry out of LRU limbo if parked, then bumps refcount.
+    private static void Revive(CacheEntry entry)
+    {
+        if (entry.LruNode != null)
+        {
+            s_lru.Remove(entry.LruNode);
+            entry.LruNode = null;
+        }
+        entry.RefCount++;
+    }
+
+    // Called by IconHandle.Dispose. On refcount hitting zero the entry moves to the LRU "limbo"
+    // queue; overflow evicts the oldest dead entry from both dictionaries.
+    internal static void ReleaseEntry(CacheEntry entry)
+    {
+        lock (s_cacheLock)
+        {
+            entry.RefCount--;
+            if (entry.RefCount > 0) return;
+            if (entry.RefCount < 0)
+            {
+                // Defensive - indicates a double-release bug elsewhere. Clamp and leave the entry
+                // in place without queueing for eviction.
+                entry.RefCount = 0;
+                string firstKey = entry.IdentityKeys.Count > 0 ? entry.IdentityKeys[0] : "?";
+                Trace.WriteLine($"AppIconResolver.ReleaseEntry refcount underflow on {firstKey}");
+                return;
+            }
+
+            if (entry.LruNode == null)
+            {
+                entry.LruNode = s_lru.AddFirst(entry);
+            }
+
+            int limit = AppServices.Settings?.IconLruLimit ?? AppSettings.IconLruLimitDefault;
+            while (s_lru.Count > limit)
+            {
+                LinkedListNode<CacheEntry>? tail = s_lru.Last;
+                if (tail == null) break;
+                CacheEntry victim = tail.Value;
+                s_lru.RemoveLast();
+                victim.LruNode = null;
+                s_byContent.Remove(victim.ContentHash);
+                for (int i = 0; i < victim.IdentityKeys.Count; i++)
+                {
+                    s_byIdentity.Remove(victim.IdentityKeys[i]);
+                }
+                // Frozen BitmapSource becomes unreachable and is reclaimed by GC.
+            }
+        }
+    }
+
+    // Crops the transparent border and re-squares so the visible glyph fills the bitmap
+    // edge-to-edge. Returns the original (frozen) on negligible padding or on any failure -
+    // this is a polish path, not a correctness one.
+    private static BitmapSource CropTransparentBorder(BitmapSource source)
+    {
+        try
+        {
+            BitmapSource src = source.Format == PixelFormats.Bgra32
+                ? source
+                : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+
+            int width = src.PixelWidth;
+            int height = src.PixelHeight;
+            if (width <= 0 || height <= 0) return FreezeIfNeeded(source);
+
+            int stride = width * 4;
+            byte[] pixels = new byte[stride * height];
+            src.CopyPixels(pixels, stride, 0);
+
+            int minX = width, minY = height, maxX = -1, maxY = -1;
+
+            for (int y = 0; y < height; y++)
+            {
+                int rowBase = y * stride;
+                int run = 0;
+                int rowMinX = -1, rowMaxX = -1;
+                for (int x = 0; x < width; x++)
+                {
+                    byte alpha = pixels[rowBase + x * 4 + 3];
+                    if (alpha > ALPHA_THRESHOLD)
+                    {
+                        run++;
+                        if (run >= MIN_OPAQUE_RUN)
+                        {
+                            int firstInRun = x - run + 1;
+                            if (rowMinX < 0 || firstInRun < rowMinX) rowMinX = firstInRun;
+                            rowMaxX = x;
+                        }
+                    }
+                    else
+                    {
+                        run = 0;
+                    }
+                }
+                if (rowMaxX >= 0)
+                {
+                    if (rowMinX < minX) minX = rowMinX;
+                    if (rowMaxX > maxX) maxX = rowMaxX;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (maxX < 0) return FreezeIfNeeded(source);
+
+            int leftPad = minX;
+            int topPad = minY;
+            int rightPad = width - 1 - maxX;
+            int bottomPad = height - 1 - maxY;
+            int minPad = Math.Min(Math.Min(leftPad, rightPad), Math.Min(topPad, bottomPad));
+            int padGate = (int)Math.Ceiling(width * MIN_PAD_RATIO);
+            if (minPad < padGate) return FreezeIfNeeded(source);
+
+            int cropW = maxX - minX + 1;
+            int cropH = maxY - minY + 1;
+            int side = Math.Max(cropW, cropH);
+            int cx = minX + cropW / 2;
+            int cy = minY + cropH / 2;
+            int half = side / 2;
+            int sx = Math.Max(0, Math.Min(width - side, cx - half));
+            int sy = Math.Max(0, Math.Min(height - side, cy - half));
+            int sw = Math.Min(side, width - sx);
+            int sh = Math.Min(side, height - sy);
+
+            CroppedBitmap cropped = new(src, new Int32Rect(sx, sy, sw, sh));
+            cropped.Freeze();
+            return cropped;
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"AppIconResolver.CropTransparentBorder failed: {ex}");
+            return FreezeIfNeeded(source);
+        }
+    }
+
+    private static BitmapSource FreezeIfNeeded(BitmapSource source)
+    {
+        if (source.CanFreeze && !source.IsFrozen) source.Freeze();
+        return source;
+    }
+
+    // FNV-1a-64 over the raw pixel buffer plus dimensions. Non-crypto, process-local, sub-ms on
+    // 9 KB. Dimensions folded in so two same-byte buffers at different shapes can't collide.
+    private static long HashPixels(BitmapSource source)
+    {
+        try
+        {
+            BitmapSource src = source.Format == PixelFormats.Bgra32
+                ? source
+                : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            int stride = src.PixelWidth * 4;
+            byte[] pixels = new byte[stride * src.PixelHeight];
+            src.CopyPixels(pixels, stride, 0);
+
+            const ulong OFFSET = 14695981039346656037UL;
+            const ulong PRIME = 1099511628211UL;
+            ulong hash = OFFSET;
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                hash ^= pixels[i];
+                hash *= PRIME;
+            }
+            hash ^= (ulong)src.PixelWidth;
+            hash *= PRIME;
+            hash ^= (ulong)src.PixelHeight;
+            hash *= PRIME;
+            return (long)hash;
+        }
+        catch
+        {
+            // Last-resort fallback - object identity so two distinct instances never collide.
+            return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(source);
+        }
+    }
+
+    // -- Extraction primitives. Called only on cache miss; behavior unchanged from prior revision.
 
     // PE-resource extraction: LoadLibraryEx as a data file, find RT_GROUP_ICON for the requested
     // ordinal, pick the best size match via LookupIconIdFromDirectoryEx, then materialize the icon

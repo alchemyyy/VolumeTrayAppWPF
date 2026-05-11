@@ -842,7 +842,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Autosave_Title", resourceCulture);
             }
         }
-        
+
+        /// <summary>
+        ///   Looks up a localized string similar to App icons.
+        /// </summary>
+        public static string Settings_General_AppIcons_Header {
+            get {
+                return ResourceManager.GetString("Settings_General_AppIcons_Header", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   Looks up a localized string similar to Cancel.
         /// </summary>
@@ -851,7 +860,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Cancel_Button", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   Looks up a localized string similar to Currently running from &quot;{0}&quot;..
         /// </summary>
@@ -860,7 +869,25 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_CurrentlyRunning_Format", resourceCulture);
             }
         }
-        
+
+        /// <summary>
+        ///   Looks up a localized string similar to Wait between attempts when an app icon fails to resolve. Four attempts run with linear backoff (1x, 2x, 3x this value), so the worst case with the default is roughly 1.5 seconds before the fallback glyph stays..
+        /// </summary>
+        public static string Settings_General_IconRetryInterval_Description {
+            get {
+                return ResourceManager.GetString("Settings_General_IconRetryInterval_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Icon retry interval (ms).
+        /// </summary>
+        public static string Settings_General_IconRetryInterval_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_IconRetryInterval_Title", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   Looks up a localized string similar to Install.
         /// </summary>

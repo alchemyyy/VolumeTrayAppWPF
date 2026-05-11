@@ -7,6 +7,8 @@
     xmlns:wpf="clr-namespace:VolumeTrayAppWPF.WPF"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     xmlns:visuals="clr-namespace:VolumeTrayAppWPF.Visuals"
+    xmlns:interop="clr-namespace:VolumeTrayAppWPF.Audio.Interop"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
     Width="350"
@@ -222,7 +224,7 @@
              cell. Going up two ContentPresenter levels lands us at the outer ContentPresenter whose
              DataContext is the VolumeFlyoutCell. -->
         <DataTemplate x:Key="SessionRowTemplate" DataType="{x:Type audio:AudioAppGroup}">
-            <Grid Margin="0,0,0,10">
+            <Grid Margin="0,0,0,9">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Opacity" Value="1.0"/>
@@ -236,6 +238,24 @@
                             <DataTrigger Binding="{Binding DataContext.Device.IsActive, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
+                            <!-- DimInactive mode: on a capture device, dim app sessions that aren't
+                                 currently consuming the mic. Active sessions stay at full opacity. -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Inactive}"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Expired}"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </MultiDataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Grid.Style>
@@ -303,6 +323,38 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+                  <!-- Mini glyph overlay slot. Empty by default; on a capture-device drawer, shows
+                         GlyphCatalog.CIRCLE for any app whose AudioAppGroup.State is Active (i.e. the
+                         app currently has the microphone stream open). Cell ancestor walk matches the
+                         existing Device.IsMuted trigger pattern. -->
+                  <Grid Width="12" Height="12"
+                        HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                        Margin="11,0,0,-2"
+                        IsHitTestVisible="False">
+                    <TextBlock FontFamily="Segoe Fluent Icons"
+                               FontSize="6"
+                               FontWeight="ExtraBold"
+                               Foreground="{DynamicResource ThemeIconForeground}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               TextAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value=""/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.ActiveGlyph}"/>
+                                            <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                            <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Active}"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CIRCLE}"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+          </Grid>
                 </Grid>
 
                 <wpf:VolumeSlider Grid.Column="1"
@@ -339,7 +391,11 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0" Margin="0,0,0,4">
+                <!-- Title + control buttons row. Grouped in one Grid so the whole header
+                     band (name text, listen button, device icon button) moves as a unit.
+                     Placed below the slider (Grid.Row=1) so the slider reads as the primary
+                     control and the title/buttons act as the row's footer chrome. -->
+                <Grid Grid.Row="1" Margin="-1,2,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -377,7 +433,7 @@
                          a specific target. Opacity binds to (listening AND target active) so the
                          button reads dim whenever no audio is actually flowing. -->
                     <Button x:Name="ListenButton" Grid.Column="1"
-                            Margin="8,0,0,0"
+                            Margin="0,3,0,-3"
                             Click="ListenButton_Click"
                             PreviewMouseRightButtonUp="ListenButton_PreviewMouseRightButtonUp"
                             ToolTip="{loc:Loc Flyout_ListenButton_Tooltip}">
@@ -406,7 +462,7 @@
                     </Button>
                     <Button Grid.Column="2"
                             Style="{StaticResource DeviceIconButtonStyle}"
-                            Margin="8,0,0,0"
+                            Margin="6,3,-1,-3"
                             Click="DeviceIcon_Click"
                             PreviewMouseRightButtonUp="DeviceIcon_PreviewMouseRightButtonUp"
                             ToolTip="{loc:Loc Flyout_DeviceIcon_Tooltip}">
@@ -440,7 +496,7 @@
                     </Button>
                 </Grid>
 
-                <Grid Grid.Row="1">
+                <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -482,9 +538,9 @@
                                          and a shared HorizontalAlignment for every playback (speaker tier)
                                          glyph. Tune any value here and every matching trigger picks it up. -->
                                     <Style.Resources>
-                      <sys:Double x:Key="MicGlyphFontSize">21</sys:Double>
+                      <sys:Double x:Key="MicGlyphFontSize">20.5</sys:Double>
                                         <FontWeight x:Key="MicGlyphFontWeight">ExtraBold</FontWeight>
-                                        <TranslateTransform x:Key="MicGlyphOffset" X="0" Y="0"/>
+                                        <TranslateTransform x:Key="MicGlyphOffset" X="-1" Y="0"/>
                                         <HorizontalAlignment x:Key="PlaybackGlyphAlignment">Right</HorizontalAlignment>
                                         <TranslateTransform x:Key="PlaybackGlyphOffset" X="0" Y="0"/>
                                     </Style.Resources>
@@ -500,6 +556,7 @@
                                                 <Binding Path="IsMuted"/>
                                                 <Binding Path="IsCaptureDevice"/>
                                                 <Binding Path="IsListeningToThisDevice"/>
+                                                <Binding Path="IsCaptureSleeping"/>
                                             </MultiBinding>
                                         </Setter.Value>
                                     </Setter>
@@ -519,6 +576,11 @@
                                             <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
                                         </Trigger>
                                         <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_LISTENING}">
+                                            <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
+                                            <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
+                                            <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
+                                        </Trigger>
+                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_SLEEP}">
                                             <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
                                             <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
                                             <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
@@ -680,7 +742,7 @@
                 <Border Grid.Row="1"
                         Background="{DynamicResource ThemeFooterBackground}"
                         CornerRadius="{Binding IsLast, Converter={StaticResource IsLastToFooterCorner}}"
-                        Padding="14,0,12,12">
+                        Padding="17,4,12,12">
                     <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
                 </Border>
 
@@ -720,7 +782,7 @@
 
                 <Border Grid.Row="0"
                         Background="{DynamicResource ThemeFooterBackground}"
-                        Padding="14,10,12,12">
+                        Padding="14,12,12,12">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="0"/>

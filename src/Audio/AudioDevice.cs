@@ -85,6 +85,14 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private int _interpolationStep;
     private int _interpolationSteps = 1;
 
+    // True on a capture endpoint when no session is currently in the Active state. Windows lets
+    // the capture engine idle when no app is streaming the mic, so the endpoint meter stops
+    // updating and holds whatever peak was last sampled. Bg-thread sample reads see this flag and
+    // force the raw peaks to 0 so the lerp falls to silence instead of freezing on a stale value;
+    // the bound UI also swaps the mute-row glyph to MICROPHONE_SLEEP. volatile so the bg sample
+    // thread reads a coherent value - writes always happen on the UI thread.
+    private volatile bool _isCaptureSleeping;
+
     public string Id { get; }
     public EDataFlow DataFlow { get; }
     public ReadOnlyObservableCollection<AudioAppGroup> Groups { get; }
@@ -396,6 +404,14 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// </summary>
     public float PeakValueMax => _displayPeakMax;
 
+    /// <summary>
+    /// True when this is a capture endpoint with no currently-Active session. Windows idles the
+    /// capture engine in that state and the endpoint meter freezes on its last value, so the UI
+    /// swaps to MICROPHONE_SLEEP and the sample loop pins the peak to 0. Always false on render
+    /// endpoints. Recomputed on every session add / remove / state change.
+    /// </summary>
+    public bool IsCaptureSleeping => _isCaptureSleeping;
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public AudioDevice(IMMDevice device, EDataFlow dataFlow, Dispatcher dispatcher, AsyncThrottler<string> volumeThrottler, ProcessExitMonitor processExitMonitor)
@@ -605,6 +621,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             _sessionManager.RegisterSessionNotification(_sessionBridge);
 
             EnumerateExistingSessions();
+
+            // After the initial session enumeration, decide whether the capture engine is idle.
+            // Render endpoints short-circuit inside the recompute - the flag stays false there.
+            RecomputeCaptureSleepingState();
         }
         catch (Exception ex)
         {
@@ -637,15 +657,27 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IAudioMeterInformation? meter = _endpointMeter;
         if (meter == null) return;
 
-        try
+        if (_isCaptureSleeping)
         {
-            MeterReader.ReadStereoPeaks(meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
-            _rawPeakMin = minPeak;
-            _rawPeakMax = maxPeak;
+            // Capture engine is idled by Windows when no app holds an active stream. The endpoint
+            // meter holds the last value from when something was capturing - reading it would
+            // freeze the level bar on a stale peak. Pin raw peaks to 0 instead; the lerp falls
+            // smoothly to silence.
+            _rawPeakMin = 0f;
+            _rawPeakMax = 0f;
         }
-        catch
+        else
         {
-            // Endpoint disconnect race - leave previous raw values in place; next sample reconciles.
+            try
+            {
+                MeterReader.ReadStereoPeaks(meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
+                _rawPeakMin = minPeak;
+                _rawPeakMax = maxPeak;
+            }
+            catch
+            {
+                // Endpoint disconnect race - leave previous raw values in place; next sample reconciles.
+            }
         }
 
         AudioAppGroup[] groups;
@@ -794,6 +826,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         {
             group.AddSession(session);
         }
+
+        // A newly-added Active session wakes the capture engine; recompute so the bound UI flips
+        // off MICROPHONE_SLEEP without waiting for the next state-change event.
+        RecomputeCaptureSleepingState();
     }
 
     private void OnSessionDisconnected(AudioSession session) => RemoveSession(session);
@@ -802,6 +838,34 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         // Expired state means the app stopped using the endpoint; drop it so the flyout list stays current.
         if (session.State == AudioSessionState.Expired) RemoveSession(session);
+        // Any Active <-> Inactive flip can change the capture engine's idle status. RemoveSession
+        // also calls Recompute, but it's idempotent (the flag only fires PropertyChanged on actual
+        // change) so the double call on the Expired path is harmless.
+        RecomputeCaptureSleepingState();
+    }
+
+    /// <summary>
+    /// Walks the live group list and flips <see cref="IsCaptureSleeping"/> based on whether any
+    /// session is currently Active. No-op on render endpoints - the engine never idles there, so
+    /// the flag stays false and the bound UI keeps showing the normal speaker tier. Must be called
+    /// on the UI thread since the group list is UI-thread-only.
+    /// </summary>
+    private void RecomputeCaptureSleepingState()
+    {
+        if (_disposed) return;
+        bool sleeping = DataFlow == EDataFlow.eCapture && !HasAnyActiveSession();
+        if (_isCaptureSleeping == sleeping) return;
+        _isCaptureSleeping = sleeping;
+        OnPropertyChanged(nameof(IsCaptureSleeping));
+    }
+
+    private bool HasAnyActiveSession()
+    {
+        for (int i = 0; i < _groups.Count; i++)
+        {
+            if (_groups[i].State == AudioSessionState.Active) return true;
+        }
+        return false;
     }
 
     private void RemoveSession(AudioSession session)
@@ -819,6 +883,8 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             session.StateChanged -= OnSessionStateChanged;
             g.RemoveSession(session);
             try { session.Dispose(); } catch { }
+            // Losing this session may have been the last active one; refresh the sleep flag.
+            RecomputeCaptureSleepingState();
             return;
         }
     }

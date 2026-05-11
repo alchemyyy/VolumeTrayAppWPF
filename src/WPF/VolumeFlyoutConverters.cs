@@ -48,11 +48,14 @@ internal sealed class ScalarToPercentConverter : IValueConverter
 /// PLAYBACK_VOLUME_LOW. Volume-tier-aware selection is intentionally skipped here so the mute
 /// button doesn't visually re-flow through tiers as the user drags the slider - GetVolumeTier
 /// is reserved for the tray icon.
-/// Capture endpoints: microphone-themed glyphs - muted wins, then "Listen to this device", else
-/// the plain mic.
+/// Capture endpoints: microphone-themed glyphs. Precedence muted > listening > sleeping > plain.
+/// Sleeping (no app is actively streaming the mic so Windows idles the capture engine) ranks
+/// below listening because Listen-to-this-device itself keeps a capture client running, so the
+/// engine isn't actually asleep in that case.
 ///
 /// MultiBinding inputs (in declared order):
-///   [0]=Volume(scalar), [1]=IsMuted, [2]=IsCaptureDevice, [3]=IsListeningToThisDevice.
+///   [0]=Volume(scalar), [1]=IsMuted, [2]=IsCaptureDevice, [3]=IsListeningToThisDevice,
+///   [4]=IsCaptureSleeping.
 /// Volume is bound for parity with the binding contract but is not consulted in the conversion.
 /// </summary>
 internal sealed class VolumeGlyphConverter : IMultiValueConverter
@@ -66,11 +69,13 @@ internal sealed class VolumeGlyphConverter : IMultiValueConverter
         bool muted = values[1] is true;
         bool isCapture = values.Length > 2 && values[2] is true;
         bool isListening = values.Length > 3 && values[3] is true;
+        bool isSleeping = values.Length > 4 && values[4] is true;
 
         if (isCapture)
         {
             if (muted) return GlyphCatalog.MICROPHONE_OFF;
             if (isListening) return GlyphCatalog.MICROPHONE_LISTENING;
+            if (isSleeping) return GlyphCatalog.MICROPHONE_SLEEP;
             return GlyphCatalog.MICROPHONE;
         }
 

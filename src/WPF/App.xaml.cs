@@ -1,7 +1,7 @@
 // Uncomment to pad the tray context menu with 40 dummy device entries.
 // Verifies ShowContextMenu positioning when the menu overflows the work area.
 // Flip the sibling toggle at the top of VolumeFlyout.xaml.cs to test the flyout too.
-#define DEBUG_OVERFLOW_DUMMIES
+// #define DEBUG_OVERFLOW_DUMMIES
 
 using System.ComponentModel;
 using System.Diagnostics;
