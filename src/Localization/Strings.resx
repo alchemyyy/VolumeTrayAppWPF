@@ -229,6 +229,81 @@
   <data name="Settings_Flyout_ShowListenButton_Description" xml:space="preserve">
     <value>Adds a button to each recording device row that toggles the Windows "Listen to this device" feature. Left-click toggles, Ctrl+left-click enables with Default Playback as the target, right-click picks a specific target.</value>
   </data>
+  <data name="Settings_Flyout_RecordingAppDrawerDisplayType_Title" xml:space="preserve">
+    <value>App drawer display type</value>
+  </data>
+  <data name="Settings_Flyout_RecordingAppDrawerDisplayType_Description" xml:space="preserve">
+    <value>Displaying applications with volume mixer sliders for recording devices is pointless, as recording devices do not go through a volume mixing layer. But this is still here if you want to make the flyout look consistent.</value>
+  </data>
+  <data name="Settings_Flyout_RecordingAppDrawerDisplayType_Icons" xml:space="preserve">
+    <value>Icon grid</value>
+  </data>
+  <data name="Settings_Flyout_RecordingAppDrawerDisplayType_Sliders" xml:space="preserve">
+    <value>Full sliders</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsCentered_Title" xml:space="preserve">
+    <value>Center the icon grid</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsCentered_Description" xml:space="preserve">
+    <value>Center-anchors the icon grid inside the drawer so a partial last row sits in the middle instead of hugging the left edge.</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconScale_Title" xml:space="preserve">
+    <value>Icon scale (percent)</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconScale_Description" xml:space="preserve">
+    <value>Scales the app icons in the grid drawer. 100 matches the slider-drawer baseline; values above 100 enlarge the icons while keeping eight per row.</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsPerRow_Title" xml:space="preserve">
+    <value>Max apps per row</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsPerRow_Description" xml:space="preserve">
+    <value>Caps how many icons fit on a row in the grid drawer. Values above 8 shrink each cell to keep the grid inside the drawer; values below 8 leave the cells at their default size and the grid reads narrower.</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsPerColumn_Title" xml:space="preserve">
+    <value>Max apps per column</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsPerColumn_Description" xml:space="preserve">
+    <value>Caps how many icons fit in a column in the grid drawer. Once a column fills, the next icon starts a new column alongside it.</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerStackDirection_Title" xml:space="preserve">
+    <value>Icon stack direction</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerStackDirection_Description" xml:space="preserve">
+    <value>How the app icons stack inside the grid drawer. Auto picks the direction that puts the first app closest to the device row based on whether apps sit above or below it.</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerStackDirection_TopBottom" xml:space="preserve">
+    <value>Top to bottom</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerStackDirection_BottomTop" xml:space="preserve">
+    <value>Bottom to top</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerStackDirection_LeftRight" xml:space="preserve">
+    <value>Left to right</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerStackDirection_RightLeft" xml:space="preserve">
+    <value>Right to left</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerStackDirection_Auto" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="Settings_Flyout_PlaybackDrawer_Header" xml:space="preserve">
+    <value>Playback drawer</value>
+  </data>
+  <data name="Settings_Flyout_RecordingDrawer_Header" xml:space="preserve">
+    <value>Recording drawer</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerMaxApps_Sliders_Title" xml:space="preserve">
+    <value>Max apps before scrolling - Full sliders</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerMaxApps_Sliders_Description" xml:space="preserve">
+    <value>Caps how many app slider rows render before the drawer enters scrolling overflow.</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerMaxApps_Icons_Title" xml:space="preserve">
+    <value>Max rows before scrolling - Icon grid</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerMaxApps_Icons_Description" xml:space="preserve">
+    <value>Caps how many icon rows render before the drawer enters scrolling overflow.</value>
+  </data>
   <data name="Settings_General_Apply_Button" xml:space="preserve">
     <value>Apply</value>
   </data>

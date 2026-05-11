@@ -30,6 +30,21 @@
         <wpf:DeviceIconOpacityConverter x:Key="DeviceIconOpacity"/>
         <wpf:IsLastToFooterCornerRadiusConverter x:Key="IsLastToFooterCorner"/>
 
+        <!-- Per-cell slot size for the icon grid drawer. Lifted into the resource dictionary as a
+             DynamicResource source so XAML Hot Reload edits to this value propagate to every live
+             CenteringWrapPanel instance instead of being trapped inside the already-instantiated
+             ItemsPanelTemplate output. -->
+        <sys:Double x:Key="GridSlotSize">36</sys:Double>
+
+        <!-- Single source of truth for app-icon pixel sizes across both drawer modes. Slider rows
+             bind their Image Width / Height to AppIconImageSize and their fallback / mute glyph
+             FontSize to AppIconGlyphSize via DynamicResource. Grid rows go through VolumeFlyout's
+             AppDrawerIconImageSize / AppDrawerIconGlyphSize properties (defined in code-behind),
+             which read these same resources and then scale them by AppDrawerIconScalePercent.
+             Tweak here once to retune every app icon in the flyout. -->
+        <sys:Double x:Key="AppIconImageSize">22</sys:Double>
+        <sys:Double x:Key="AppIconGlyphSize">20</sys:Double>
+
         <!-- Slider primitives. Lifted from BrightnessFlyout but stripped of curve / preview chrome -
              the volume slider only shows a track, fill, and thumb. -->
         <Style x:Key="VolumeSliderThumbStyle" TargetType="Thumb">
@@ -266,14 +281,32 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- App icon. Falls back to a generic glyph when the icon resolver returns null;
-                     hover overlays the muted-speaker glyph so click=mute reads visually. -->
-                <Grid x:Name="AppIconRoot" Grid.Column="0" Width="22" Height="22"
+                     hover overlays the muted-speaker glyph so click=mute reads visually.
+                     Width / Height / FontSize pull from the AppIconImageSize / AppIconGlyphSize
+                     resources so the slider-mode icon size tracks the same root truth the grid
+                     mode multiplies by its scale percent. -->
+                <Grid x:Name="AppIconRoot" Grid.Column="0"
+                      Width="{DynamicResource AppIconImageSize}"
+                      Height="{DynamicResource AppIconImageSize}"
                       Margin="0,0,10,0" VerticalAlignment="Center"
-                      Background="Transparent" Cursor="Hand"
+                      Background="Transparent"
                       ToolTip="{Binding DisplayName}"
                       ToolTipService.InitialShowDelay="1000"
                       PreviewMouseLeftButtonUp="AppIcon_PreviewMouseLeftButtonUp">
-                    <Image Source="{Binding Icon}" Width="22" Height="22"
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Style.Triggers>
+                                <!-- Capture sessions are not click-to-mute, so drop the hand cursor too. -->
+                                <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Image Source="{Binding Icon}"
+                           Width="{DynamicResource AppIconImageSize}"
+                           Height="{DynamicResource AppIconImageSize}"
                            RenderOptions.BitmapScalingMode="HighQuality">
                         <Image.Style>
                             <Style TargetType="Image">
@@ -288,7 +321,7 @@
                     </Image>
                     <TextBlock Text="&#xE7F4;"
                                FontFamily="Segoe Fluent Icons"
-                               FontSize="20"
+                               FontSize="{DynamicResource AppIconGlyphSize}"
                                Foreground="{DynamicResource ThemeIconForeground}"
                                HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock.Style>
@@ -305,7 +338,7 @@
                     <TextBlock IsHitTestVisible="False"
                                Text="&#xE653;"
                                FontFamily="Segoe Fluent Icons"
-                               FontSize="20"
+                               FontSize="{DynamicResource AppIconGlyphSize}"
                                Foreground="{DynamicResource ThemeIconForeground}"
                                HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock.Style>
@@ -318,6 +351,10 @@
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsMuted}" Value="True">
                                         <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <!-- Capture sessions have no useful per-app mute, so suppress the X overlay entirely. -->
+                                    <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -686,6 +723,223 @@
             </Grid>
         </ControlTemplate>
 
+        <!-- Per-app icon cell for the grid drawer. Sister of SessionRowTemplate but icon-only - no
+             slider, no percent text. Click toggles mute via the same AppIcon_PreviewMouseLeftButtonUp
+             handler the slider row uses. The cell is 36x36 with the icon centered at 22x22 so the hit
+             target is comfortable while the icon itself matches the slider-row visual. The dim and
+             capture-activity triggers mirror SessionRowTemplate's so a muted / inactive / dim-on-
+             capture-inactive state reads the same in both drawer modes. -->
+        <DataTemplate x:Key="GridIconTemplate" DataType="{x:Type audio:AudioAppGroup}">
+            <Grid x:Name="AppIconRoot"
+                  Width="36" Height="36"
+                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                  Background="Transparent"
+                  ToolTip="{Binding DisplayName}"
+                  ToolTipService.InitialShowDelay="400"
+                  PreviewMouseLeftButtonUp="AppIcon_PreviewMouseLeftButtonUp">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Opacity" Value="1.0"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Style.Triggers>
+                            <!-- Capture sessions are not click-to-mute, so drop the hand cursor too. -->
+                            <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding DataContext.Device.IsMuted, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding DataContext.Device.IsActive, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </DataTrigger>
+                            <!-- DimInactive mode on a capture device: dim icons whose session is not
+                                 currently consuming the mic. Matches the SessionRowTemplate triggers. -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Inactive}"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Expired}"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <!-- Hover background ringing the icon so the click target reads as a button. -->
+                <Border CornerRadius="{DynamicResource CornerRadiusMedium}"
+                        IsHitTestVisible="False">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=AppIconRoot}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource ThemeButtonHover}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+
+                <Image Source="{Binding Icon}"
+                       Width="{Binding AppDrawerIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                       Height="{Binding AppDrawerIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                       RenderOptions.BitmapScalingMode="HighQuality"
+                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image.Style>
+                        <Style TargetType="Image">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Image.Style>
+                </Image>
+                <TextBlock Text="&#xE7F4;"
+                           FontFamily="Segoe Fluent Icons"
+                           FontSize="{Binding AppDrawerIconGlyphSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                           Foreground="{DynamicResource ThemeIconForeground}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock IsHitTestVisible="False"
+                           Text="&#xE653;"
+                           FontFamily="Segoe Fluent Icons"
+                           FontSize="{Binding AppDrawerIconGlyphSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                           Foreground="{DynamicResource ThemeIconForeground}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Setter Property="Opacity" Value="0.5"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=AppIconRoot}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <!-- Capture sessions have no useful per-app mute, so suppress the X overlay entirely. -->
+                                <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!-- ActiveGlyph indicator. Capture cells only; shows a small dot on apps whose
+                     session is currently capturing audio. Pinned bottom-right inside the slot so
+                     it sits at a consistent offset regardless of the icon's natural size. -->
+                <Grid Width="10" Height="10"
+                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                      Margin="0,0,2,2"
+                      IsHitTestVisible="False">
+                    <TextBlock FontFamily="Segoe Fluent Icons"
+                               FontSize="6"
+                               FontWeight="ExtraBold"
+                               Foreground="{DynamicResource ThemeIconForeground}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               TextAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value=""/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.ActiveGlyph}"/>
+                                            <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                            <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Active}"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CIRCLE}"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Grid drawer variant of AppsRowTemplate. Uses CenteringWrapPanel with a fixed 8-column
+             grid (Width=320, ItemWidth=40) so the slot layout is stable across rows and across
+             icon-scale changes. The panel's CenterLastRow flag, bound to the Window's
+             AppDrawerIconsCentered setting, optionally shifts the trailing partial row to the
+             horizontal center of the grid; preceding full rows stay left-anchored either way.
+             Rounded-corner trigger matches the slider-drawer template so the AppsBelow IsLast cell
+             gets the flyout's outer rounded footer corners. -->
+        <ControlTemplate x:Key="AppsGridRowTemplate" TargetType="ContentControl">
+            <Border Background="{DynamicResource ThemeFooterBackground}"
+                    Padding="13,0,11,0"
+                    Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="0"/>
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsLast}" Value="True"/>
+                                    <Condition Binding="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <!-- Icon-grid drawer overflow: ScrollViewer caps the rendered height at the
+                     per-device-type GridDrawerMaxHeight (rows * GridSlotSize). In vertical-flow
+                     stack directions the panel's natural height is bounded by perColumn so the
+                     scrollbar usually stays hidden; in horizontal-flow modes the cap kicks in
+                     once rows exceed the user's max-rows setting. -->
+                <ScrollViewer MaxHeight="{Binding GridDrawerMaxHeight}"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding VisibleGroups}"
+                                  ItemTemplate="{StaticResource GridIconTemplate}"
+                                  HorizontalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <!-- CenteringWrapPanel column count comes from the Window's icons-per-row
+                                     setting; slot size is a hot-reloadable resource (GridSlotSize) so the
+                                     cell pitch can be tuned at runtime. CenterLastRow (bound to the
+                                     Window's AppDrawerIconsCentered setting) shifts only the trailing
+                                     partial row to the row's horizontal center; full rows are
+                                     left-anchored in either mode. -->
+                                <wpf:CenteringWrapPanel ItemWidth="{DynamicResource GridSlotSize}"
+                                                        ItemHeight="{DynamicResource GridSlotSize}"
+                                                        Columns="{Binding AppDrawerIconsPerRow, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CenterLastRow="{Binding AppDrawerIconsCentered, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        StackDirection="{Binding AppDrawerStackDirection, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+        </ControlTemplate>
+
         <!-- Apps row content. Per-device session list lifted into the same footer-color band as
              DeviceRowTemplate so a device and its apps read as a stacked pair. Used by both
              CellAppsAboveTemplate and CellAppsBelowTemplate; DataContext is the VolumeFlyoutCell.
@@ -713,8 +967,16 @@
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <ItemsControl ItemsSource="{Binding VisibleGroups}"
-                              ItemTemplate="{StaticResource SessionRowTemplate}"/>
+                <!-- Slider drawer overflow: ScrollViewer caps the rendered height at the
+                     per-device-type SliderDrawerMaxHeight (rows * row pitch). Below the cap the
+                     items render at natural height and the scrollbar stays hidden; past the cap
+                     the implicit app-wide ScrollBar style (the device-list scrollbar) kicks in. -->
+                <ScrollViewer MaxHeight="{Binding SliderDrawerMaxHeight}"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding VisibleGroups}"
+                                  ItemTemplate="{StaticResource SessionRowTemplate}"/>
+                </ScrollViewer>
             </Border>
         </ControlTemplate>
 
@@ -818,9 +1080,95 @@
             </Grid>
         </DataTemplate>
 
+        <!-- Grid-drawer variant of CellAppsAboveTemplate. Identical chrome to the slider variant -
+             same faux rounded card, same device-row band - only the apps section swaps from
+             AppsRowTemplate to AppsGridRowTemplate. Picked by the selector for capture cells when
+             RecordingAppDrawerDisplayType = Icons. -->
+        <DataTemplate x:Key="CellAppsAboveGridTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        Background="{DynamicResource ThemeFooterBackground}"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        IsHitTestVisible="False"/>
+
+                <ContentControl Grid.Row="0" Template="{StaticResource AppsGridRowTemplate}"/>
+
+                <Border Grid.Row="1"
+                        Background="{DynamicResource ThemeFooterBackground}"
+                        CornerRadius="{Binding IsLast, Converter={StaticResource IsLastToFooterCorner}}"
+                        Padding="17,4,12,12">
+                    <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
+                </Border>
+
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        BorderBrush="{DynamicResource ThemeSliderTrack}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        Opacity="0.4"
+                        IsHitTestVisible="False"/>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Grid-drawer variant of CellAppsBelowTemplate. Same swap rationale as the AppsAbove
+             variant: only the apps section moves to AppsGridRowTemplate; the device row and faux
+             rounded card chrome are unchanged. -->
+        <DataTemplate x:Key="CellAppsBelowGridTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        Background="{DynamicResource ThemeFooterBackground}"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        IsHitTestVisible="False"/>
+
+                <Border Grid.Row="0"
+                        Background="{DynamicResource ThemeFooterBackground}"
+                        Padding="14,12,12,12">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="0"/>
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsLast}" Value="True"/>
+                                        <Condition Binding="{Binding HasVisibleGroups}" Value="False"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
+                </Border>
+
+                <ContentControl Grid.Row="1" Tag="True" Template="{StaticResource AppsGridRowTemplate}"/>
+
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        BorderBrush="{DynamicResource ThemeSliderTrack}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        Opacity="0.4"
+                        IsHitTestVisible="False"/>
+            </Grid>
+        </DataTemplate>
+
         <wpf:VolumeFlyoutCellTemplateSelector x:Key="CellTemplateSelector"
                                               AppsAboveTemplate="{StaticResource CellAppsAboveTemplate}"
-                                              AppsBelowTemplate="{StaticResource CellAppsBelowTemplate}"/>
+                                              AppsBelowTemplate="{StaticResource CellAppsBelowTemplate}"
+                                              AppsAboveGridTemplate="{StaticResource CellAppsAboveGridTemplate}"
+                                              AppsBelowGridTemplate="{StaticResource CellAppsBelowGridTemplate}"/>
     </Window.Resources>
 
     <!-- Outer rounded card with drop-shadow. Bubbled (non-preview) mouse handlers drive the

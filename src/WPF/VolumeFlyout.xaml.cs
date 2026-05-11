@@ -96,6 +96,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // selection per-ContentPresenter, so we have to recreate the visuals to swap templates).
     private FlyoutDeviceLayoutStyle _renderedLayout;
 
+    // Recording-device drawer display type at the time of the last cell rebuild. Mirrors
+    // _renderedLayout: the template selector caches its pick per-ContentPresenter, so swapping
+    // between Sliders and Icons on a capture cell requires a full rebuild.
+    private AppDrawerDisplayType _renderedRecordingAppDrawer;
+
     // Currently-captured slider during a track click drag. Null when no drag is in flight or the
     // active gesture is a thumb drag (which WPF handles natively).
     private Slider? _draggingSlider;
@@ -173,7 +178,95 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // device's drawer. Defaults to DimInactive so early-init paths (no settings yet) match the
     // shipped default rather than rendering as "no indicator".
     public CaptureActivityIndicator CaptureActivityIndicator =>
-        _appSettings?.CaptureActivityIndicator ?? CaptureActivityIndicator.DimInactive;
+        _appSettings?.CaptureActivityIndicator ?? CaptureActivityIndicator.ActiveGlyph;
+
+    // Recording-device drawer style. Bound by the cell template selector to pick the icon-grid
+    // template variant over the slider-row variant for capture cells. Defaults to Icons so the
+    // shipped default applies when settings aren't wired (test harness / early init).
+    public AppDrawerDisplayType RecordingAppDrawerDisplayType =>
+        _appSettings?.RecordingAppDrawerDisplayType ?? AppDrawerDisplayType.Icons;
+
+    // True when the icon grid is configured to center its rows instead of left-anchoring them.
+    // Drives the WrapPanel / ItemsControl style triggers in AppsGridRowTemplate.
+    public bool AppDrawerIconsCentered => _appSettings?.AppDrawerIconsCentered ?? false;
+
+    // Base icon / glyph sizes routed through DPs so XAML Hot Reload edits to the AppIconImageSize /
+    // AppIconGlyphSize resources flow through this property too. The Window's XAML root sets both
+    // DPs via DynamicResource, so the resource dictionary owns the canonical value. The change
+    // callback re-fires PropertyChanged on the scaled-grid versions so grid bindings re-evaluate
+    // alongside the slider rows that bind the resources directly.
+    public static readonly DependencyProperty BaseAppIconImageSizeProperty = DependencyProperty.Register(
+        nameof(BaseAppIconImageSize), typeof(double), typeof(VolumeFlyout),
+        new PropertyMetadata(22.0, OnBaseAppIconSizeChanged));
+
+    public static readonly DependencyProperty BaseAppIconGlyphSizeProperty = DependencyProperty.Register(
+        nameof(BaseAppIconGlyphSize), typeof(double), typeof(VolumeFlyout),
+        new PropertyMetadata(20.0, OnBaseAppIconSizeChanged));
+
+    public double BaseAppIconImageSize
+    {
+        get => (double)GetValue(BaseAppIconImageSizeProperty);
+        set => SetValue(BaseAppIconImageSizeProperty, value);
+    }
+
+    public double BaseAppIconGlyphSize
+    {
+        get => (double)GetValue(BaseAppIconGlyphSizeProperty);
+        set => SetValue(BaseAppIconGlyphSizeProperty, value);
+    }
+
+    private static void OnBaseAppIconSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        VolumeFlyout self = (VolumeFlyout)d;
+        self.OnPropertyChanged(nameof(AppDrawerIconImageSize));
+        self.OnPropertyChanged(nameof(AppDrawerIconGlyphSize));
+    }
+
+    // Per-icon pixel size for the grid drawer's Image. The base comes from BaseAppIconImageSize
+    // (= the AppIconImageSize resource), multiplied by AppDrawerIconScalePercent so the percent
+    // only takes effect in grid mode while slider mode binds the resource at 1:1.
+    public double AppDrawerIconImageSize =>
+        BaseAppIconImageSize * ((_appSettings?.AppDrawerIconScalePercent ?? 100) / 100.0);
+
+    // Glyph FontSize for the fallback and mute-hover textblocks in the icon cell, scaled by the
+    // same percent so the placeholder reads as a peer to a real icon at the chosen size.
+    public double AppDrawerIconGlyphSize =>
+        BaseAppIconGlyphSize * ((_appSettings?.AppDrawerIconScalePercent ?? 100) / 100.0);
+
+    // Sanitised column count for the icon grid. Bound to CenteringWrapPanel.Columns so the panel
+    // wraps at exactly this many cells per row and sizes itself from its own ItemWidth. Clamped to
+    // [1, 16] so a corrupt settings.xml can't collapse the grid or blow it past the screen.
+    // In vertical stack-direction modes the same value is reinterpreted as items-per-column by the
+    // panel itself; the Window only sanitises the user input.
+    public int AppDrawerIconsPerRow
+    {
+        get
+        {
+            int n = _appSettings?.AppDrawerIconsPerRow ?? 9;
+            if (n < 1) return 1;
+            if (n > 16) return 16;
+            return n;
+        }
+    }
+
+    /// <summary>
+    /// Resolved icon-grid stack direction. Auto picks BottomTop when apps sit above the device row
+    /// (the bottom-most app abuts the device) and TopBottom when apps sit below. Bound to
+    /// CenteringWrapPanel.StackDirection in AppsGridRowTemplate.
+    /// </summary>
+    public AppDrawerStackDirection AppDrawerStackDirection
+    {
+        get
+        {
+            AppDrawerStackDirection raw = _appSettings?.AppDrawerStackDirection ?? AppDrawerStackDirection.Auto;
+            if (raw != AppDrawerStackDirection.Auto) return raw;
+
+            FlyoutDeviceLayoutStyle layout = _appSettings?.FlyoutDeviceLayout ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
+            return layout == FlyoutDeviceLayoutStyle.AppsAboveDevice
+                ? AppDrawerStackDirection.BottomTop
+                : AppDrawerStackDirection.TopBottom;
+        }
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -200,6 +293,14 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext = this;
 
+        // Bind the base icon-size DPs to the root resources via DynamicResource so XAML Hot Reload
+        // edits to AppIconImageSize / AppIconGlyphSize update both the slider rows (which bind the
+        // resources directly) and the grid drawer (which goes through the scaled properties below).
+        // Has to live in code-behind rather than as a XAML root attribute because the XAML compiler
+        // resolves Window attributes against the literal Window type, not the partial subclass.
+        SetResourceReference(BaseAppIconImageSizeProperty, "AppIconImageSize");
+        SetResourceReference(BaseAppIconGlyphSizeProperty, "AppIconGlyphSize");
+
         _dragHelper = new WindowDragHelper(this);
 
         IsUndocked = _appSettings is
@@ -211,6 +312,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         };
 
         _renderedLayout = _appSettings?.FlyoutDeviceLayout ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
+        _renderedRecordingAppDrawer = _appSettings?.RecordingAppDrawerDisplayType ?? AppDrawerDisplayType.Icons;
 
         ((INotifyCollectionChanged)_deviceManager.Devices).CollectionChanged += OnDevicesCollectionChanged;
         SyncDeviceSubscriptions();
@@ -239,11 +341,21 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(AllowFlyoutUndock));
             OnPropertyChanged(nameof(ShowListenButtonInFlyout));
             OnPropertyChanged(nameof(CaptureActivityIndicator));
+            OnPropertyChanged(nameof(RecordingAppDrawerDisplayType));
+            OnPropertyChanged(nameof(AppDrawerIconsCentered));
+            OnPropertyChanged(nameof(AppDrawerIconImageSize));
+            OnPropertyChanged(nameof(AppDrawerIconGlyphSize));
+            OnPropertyChanged(nameof(AppDrawerIconsPerRow));
+            OnPropertyChanged(nameof(AppDrawerStackDirection));
 
             FlyoutDeviceLayoutStyle currentLayout = _appSettings?.FlyoutDeviceLayout
                 ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
-            bool layoutChanged = currentLayout != _renderedLayout;
+            AppDrawerDisplayType currentRecordingDrawer = _appSettings?.RecordingAppDrawerDisplayType
+                ?? AppDrawerDisplayType.Icons;
+            bool layoutChanged = currentLayout != _renderedLayout
+                || currentRecordingDrawer != _renderedRecordingAppDrawer;
             _renderedLayout = currentLayout;
+            _renderedRecordingAppDrawer = currentRecordingDrawer;
 
             RebuildCellList(forceFullRebuild: layoutChanged);
         });
@@ -1230,8 +1342,21 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         if (sender is not FrameworkElement fe) return;
         if (fe.DataContext is not AudioAppGroup group) return;
+        // Capture sessions have no useful per-app mute; ignore clicks on those icons.
+        if (FindAncestorCell(fe) is { IsCapture: true }) return;
         group.IsMuted = !group.IsMuted;
         e.Handled = true;
+    }
+
+    private static VolumeFlyoutCell? FindAncestorCell(DependencyObject start)
+    {
+        DependencyObject? current = start;
+        while (current != null)
+        {
+            if (current is FrameworkElement element && element.DataContext is VolumeFlyoutCell cell) return cell;
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return null;
     }
 
     private void UndockButton_Click(object sender, RoutedEventArgs e)

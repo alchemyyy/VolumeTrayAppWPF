@@ -104,6 +104,37 @@ public enum CaptureActivityIndicator
 }
 
 /// <summary>
+/// How the per-device app drawer renders its session list.
+/// Sliders: full row per app, icon + volume slider + percent text (the original layout).
+/// Icons: icons only, packed into an 8-column grid -- pointless to show volume mixer sliders for
+/// recording devices since they don't go through a mixing layer.
+/// </summary>
+public enum AppDrawerDisplayType
+{
+    Sliders,
+    Icons,
+}
+
+/// <summary>
+/// Stack flow for the grid drawer's app icons. The first four are explicit directions:
+///   TopBottom -- horizontal rows, filled top-down (the original layout).
+///   BottomTop -- horizontal rows, filled bottom-up so the first item sits closest to the device row.
+///   LeftRight -- vertical columns, filled left-to-right.
+///   RightLeft -- vertical columns, filled right-to-left.
+/// Auto picks BottomTop when apps sit above the device row (so the first app abuts the device) and
+/// TopBottom when apps sit below it. The AppDrawerIconsPerRow setting caps the primary-axis group:
+/// items-per-row in the horizontal modes, items-per-column in the vertical ones.
+/// </summary>
+public enum AppDrawerStackDirection
+{
+    TopBottom,
+    BottomTop,
+    LeftRight,
+    RightLeft,
+    Auto,
+}
+
+/// <summary>
 /// A selectable volume-slider thumb glyph, stored with its own display properties
 /// (font family, font size, width, height, horizontal scale) so that differently-proportioned glyphs
 /// render correctly both in the dropdown preview and on the slider itself.
@@ -659,7 +690,42 @@ public class AppSettings
     public bool ShowListenButtonInFlyout { get; set; } = true;
 
     // How the flyout marks actively-capturing app sessions inside a recording device's drawer.
-    public CaptureActivityIndicator CaptureActivityIndicator { get; set; } = CaptureActivityIndicator.DimInactive;
+    public CaptureActivityIndicator CaptureActivityIndicator { get; set; } = CaptureActivityIndicator.ActiveGlyph;
+
+    // Drawer style for the per-app session list under a recording device. Defaults to Icons because
+    // recording sessions don't have a per-app volume mixer to control; the user can flip back to
+    // Sliders for visual consistency with the playback drawers.
+    public AppDrawerDisplayType RecordingAppDrawerDisplayType { get; set; } = AppDrawerDisplayType.Icons;
+
+    // Icon-grid sub-options. Centered flips the grid from left-anchored (the default) to
+    // center-anchored, which only changes how a partial last row reads. Scale is an integer percent
+    // applied to the icon visuals (Image + fallback / mute glyphs) so the user can bump them larger
+    // without changing the 8-per-row slot grid. Defaults to 115 so the icons read a touch larger
+    // than the slider-drawer baseline.
+    public bool AppDrawerIconsCentered { get; set; } = false;
+    public int AppDrawerIconScalePercent { get; set; } = 115;
+
+    // Maximum icons per row in the grid drawer. The slot grid auto-shrinks the cell width when this
+    // exceeds 8 so the grid stays inside the drawer's inner band; below 8 the slot stays at 40 and
+    // the grid is just visually narrower.
+    // In vertical stack-direction modes (LeftRight / RightLeft) this same value caps icons per
+    // column instead -- one knob covers both axes.
+    public int AppDrawerIconsPerRow { get; set; } = 9;
+
+    // Stack direction for the icon grid. Auto resolves at render time against FlyoutDeviceLayout so
+    // the first app always sits closest to its device row regardless of which side the apps are on.
+    public AppDrawerStackDirection AppDrawerStackDirection { get; set; } = AppDrawerStackDirection.Auto;
+
+    // Per-device-type, per-drawer-mode caps on how many app rows render before the drawer enters
+    // overflow scroll. Sliders caps slider rows (each app = one row); Icons caps icon-grid rows.
+    // Four distinct values so a user can tune each axis without one knob bleeding into another --
+    // even though playback is currently hard-wired to Sliders, the Icons cap is still stored for
+    // future symmetry. Defaults: 24 slider rows / 10 icon rows match the heaviest usable density
+    // before a typical flyout exceeds the screen.
+    public int PlaybackAppDrawerSlidersMaxApps { get; set; } = 24;
+    public int PlaybackAppDrawerIconsMaxRows { get; set; } = 10;
+    public int RecordingAppDrawerSlidersMaxApps { get; set; } = 24;
+    public int RecordingAppDrawerIconsMaxRows { get; set; } = 10;
 
     // Empty by default; defaults are seeded by EnsureDefaultHotkeys() after construction or load.
     // The previous in-place initializer collided with XmlSerializer's "append to existing list" behavior:

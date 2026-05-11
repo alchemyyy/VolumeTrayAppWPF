@@ -742,11 +742,14 @@ public partial class App
         _trayRenderer.IsLightTheme = isLight;
         string foregroundGlyph = GlyphCatalog.GetVolumeTier(device.Volume, device.IsMuted);
         _trayRenderer.Glyph = foregroundGlyph;
-        // Full-volume speaker as a dimmed backdrop on every partial state, mirroring how the OS
-        // shell paints Wi-Fi: the silhouette of the full glyph stays present so the partial
-        // foreground reads as "this much of that". Skip the backdrop when the foreground IS
-        // the full glyph - drawing it twice would just darken the icon.
-        _trayRenderer.BackdropGlyph = foregroundGlyph == GlyphCatalog.PLAYBACK_VOLUME_HIGH ? null : GlyphCatalog.PLAYBACK_VOLUME_HIGH;
+        // Full-volume speaker as a dimmed backdrop on partial speaker-tier states, mirroring how
+        // the OS shell paints Wi-Fi: the silhouette of the full glyph stays present so the
+        // partial foreground reads as "this much of that". Skip the backdrop when muted (the
+        // mute glyph is a distinct icon, not a speaker-tier variant, so the speaker silhouette
+        // doesn't belong behind it) and when the foreground IS the full glyph.
+        _trayRenderer.BackdropGlyph = device.IsMuted || foregroundGlyph == GlyphCatalog.PLAYBACK_VOLUME_HIGH
+            ? null
+            : GlyphCatalog.PLAYBACK_VOLUME_HIGH;
 
         int percent = (int)Math.Round(device.Volume * 100);
         string tooltip = device.IsMuted

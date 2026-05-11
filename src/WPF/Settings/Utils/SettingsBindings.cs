@@ -43,6 +43,7 @@ public static class SettingsBindings
         ["ShowRecordingDevicesInFlyout"] = (s, v) => s.ShowRecordingDevicesInFlyout = v,
         ["IntermixRecordingWithPlaybackInFlyout"] = (s, v) => s.IntermixRecordingWithPlaybackInFlyout = v,
         ["ShowListenButtonInFlyout"] = (s, v) => s.ShowListenButtonInFlyout = v,
+        ["AppDrawerIconsCentered"] = (s, v) => s.AppDrawerIconsCentered = v,
     };
 
     /// <summary>Setter + parser pair for an enum-bound ComboBox.</summary>
@@ -65,6 +66,8 @@ public static class SettingsBindings
         ["FlyoutDeviceLayout"] = Bind<FlyoutDeviceLayoutStyle>((s, v) => s.FlyoutDeviceLayout = v),
         ["FlyoutDeviceSort"] = Bind<FlyoutDeviceSortOrder>((s, v) => s.FlyoutDeviceSort = v),
         ["CaptureActivityIndicator"] = Bind<CaptureActivityIndicator>((s, v) => s.CaptureActivityIndicator = v),
+        ["RecordingAppDrawerDisplayType"] = Bind<AppDrawerDisplayType>((s, v) => s.RecordingAppDrawerDisplayType = v),
+        ["AppDrawerStackDirection"] = Bind<AppDrawerStackDirection>((s, v) => s.AppDrawerStackDirection = v),
         ["TrayMenuPlaybackDeviceNameStyle"] = Bind<TrayMenuDeviceNameStyle>(
             (s, v) => s.TrayMenuPlaybackDeviceNameStyle = v),
         ["TrayMenuRecordingDeviceNameStyle"] = Bind<TrayMenuDeviceNameStyle>(
