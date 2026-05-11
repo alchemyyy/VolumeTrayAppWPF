@@ -50,6 +50,21 @@ public enum SliderThumbShape
 }
 
 /// <summary>
+/// Which slice of an audio endpoint's name the tray context menu shows for each device row.
+/// NameAndModel: full FriendlyName, e.g. "Speakers (Realtek(R) Audio)" - displayed as "Name+Model".
+/// Name: PKEY_Device_DeviceDesc only, e.g. "Speakers".
+/// Model: PKEY_DeviceInterface_FriendlyName only, e.g. "Realtek(R) Audio".
+/// Playback and recording lists carry separate enum values so a user can keep playback verbose
+/// while collapsing recording rows to just the model (or vice versa).
+/// </summary>
+public enum TrayMenuDeviceNameStyle
+{
+    NameAndModel,
+    Name,
+    Model,
+}
+
+/// <summary>
 /// How each device's row is laid out relative to its per-app session sliders.
 /// AppsAboveDevice: apps on top, device row underneath in the footer band - matches EarTrumpet.
 /// AppsBelowDevice: device row on top, apps underneath. Bottom-up device list ordering applies in
@@ -311,6 +326,35 @@ public class AppSettings
     public ContextMenuPosition ContextMenuPosition { get; set; } = ContextMenuPosition.Modern;
     public int ContextMenuFontSize { get; set; } = 15;
 
+    // Per-flow device-name style for the tray context menu rows. Defaults to Everything so the
+    // initial UX matches the prior behavior (full Windows FriendlyName).
+    public TrayMenuDeviceNameStyle TrayMenuPlaybackDeviceNameStyle { get; set; } = TrayMenuDeviceNameStyle.NameAndModel;
+    public TrayMenuDeviceNameStyle TrayMenuRecordingDeviceNameStyle { get; set; } = TrayMenuDeviceNameStyle.NameAndModel;
+
+    // Cap on the rendered device-name length in the tray context menu. When the chosen name slice
+    // exceeds this character count, the suffix is replaced with a 2-dot ellipsis ("..") to keep
+    // the menu width predictable. Clamped to the spinner's [Min, Max] range so a corrupt
+    // settings.xml can't push the value outside what the UI accepts.
+    public const int TrayMenuDeviceNameMaxLengthDefault = 32;
+    public const int TrayMenuDeviceNameLengthNumericBoxMin = 3;
+    public const int TrayMenuDeviceNameLengthNumericBoxMax = 200;
+
+    private int _trayMenuDeviceNameMaxLength = TrayMenuDeviceNameMaxLengthDefault;
+
+    [XmlElement]
+    public int TrayMenuDeviceNameMaxLength
+    {
+        get => _trayMenuDeviceNameMaxLength;
+        set
+        {
+            int clamped = Math.Max(
+                TrayMenuDeviceNameLengthNumericBoxMin,
+                Math.Min(TrayMenuDeviceNameLengthNumericBoxMax, value));
+            if (_trayMenuDeviceNameMaxLength == clamped) return;
+            _trayMenuDeviceNameMaxLength = clamped;
+        }
+    }
+
     // Theme
     public ThemeMode ThemeMode { get; set; } = ThemeMode.System;
     public NullableThemeColor TextColor { get; set; } = new();
@@ -550,6 +594,7 @@ public class AppSettings
     public FlyoutDeviceSortOrder FlyoutDeviceSort { get; set; } = FlyoutDeviceSortOrder.StateGrouped;
     public bool ShowRecordingDevicesInFlyout { get; set; } = true;
     public bool IntermixRecordingWithPlaybackInFlyout { get; set; } = false;
+    public bool ShowListenButtonInFlyout { get; set; } = true;
 
     // Empty by default; defaults are seeded by EnsureDefaultHotkeys() after construction or load.
     // The previous in-place initializer collided with XmlSerializer's "append to existing list" behavior:

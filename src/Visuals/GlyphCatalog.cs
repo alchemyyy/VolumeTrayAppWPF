@@ -38,6 +38,7 @@ internal static class GlyphCatalog
     public const string MICROPHONE_FILLED = "\uEC71";  // Mic On
     public const string MICROPHONE_CLIPPING = "\uEC72";  // Mic Clipping
     public const string MICROPHONE_LISTENING = "\uF12E";  // Mic Listening
+    public const string EAR_LISTEN = "\uF270";  // Ear (glyph for capture-device 'Listen to this device' toggle)
 
 
 

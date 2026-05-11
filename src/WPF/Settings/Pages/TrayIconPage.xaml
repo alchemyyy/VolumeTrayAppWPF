@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     mc:Ignorable="d"
@@ -38,6 +39,43 @@
                     <ComboBoxItem Tag="Classic" Content="{loc:Loc Settings_TrayIcon_MenuPosition_Classic}"/>
                     <ComboBoxItem Tag="Modern" Content="{loc:Loc Settings_TrayIcon_MenuPosition_Modern}"/>
                 </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_TrayIcon_PlaybackDeviceName_Title}"
+                               Description="{loc:Loc Settings_TrayIcon_PlaybackDeviceName_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="TrayMenuPlaybackDeviceNameStyleCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="TrayMenuPlaybackDeviceNameStyle" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="NameAndModel" Content="{loc:Loc Settings_TrayIcon_DeviceName_NameAndModel}"/>
+                    <ComboBoxItem Tag="Name" Content="{loc:Loc Settings_TrayIcon_DeviceName_Name}"/>
+                    <ComboBoxItem Tag="Model" Content="{loc:Loc Settings_TrayIcon_DeviceName_Model}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_TrayIcon_RecordingDeviceName_Title}"
+                               Description="{loc:Loc Settings_TrayIcon_RecordingDeviceName_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="TrayMenuRecordingDeviceNameStyleCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="TrayMenuRecordingDeviceNameStyle" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="NameAndModel" Content="{loc:Loc Settings_TrayIcon_DeviceName_NameAndModel}"/>
+                    <ComboBoxItem Tag="Name" Content="{loc:Loc Settings_TrayIcon_DeviceName_Name}"/>
+                    <ComboBoxItem Tag="Model" Content="{loc:Loc Settings_TrayIcon_DeviceName_Model}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_TrayIcon_DeviceNameMaxLength_Title}"
+                               Description="{loc:Loc Settings_TrayIcon_DeviceNameMaxLength_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="TrayMenuDeviceNameMaxLengthBox"
+                                      Minimum="3" Maximum="200"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 

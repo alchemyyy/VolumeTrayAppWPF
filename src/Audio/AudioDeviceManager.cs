@@ -261,6 +261,8 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         EnumerateAndWrap(EDataFlow.eCapture);
 
         UpdateAllDefaults();
+        // UpdateAllDefaults already calls UpdateListenTargetActiveness, but only after the default
+        // resolution lands - so the seed is good on first paint without an extra call here.
     }
 
     private void EnumerateAndWrap(EDataFlow flow)
@@ -364,6 +366,9 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         if ((newState & (uint)DeviceState.Active) != 0) match.UpgradeFromActiveState();
 
         ScheduleUpdateAllDefaults();
+        // Any render endpoint going active / inactive can change the dim state of every capture
+        // row's listen button (target-active is a cross-device derived flag), so recompute here.
+        UpdateListenTargetActiveness();
     }
 
     /// <summary>
@@ -379,15 +384,40 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Refresh one device's "Listen to this device" state when the OS reports a change to
-    /// PKEY_AudioEndpoint_ListenToThisDevice. Capture-only feature; render endpoints ignore it.
+    /// Refresh one capture device's Listen-feature state (enable bit + target endpoint id) when the
+    /// OS reports a change to either listen-fmtid pid. Capture-only; render endpoints have no
+    /// listen state. The target-active dim flag is recomputed off the new target id.
     /// </summary>
     private void RefreshDeviceListenState(string id)
     {
         if (string.IsNullOrEmpty(id)) return;
         AudioDevice? match = FindDeviceById(id);
         if (match == null) return;
-        match.RefreshListenToThisDeviceFromStore();
+        match.RefreshListenStateFromStore();
+        UpdateListenTargetActiveness();
+    }
+
+    /// <summary>
+    /// Recomputes <see cref="AudioDevice.IsListenTargetActive"/> on every capture endpoint. The
+    /// target is either a specific render endpoint id (pid 0 of the listen fmtid) or null meaning
+    /// follow the system default playback device. Called from any path that could change the
+    /// answer: device state flips, default-device changes, listen-target writes.
+    /// </summary>
+    private void UpdateListenTargetActiveness()
+    {
+        AudioDevice? defaultRender = null;
+        foreach (AudioDevice d in _devices)
+        {
+            if (d.DataFlow == EDataFlow.eRender && d.IsDefault) { defaultRender = d; break; }
+        }
+
+        foreach (AudioDevice d in _devices)
+        {
+            if (d.DataFlow != EDataFlow.eCapture) continue;
+            string? targetId = d.ListenTargetDeviceId;
+            AudioDevice? target = targetId == null ? defaultRender : FindDeviceById(targetId);
+            d.IsListenTargetActive = target != null && target.IsActive;
+        }
     }
 
     private AudioDevice? FindDeviceById(string id)
@@ -492,6 +522,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         DefaultCommunicationsDevice = renderComms;
         DefaultCaptureDevice = captureDefault;
         DefaultCommunicationsCaptureDevice = captureComms;
+
+        // Capture rows that follow the default playback device (null target id) reread their dim
+        // state from whichever render endpoint is now the default.
+        UpdateListenTargetActiveness();
     }
 
     /// <summary>
@@ -661,10 +695,13 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
                 string id = pwstrDeviceId;
                 _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceFriendlyName(id));
             }
-            // 'Listen to this device' toggles in mmsys.cpl land here for the affected capture
-            // endpoint. Refresh just that device's bound flag so the icon swaps live.
+            // Listen-feature changes from mmsys.cpl land here for the affected capture endpoint.
+            // The same fmtid covers pid 1 (enable bool) and pid 0 (target endpoint id) - we
+            // recheck both whenever either fires so a target change without an enable change
+            // still updates the dim state, and vice versa.
             else if (key.fmtid == PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice.fmtid &&
-                key.pid == PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice.pid)
+                (key.pid == PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice.pid ||
+                 key.pid == PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceId.pid))
             {
                 string id = pwstrDeviceId;
                 _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceListenState(id));

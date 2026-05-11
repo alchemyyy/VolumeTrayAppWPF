@@ -16,16 +16,16 @@ namespace VolumeTrayAppWPF.Audio;
 // Volume, IsMuted, PeakValue, State) so the flyout DataTemplate can bind to either type. Volume
 // and IsMuted writes fan out to every session in the group; reads return the first session's value.
 // PeakValue is the max across all sessions so the loudest stream drives the meter.
-internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
+internal sealed class AudioAppGroup(string appId, Dispatcher dispatcher) : INotifyPropertyChanged, IDisposable
 {
     private readonly List<AudioSession> _sessions = [];
-    private readonly Dispatcher _dispatcher;
+    private readonly Dispatcher _dispatcher = dispatcher;
 
     private float _peakValueMin;
     private float _peakValueMax;
     private bool _disposed;
 
-    public string AppId { get; }
+    public string AppId { get; } = appId;
 
     /// <summary>The sessions inside this group. Mutated only on the UI thread by AudioDevice.</summary>
     public IReadOnlyList<AudioSession> Sessions => _sessions;
@@ -39,15 +39,15 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            for (int i = 0; i < _sessions.Count; i++)
+            bool isInactive = false;
+            foreach (AudioSession session in _sessions)
             {
-                if (_sessions[i].State == AudioSessionState.Active) return AudioSessionState.Active;
+                if (session.State == AudioSessionState.Active)
+                    return AudioSessionState.Active;
+                if (session.State != AudioSessionState.Expired)
+                    isInactive = true;
             }
-            for (int i = 0; i < _sessions.Count; i++)
-            {
-                if (_sessions[i].State != AudioSessionState.Expired) return AudioSessionState.Inactive;
-            }
-            return AudioSessionState.Expired;
+            return isInactive ? AudioSessionState.Inactive : AudioSessionState.Expired;
         }
     }
 
@@ -58,7 +58,9 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
         {
             // Fan out to every session. Each AudioSession.Volume.set already filters near-equal writes
             // and tolerates COM failures, so no extra guard is needed here.
-            for (int i = 0; i < _sessions.Count; i++) _sessions[i].Volume = value;
+            foreach (AudioSession session in _sessions)
+                session.Volume = value;
+
             OnPropertyChanged();
         }
     }
@@ -68,7 +70,9 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
         get => _sessions.Count > 0 && _sessions[0].IsMuted;
         set
         {
-            for (int i = 0; i < _sessions.Count; i++) _sessions[i].IsMuted = value;
+            foreach (AudioSession session in _sessions)
+                session.IsMuted = value;
+
             OnPropertyChanged();
         }
     }
@@ -91,12 +95,6 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
 
     /// <summary>Raised when the last session is removed so AudioDevice can drop the group from its list.</summary>
     internal event Action<AudioAppGroup>? Empty;
-
-    public AudioAppGroup(string appId, Dispatcher dispatcher)
-    {
-        AppId = appId;
-        _dispatcher = dispatcher;
-    }
 
     /// <summary>
     /// Adds a session to the group. New sessions inherit the group's existing mute state so a freshly
@@ -168,9 +166,9 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
         try { sessions = _sessions.ToArray(); }
         catch { return; }
 
-        for (int i = 0; i < sessions.Length; i++)
+        foreach (AudioSession session in sessions)
         {
-            try { sessions[i].UpdatePeakValueBackground(unified, biasMultiplier); }
+            try { session.UpdatePeakValueBackground(unified, biasMultiplier); }
             catch { /* session may have died between callbacks */ }
         }
     }
@@ -233,10 +231,10 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
     {
         float maxOfMins = 0f;
         float maxOfMaxes = 0f;
-        for (int i = 0; i < _sessions.Count; i++)
+        foreach (AudioSession session in _sessions)
         {
-            float pMin = _sessions[i].PeakValueMin;
-            float pMax = _sessions[i].PeakValueMax;
+            float pMin = session.PeakValueMin;
+            float pMax = session.PeakValueMax;
             if (pMin > maxOfMins) maxOfMins = pMin;
             if (pMax > maxOfMaxes) maxOfMaxes = pMax;
         }
@@ -249,7 +247,9 @@ internal sealed class AudioAppGroup : INotifyPropertyChanged, IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        for (int i = 0; i < _sessions.Count; i++) _sessions[i].PropertyChanged -= OnSessionPropertyChanged;
+        foreach (AudioSession session in _sessions)
+            session.PropertyChanged -= OnSessionPropertyChanged;
+
         _sessions.Clear();
     }
 

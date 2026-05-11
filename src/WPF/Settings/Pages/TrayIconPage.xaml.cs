@@ -47,6 +47,16 @@ public partial class TrayIconPage : UserControl
             TrayScrollEnableToggle.IsChecked = settings.TrayScrollEnabled;
 
             SettingsBindings.SelectComboByTag(ContextMenuPositionCombo, settings.ContextMenuPosition.ToString());
+            SettingsBindings.SelectComboByTag(
+                TrayMenuPlaybackDeviceNameStyleCombo, settings.TrayMenuPlaybackDeviceNameStyle.ToString());
+            SettingsBindings.SelectComboByTag(
+                TrayMenuRecordingDeviceNameStyleCombo, settings.TrayMenuRecordingDeviceNameStyle.ToString());
+            SettingsBindings.BindSpinner(
+                TrayMenuDeviceNameMaxLengthBox,
+                () => settings.TrayMenuDeviceNameMaxLength,
+                v => settings.TrayMenuDeviceNameMaxLength = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
             SettingsBindings.SelectComboByTag(TrayDoubleClickActionCombo, settings.TrayDoubleClickAction.ToString());
             SettingsBindings.SelectComboByTag(
                 TrayCtrlLeftClickActionCombo, settings.TrayCtrlLeftClickAction.ToString());

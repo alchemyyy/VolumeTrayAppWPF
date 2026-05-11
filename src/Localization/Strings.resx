@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -222,6 +222,12 @@
   </data>
   <data name="Settings_Flyout_IntermixRecording_Description" xml:space="preserve">
     <value>When on, recording devices interleave with playback devices inside each sort bucket. When off, all playback devices show first and recording devices group together at the top of the list.</value>
+  </data>
+  <data name="Settings_Flyout_ShowListenButton_Title" xml:space="preserve">
+    <value>Show "Listen to this device" button</value>
+  </data>
+  <data name="Settings_Flyout_ShowListenButton_Description" xml:space="preserve">
+    <value>Adds a button to each recording device row that toggles the Windows "Listen to this device" feature. Left-click toggles, Ctrl+left-click enables with Default Playback as the target, right-click picks a specific target.</value>
   </data>
   <data name="Settings_General_Apply_Button" xml:space="preserve">
     <value>Apply</value>
@@ -581,6 +587,21 @@ Target: {1}</value>
   <data name="Settings_TrayIcon_CtrlRightClick_Title" xml:space="preserve">
     <value>Ctrl + right click</value>
   </data>
+  <data name="Settings_TrayIcon_DeviceName_Model" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="Settings_TrayIcon_DeviceName_Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Settings_TrayIcon_DeviceName_NameAndModel" xml:space="preserve">
+    <value>Name+Model</value>
+  </data>
+  <data name="Settings_TrayIcon_DeviceNameMaxLength_Description" xml:space="preserve">
+    <value>Names longer than this character count are truncated with a 2-dot ellipsis suffix.</value>
+  </data>
+  <data name="Settings_TrayIcon_DeviceNameMaxLength_Title" xml:space="preserve">
+    <value>Device name max length</value>
+  </data>
   <data name="Settings_TrayIcon_DoubleLeftClick_Title" xml:space="preserve">
     <value>Double left click</value>
   </data>
@@ -608,11 +629,29 @@ Target: {1}</value>
   <data name="Settings_TrayIcon_MouseWheel_Title" xml:space="preserve">
     <value>Mouse wheel</value>
   </data>
+  <data name="Settings_TrayIcon_PlaybackDeviceName_Description" xml:space="preserve">
+    <value>Which slice of each playback device's name appears in the tray context menu.</value>
+  </data>
+  <data name="Settings_TrayIcon_PlaybackDeviceName_Title" xml:space="preserve">
+    <value>Playback device names</value>
+  </data>
+  <data name="Settings_TrayIcon_RecordingDeviceName_Description" xml:space="preserve">
+    <value>Which slice of each recording device's name appears in the tray context menu.</value>
+  </data>
+  <data name="Settings_TrayIcon_RecordingDeviceName_Title" xml:space="preserve">
+    <value>Recording device names</value>
+  </data>
   <data name="Settings_TrayIcon_SectionHeader" xml:space="preserve">
     <value>Tray Icon</value>
   </data>
   <data name="Flyout_DeviceIcon_Tooltip" xml:space="preserve">
-    <value>Click: enable / disable. Ctrl+click: set as default. Shift+click: set as default communications.</value>
+    <value>Click: set as default. Ctrl+click: enable / disable. Shift+click: set as default communications.</value>
+  </data>
+  <data name="Flyout_ListenButton_Tooltip" xml:space="preserve">
+    <value>Click: toggle Listen to this device. Ctrl+click: enable with Default Playback target. Right-click: pick target device.</value>
+  </data>
+  <data name="Flyout_ListenMenu_DefaultPlaybackDevice" xml:space="preserve">
+    <value>Default Playback Device</value>
   </data>
   <data name="Tray_Bluetooth" xml:space="preserve">
     <value>Bluetooth</value>

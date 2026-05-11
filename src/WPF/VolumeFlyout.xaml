@@ -108,7 +108,14 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid>
-                            <Rectangle Fill="Transparent" Height="24"/>
+                            <!-- Transparent hit-test surface for slider wheel + click. Height +
+                                 symmetric negative margins extend the wheel hit area 5 DIPs above
+                                 and below the slider's visible track so a wheel event landing in
+                                 the 10-DIP gap between two app sliders still adjusts the slider
+                                 instead of bubbling to the cell-list ScrollViewer, and so the slider
+                                 is generally easier to hover-scroll. Net layout contribution
+                                 (34 - 5 - 5 = 24) keeps the slider's allocated height unchanged. -->
+                            <Rectangle Fill="Transparent" Height="34" Margin="0,-5,0,-5"/>
                             <Border Height="4"
                                     Background="{DynamicResource ThemeSliderTrack}"
                                     CornerRadius="{DynamicResource CornerRadiusSmall}"
@@ -215,7 +222,7 @@
              cell. Going up two ContentPresenter levels lands us at the outer ContentPresenter whose
              DataContext is the VolumeFlyoutCell. -->
         <DataTemplate x:Key="SessionRowTemplate" DataType="{x:Type audio:AudioAppGroup}">
-            <Grid Margin="0,0,0,10" PreviewMouseWheel="SessionRow_PreviewMouseWheel" Tag="{Binding}">
+            <Grid Margin="0,0,0,10">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Opacity" Value="1.0"/>
@@ -307,6 +314,7 @@
                                   PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
                                   PreviewMouseMove="Slider_PreviewMouseMove"
                                   PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
+                                  PreviewMouseWheel="SessionSlider_PreviewMouseWheel"
                                   MouseLeave="Slider_MouseLeave"/>
 
                 <TextBlock Grid.Column="2"
@@ -335,14 +343,68 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0"
-                               Text="{Binding FriendlyName, FallbackValue='No audio device'}"
-                               Foreground="{DynamicResource ThemeForeground}"
-                               FontSize="14"
-                               VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"/>
-                    <Button Grid.Column="1"
+                    <!-- Device name. TextBlock for view mode; double-click swaps to the sibling
+                         TextBox for inline rename. Empty / whitespace on commit clears the
+                         PKEY_Device_FriendlyName override and the OS-synthesized name returns. -->
+                    <Grid Grid.Column="0">
+                        <TextBlock x:Name="DeviceNameText"
+                                   Text="{Binding FriendlyName, FallbackValue='No audio device'}"
+                                   Foreground="{DynamicResource ThemeForeground}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   MouseLeftButtonDown="DeviceNameText_MouseLeftButtonDown"/>
+                        <TextBox x:Name="DeviceNameEdit"
+                                 Visibility="Collapsed"
+                                 FontSize="14"
+                                 VerticalAlignment="Center"
+                                 Background="Transparent"
+                                 Foreground="{DynamicResource ThemeForeground}"
+                                 CaretBrush="{DynamicResource ThemeForeground}"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 Margin="0"
+                                 KeyDown="DeviceNameEdit_KeyDown"
+                                 LostKeyboardFocus="DeviceNameEdit_LostKeyboardFocus"/>
+                    </Grid>
+                    <!-- Listen-to-this-device button. Capture endpoints only - collapsed on
+                         playback rows so the slot stays empty and the icon button hugs the right.
+                         Left click toggles the listen-enable bit (pid 1) and leaves the existing
+                         target untouched; ctrl+left toggles on with target reset to "follow default
+                         playback device" (pid 0 deleted). Right click opens a context menu to pick
+                         a specific target. Opacity binds to (listening AND target active) so the
+                         button reads dim whenever no audio is actually flowing. -->
+                    <Button x:Name="ListenButton" Grid.Column="1"
+                            Margin="8,0,0,0"
+                            Click="ListenButton_Click"
+                            PreviewMouseRightButtonUp="ListenButton_PreviewMouseRightButtonUp"
+                            ToolTip="{loc:Loc Flyout_ListenButton_Tooltip}">
+                        <!-- Visibility = capture endpoint AND the global toggle is on. Collapsed
+                             leaves the column zero-width so playback rows look unchanged and the
+                             icon button hugs the right edge as before. -->
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsCaptureDevice}" Value="True"/>
+                                            <Condition Binding="{Binding ShowListenButtonInFlyout, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <TextBlock Text="{x:Static visuals:GlyphCatalog.EAR_LISTEN}"
+                                   Opacity="{Binding IsListenButtonActive, Converter={StaticResource DeviceIconOpacity}}"
+                                   FontFamily="Segoe Fluent Icons"
+                                   FontSize="18"
+                                   Foreground="{DynamicResource ThemeIconForeground}"/>
+                    </Button>
+                    <Button Grid.Column="2"
                             Style="{StaticResource DeviceIconButtonStyle}"
                             Margin="8,0,0,0"
                             Click="DeviceIcon_Click"
@@ -378,7 +440,7 @@
                     </Button>
                 </Grid>
 
-                <Grid Grid.Row="1" PreviewMouseWheel="DeviceRow_PreviewMouseWheel">
+                <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -521,6 +583,7 @@
                                       PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
                                       PreviewMouseMove="Slider_PreviewMouseMove"
                                       PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
+                                      PreviewMouseWheel="DeviceSlider_PreviewMouseWheel"
                                       MouseLeave="Slider_MouseLeave">
                         <wpf:VolumeSlider.Style>
                             <Style TargetType="{x:Type wpf:VolumeSlider}" BasedOn="{StaticResource VolumeSliderStyle}">
@@ -603,6 +666,15 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
+                <!-- Faux rounded-card fill. Drawn first so the cell's content paints on top of
+                     it. Overflows the cell by 1px each side so the wrapper width matches the
+                     flyout's full outer width; ClipToBounds on the parent clips the overflow. -->
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        Background="{DynamicResource ThemeFooterBackground}"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        IsHitTestVisible="False"/>
+
                 <ContentControl Grid.Row="0" Template="{StaticResource AppsRowTemplate}"/>
 
                 <Border Grid.Row="1"
@@ -611,6 +683,17 @@
                         Padding="14,0,12,12">
                     <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
                 </Border>
+
+                <!-- Faux rounded-card outline. Same shape and overflow as the fill above; sits
+                     last so the stroke paints on top of everything. No children, so Opacity
+                     dims the BorderBrush only. -->
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        BorderBrush="{DynamicResource ThemeSliderTrack}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        Opacity="0.4"
+                        IsHitTestVisible="False"/>
             </Grid>
         </DataTemplate>
 
@@ -625,6 +708,15 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
+
+                <!-- Faux rounded-card fill. Drawn first so the cell's content paints on top of
+                     it. Overflows the cell by 1px each side so the wrapper width matches the
+                     flyout's full outer width; ClipToBounds on the parent clips the overflow. -->
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        Background="{DynamicResource ThemeFooterBackground}"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        IsHitTestVisible="False"/>
 
                 <Border Grid.Row="0"
                         Background="{DynamicResource ThemeFooterBackground}"
@@ -650,6 +742,17 @@
                      the flyout's bottom edge in the AppsBelow layout, so it can round its bottom
                      corners when IsLast. -->
                 <ContentControl Grid.Row="1" Tag="True" Template="{StaticResource AppsRowTemplate}"/>
+
+                <!-- Faux rounded-card outline. Same shape and overflow as the fill above; sits
+                     last so the stroke paints on top of everything. No children, so Opacity
+                     dims the BorderBrush only. -->
+                <Border Grid.Row="0" Grid.RowSpan="2"
+                        BorderBrush="{DynamicResource ThemeSliderTrack}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Margin="-1,0,-1,0"
+                        Opacity="0.4"
+                        IsHitTestVisible="False"/>
             </Grid>
         </DataTemplate>
 
@@ -675,7 +778,11 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <!-- Cells row is Star (not Auto) so when the window hits its MaxHeight cap the row
+                     gets clamped to the remaining space and the inner ScrollViewer engages. Auto
+                     would let the row claim its full DesiredHeight regardless of the window cap,
+                     leaving the ScrollViewer over-allocated and the scrollbar dormant. -->
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
             <!-- Title bar. Hosts the left-side Settings button cluster and the right-side undock button. -->
@@ -684,7 +791,8 @@
                             HorizontalAlignment="Left"
                             VerticalAlignment="Top"
                             Margin="3,6,0,0">
-                    <Button Style="{StaticResource HeaderIconButtonStyle}"
+                    <Button x:Name="SettingsButton"
+                            Style="{StaticResource HeaderIconButtonStyle}"
                             Click="SettingsButton_Click"
                             ToolTip="{loc:Loc Flyout_Settings_Tooltip}">
                         <TextBlock Text="{DynamicResource GlyphSettings}"
@@ -745,11 +853,19 @@
 
             <!-- Device cell list. Each cell is one render or capture endpoint, ordered by
                  FlyoutDeviceOrdering. Empty-state overlay sits in the same row so it occupies the
-                 empty space without forcing a height jump on first cell arrival. -->
-            <Grid Grid.Row="1">
-                <ItemsControl x:Name="CellsList"
-                              ItemsSource="{Binding Cells, RelativeSource={RelativeSource AncestorType=Window}}"
-                              ItemTemplateSelector="{StaticResource CellTemplateSelector}"/>
+                 empty space without forcing a height jump on first cell arrival. ClipToBounds
+                 hides the vertical sides of each cell's faux-card outline Border, which overflows
+                 the cell area by 1px each side - only the top / bottom edges with their rounded
+                 corners survive into the visible region. -->
+            <Grid Grid.Row="1" ClipToBounds="True">
+                <ScrollViewer x:Name="CellsScrollViewer"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Focusable="False">
+                    <ItemsControl x:Name="CellsList"
+                                  ItemsSource="{Binding Cells, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  ItemTemplateSelector="{StaticResource CellTemplateSelector}"/>
+                </ScrollViewer>
 
                 <TextBlock Text="No audio devices"
                            Foreground="{DynamicResource ThemeSecondaryForeground}"

@@ -114,13 +114,20 @@ internal static class PropertyKeys
         new Guid(0x1DA5D803, 0xD492, 0x4EDD, 0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E), 4);
 
     // 'Listen to this device' state on capture endpoints, mirroring the checkbox under
-    // Sound > Recording > [Mic Properties] > Listen tab. Stored as VT_UI4 (0 / 1) in
-    // HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture\{guid}\Properties.
-    // VT_EMPTY when never toggled. Not in the public Windows SDK headers - this fmtid is the
-    // MMDevAPI listen-feature family used by mmsys.cpl, verified by GUID lookup in mmsys.cpl
-    // and audiosrv.dll.
+    // Sound > Recording > [Mic Properties] > Listen tab. Stored as VT_BOOL (VARIANT_TRUE / FALSE)
+    // in HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture\{guid}\Properties.
+    // Verified empirically on Windows 11 - the bytes following the 8-byte PROPVARIANT header are
+    // FF FF for TRUE, 00 00 for FALSE. VT_EMPTY when never toggled. Not in the public Windows SDK
+    // headers - this fmtid is the MMDevAPI listen-feature family used by mmsys.cpl.
     public static readonly PROPERTYKEY PKEY_AudioEndpoint_ListenToThisDevice = new(
         new Guid(0x24DBB0FC, 0x9311, 0x4B3D, 0x9C, 0xF0, 0x18, 0xFF, 0x15, 0x56, 0x39, 0xD4), 1);
+
+    // Listen target playback device on a capture endpoint. Stored as VT_LPWSTR holding the target
+    // render endpoint's IMMDevice id (e.g. "{0.0.0.00000000}.{<guid>}"). Absent / VT_EMPTY means
+    // 'Default Playback Device' - mmsys.cpl deletes this pid to encode the follow-default mode.
+    // Verified empirically against the registry; same fmtid as the listen-enable bool.
+    public static readonly PROPERTYKEY PKEY_AudioEndpoint_ListenTargetDeviceId = new(
+        new Guid(0x24DBB0FC, 0x9311, 0x4B3D, 0x9C, 0xF0, 0x18, 0xFF, 0x15, 0x56, 0x39, 0xD4), 0);
 }
 
 // IPropertyStore: read-only side used to pull endpoint properties out of an IMMDevice.

@@ -47,11 +47,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private readonly Dictionary<string, AudioSession> _sessionsByInstanceId = new(StringComparer.Ordinal);
 
     private string _friendlyName;
+    private string _deviceDescription;
+    private string _interfaceFriendlyName;
     private float _volume;
     private bool _isMuted;
     private bool _isDefault;
     private bool _isDefaultCommunications;
     private bool _isListeningToThisDevice;
+    private string? _listenTargetDeviceId;
+    private bool _isListenTargetActive;
     private DeviceState _state;
     private bool _disposed;
 
@@ -89,6 +93,24 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         get => _friendlyName;
         private set { if (_friendlyName != value) { _friendlyName = value; OnPropertyChanged(); } }
+    }
+
+    // Endpoint description from PKEY_Device_DeviceDesc, e.g. "Speakers" or "Headphones".
+    // The "Name" half of the FriendlyName composite "Speakers (Realtek(R) Audio)".
+    // Falls back to FriendlyName when the property store has no DeviceDesc entry.
+    public string DeviceDescription
+    {
+        get => _deviceDescription;
+        private set { if (_deviceDescription != value) { _deviceDescription = value; OnPropertyChanged(); } }
+    }
+
+    // Adapter / interface name from PKEY_DeviceInterface_FriendlyName, e.g. "Realtek(R) Audio".
+    // The "Model" half of the FriendlyName composite. Falls back to FriendlyName when the
+    // property store has no DeviceInterface entry.
+    public string InterfaceFriendlyName
+    {
+        get => _interfaceFriendlyName;
+        private set { if (_interfaceFriendlyName != value) { _interfaceFriendlyName = value; OnPropertyChanged(); } }
     }
 
     public bool IsDefault
@@ -143,8 +165,56 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     public bool IsListeningToThisDevice
     {
         get => _isListeningToThisDevice;
-        private set { if (_isListeningToThisDevice != value) { _isListeningToThisDevice = value; OnPropertyChanged(); } }
+        private set
+        {
+            if (_isListeningToThisDevice == value) return;
+            _isListeningToThisDevice = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsListenButtonActive));
+        }
     }
+
+    /// <summary>
+    /// IMMDevice id of the render endpoint that the Listen feature feeds audio to on this capture
+    /// endpoint. Null means follow the system default playback device - mmsys.cpl encodes this by
+    /// deleting the pid (PROPVARIANT VT_EMPTY) and we mirror that on writes.
+    /// </summary>
+    public string? ListenTargetDeviceId
+    {
+        get => _listenTargetDeviceId;
+        private set
+        {
+            if (string.Equals(_listenTargetDeviceId, value, StringComparison.Ordinal)) return;
+            _listenTargetDeviceId = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Cached "the device we listen through right now is up" flag. Pushed in by
+    /// <see cref="AudioDeviceManager"/> whenever the target endpoint's State, the system default
+    /// playback device, or this capture device's <see cref="ListenTargetDeviceId"/> changes, so
+    /// the flyout's button-dim binding can react without doing cross-device lookup itself.
+    /// Always false on render endpoints.
+    /// </summary>
+    public bool IsListenTargetActive
+    {
+        get => _isListenTargetActive;
+        internal set
+        {
+            if (_isListenTargetActive == value) return;
+            _isListenTargetActive = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsListenButtonActive));
+        }
+    }
+
+    /// <summary>
+    /// True iff Listen is enabled AND the routed playback target is currently active. The flyout's
+    /// listen-button opacity binds here so the button reads dim whenever there's nothing audible
+    /// happening - either Listen is off, or it's on but pointing at a disabled / disconnected target.
+    /// </summary>
+    public bool IsListenButtonActive => _isListeningToThisDevice && _isListenTargetActive;
 
     // Registry-only ghost: the endpoint exists in the user's audio device registry but no driver
     // is currently loaded for it. NotPresent endpoints accumulate across years of plugged USB DACs,
@@ -341,15 +411,18 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         Id = id ?? string.Empty;
         _volumeThrottlerKey = "endpoint:" + Id;
 
-        _friendlyName = ResolveFriendlyName(device);
+        (_friendlyName, _deviceDescription, _interfaceFriendlyName) = ResolveDeviceNames(device);
 
         device.GetState(out uint stateRaw);
         _state = (DeviceState)stateRaw;
 
-        // Listen-to-this-device is a capture-only feature. Seed the field directly so the bound
+        // Listen-to-this-device is a capture-only feature. Seed the fields directly so the bound
         // UI doesn't need a PropertyChanged round-trip on first paint; runtime changes flow
-        // through RefreshListenToThisDeviceFromStore via the manager's property-change callback.
-        if (DataFlow == EDataFlow.eCapture) _isListeningToThisDevice = ReadListenToThisDeviceFromStore(_device);
+        // through RefreshListenStateFromStore via the manager's property-change callback.
+        if (DataFlow == EDataFlow.eCapture)
+        {
+            (_isListeningToThisDevice, _listenTargetDeviceId) = ReadListenStateFromStore(_device);
+        }
 
         // Endpoint volume / meter / session manager are only addressable on Active devices.
         // For Disabled / NotPresent / Unplugged endpoints we keep a thin wrapper alive so the
@@ -359,40 +432,140 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Re-read PKEY_AudioEndpoint_ListenToThisDevice from the property store and update
-    /// <see cref="IsListeningToThisDevice"/>. No-op on render endpoints. Invoked by the manager
-    /// when OnPropertyValueChanged fires for the listen key on this device id.
+    /// Re-read the listen-feature property pair (pid 1 = enable bool, pid 0 = target endpoint id)
+    /// from the property store and update <see cref="IsListeningToThisDevice"/> +
+    /// <see cref="ListenTargetDeviceId"/>. No-op on render endpoints. Invoked by the manager when
+    /// OnPropertyValueChanged fires for either listen-fmtid pid on this device id.
     /// </summary>
-    internal void RefreshListenToThisDeviceFromStore()
+    internal void RefreshListenStateFromStore()
     {
         if (_disposed || DataFlow != EDataFlow.eCapture) return;
-        IsListeningToThisDevice = ReadListenToThisDeviceFromStore(_device);
+        (bool enabled, string? target) = ReadListenStateFromStore(_device);
+        IsListeningToThisDevice = enabled;
+        ListenTargetDeviceId = target;
     }
 
-    private static bool ReadListenToThisDeviceFromStore(IMMDevice device)
+    /// <summary>
+    /// Writes the listen-enable bit (pid 1) to the endpoint property store. Leaves the target
+    /// (pid 0) untouched - the audio service falls back to whatever target was previously chosen,
+    /// matching the user's expectation that toggling on doesn't replace their target selection.
+    /// No-op on render endpoints.
+    /// </summary>
+    internal void SetListenEnabled(bool enabled)
+    {
+        if (_disposed || DataFlow != EDataFlow.eCapture) return;
+        WriteListenBool(PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice, enabled);
+        RefreshListenStateFromStore();
+    }
+
+    /// <summary>
+    /// Writes both the listen-target id (pid 0) and the listen-enable bit (pid 1) in one commit.
+    /// Passing null for <paramref name="targetDeviceId"/> deletes pid 0 (VT_EMPTY) which mmsys.cpl
+    /// reads back as 'Default Playback Device' - the audio service will follow whichever render
+    /// endpoint is currently default. No-op on render endpoints.
+    /// </summary>
+    internal void SetListenTarget(string? targetDeviceId, bool enable)
+    {
+        if (_disposed || DataFlow != EDataFlow.eCapture) return;
+
+        IPropertyStore? store = null;
+        IntPtr targetPtr = IntPtr.Zero;
+        try
+        {
+            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+
+            PROPERTYKEY targetKey = PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceId;
+            PROPVARIANT targetPv = default;
+            if (string.IsNullOrEmpty(targetDeviceId))
+            {
+                targetPv.vt = PROPVARIANT.VT_EMPTY;
+            }
+            else
+            {
+                targetPtr = Marshal.StringToCoTaskMemUni(targetDeviceId);
+                targetPv.vt = PROPVARIANT.VT_LPWSTR;
+                targetPv.p1 = targetPtr;
+            }
+            store.SetValue(ref targetKey, ref targetPv);
+
+            PROPERTYKEY enableKey = PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice;
+            PROPVARIANT enablePv = default;
+            enablePv.vt = PROPVARIANT.VT_BOOL;
+            // VT_BOOL is VARIANT_BOOL: -1 (0xFFFF) for TRUE, 0 for FALSE. Stored in p1's low word.
+            enablePv.p1 = enable ? new IntPtr(unchecked((int)0xFFFF)) : IntPtr.Zero;
+            store.SetValue(ref enableKey, ref enablePv);
+
+            store.Commit();
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.SetListenTarget({FriendlyName}): {ex.Message}");
+            return;
+        }
+        finally
+        {
+            if (targetPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(targetPtr);
+            if (store != null) Marshal.FinalReleaseComObject(store);
+        }
+
+        RefreshListenStateFromStore();
+    }
+
+    private void WriteListenBool(PROPERTYKEY key, bool value)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+            PROPVARIANT pv = default;
+            pv.vt = PROPVARIANT.VT_BOOL;
+            pv.p1 = value ? new IntPtr(unchecked((int)0xFFFF)) : IntPtr.Zero;
+            store.SetValue(ref key, ref pv);
+            store.Commit();
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.WriteListenBool({FriendlyName}, pid={key.pid}): {ex.Message}");
+        }
+        finally
+        {
+            if (store != null) Marshal.FinalReleaseComObject(store);
+        }
+    }
+
+    private static (bool Enabled, string? TargetDeviceId) ReadListenStateFromStore(IMMDevice device)
     {
         IPropertyStore? store = null;
         try
         {
             device.OpenPropertyStore(0 /* STGM_READ */, out store);
-            PROPERTYKEY key = PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice;
-            store.GetValue(ref key, out PROPVARIANT pv);
+
+            PROPERTYKEY enableKey = PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice;
+            store.GetValue(ref enableKey, out PROPVARIANT enablePv);
+            bool enabled;
             try
             {
-                // Canonical storage is VT_UI4 (registry DWORD). Be permissive on VT_I4 / VT_BOOL
-                // since we can't formally type-check an undocumented property; VT_EMPTY = absent
-                // = listen has never been toggled = off.
-                return pv.vt switch
+                // Be permissive on the int-ish variants - VT_BOOL is the observed canonical form
+                // but older builds and odd drivers have been seen using VT_UI4 / VT_I4 here.
+                enabled = enablePv.vt switch
                 {
-                    PROPVARIANT.VT_UI4 => pv.GetUInt32() != 0,
-                    PROPVARIANT.VT_I4 => pv.p1.ToInt64() != 0,
-                    PROPVARIANT.VT_BOOL => ((short)(pv.p1.ToInt64() & 0xFFFF)) != 0,
+                    PROPVARIANT.VT_BOOL => ((short)(enablePv.p1.ToInt64() & 0xFFFF)) != 0,
+                    PROPVARIANT.VT_UI4 => enablePv.GetUInt32() != 0,
+                    PROPVARIANT.VT_I4 => enablePv.p1.ToInt64() != 0,
                     _ => false,
                 };
             }
-            finally { Ole32.PropVariantClear(ref pv); }
+            finally { Ole32.PropVariantClear(ref enablePv); }
+
+            PROPERTYKEY targetKey = PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceId;
+            store.GetValue(ref targetKey, out PROPVARIANT targetPv);
+            string? target;
+            try { target = targetPv.GetString(); }
+            finally { Ole32.PropVariantClear(ref targetPv); }
+
+            return (enabled, target);
         }
-        catch { return false; }
+        catch { return (false, null); }
         finally { if (store != null) Marshal.FinalReleaseComObject(store); }
     }
 
@@ -658,6 +831,61 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Writes a user-chosen override to PKEY_Device_FriendlyName on the endpoint property store,
+    /// mirroring the Sound Control Panel rename gesture. Null / empty / whitespace stores a
+    /// VT_EMPTY which removes the override - the audio service restores the OS-synthesized name.
+    /// IMMNotificationClient.OnPropertyValueChanged from the audio service arrives async and is
+    /// sometimes dropped for self-initiated writes, so we reconcile the bindable name here in
+    /// place once Commit returns - the eventual notification round-trip is idempotent.
+    /// </summary>
+    internal void SetCustomFriendlyName(string? name)
+    {
+        if (_disposed) return;
+
+        string? trimmed = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+
+        // No-op when the requested name already matches the rendered name - avoids the COM write,
+        // the Commit, and the notification fanout for an edit that wouldn't change anything.
+        if (trimmed != null && trimmed == FriendlyName) return;
+
+        IPropertyStore? store = null;
+        IntPtr stringPtr = IntPtr.Zero;
+        try
+        {
+            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+            PROPERTYKEY key = PropertyKeys.PKEY_Device_FriendlyName;
+
+            PROPVARIANT pv = default;
+            if (trimmed == null)
+            {
+                pv.vt = PROPVARIANT.VT_EMPTY;
+            }
+            else
+            {
+                stringPtr = Marshal.StringToCoTaskMemUni(trimmed);
+                pv.vt = PROPVARIANT.VT_LPWSTR;
+                pv.p1 = stringPtr;
+            }
+
+            store.SetValue(ref key, ref pv);
+            store.Commit();
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.SetCustomFriendlyName({FriendlyName}): {ex.Message}");
+            return;
+        }
+        finally
+        {
+            // SetValue copies the buffer; safe to free our allocation either way.
+            if (stringPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(stringPtr);
+            if (store != null) Marshal.FinalReleaseComObject(store);
+        }
+
+        RefreshFriendlyNameFromStore();
+    }
+
+    /// <summary>
     /// Re-read PKEY_Device_FriendlyName from the property store and update the bindable
     /// <see cref="FriendlyName"/>. Invoked by the manager when the OS reports a friendly-name
     /// change for this endpoint - in-place update keeps the device wrapper alive instead of
@@ -666,27 +894,52 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     internal void RefreshFriendlyNameFromStore()
     {
         if (_disposed) return;
-        FriendlyName = ResolveFriendlyName(_device);
+        (string composite, string desc, string iface) = ResolveDeviceNames(_device);
+        FriendlyName = composite;
+        DeviceDescription = desc;
+        InterfaceFriendlyName = iface;
     }
 
-    private static string ResolveFriendlyName(IMMDevice device)
+    // Reads the trio of name properties off the endpoint property store in one pass:
+    // composite FriendlyName, endpoint DeviceDesc ("Speakers"), and DeviceInterface FriendlyName
+    // ("Realtek(R) Audio"). Each component falls back to the composite name when its specific
+    // property is missing, so the tray menu's Name / Controller views always have something to show.
+    private static (string FriendlyName, string DeviceDescription, string InterfaceFriendlyName)
+        ResolveDeviceNames(IMMDevice device)
     {
+        const string Unknown = "Unknown Device";
         IPropertyStore? store = null;
         try
         {
             device.OpenPropertyStore(0 /* STGM_READ */, out store);
-            PROPERTYKEY key = PropertyKeys.PKEY_Device_FriendlyName;
-            store.GetValue(ref key, out PROPVARIANT pv);
-            try { return pv.GetString() ?? "Unknown Device"; }
-            finally { Ole32.PropVariantClear(ref pv); }
+
+            string friendly = ReadStringProperty(store, PropertyKeys.PKEY_Device_FriendlyName) ?? Unknown;
+            string deviceDesc = ReadStringProperty(store, PropertyKeys.PKEY_Device_DeviceDesc) ?? friendly;
+            string iface = ReadStringProperty(store, PropertyKeys.PKEY_DeviceInterface_FriendlyName) ?? friendly;
+            return (friendly, deviceDesc, iface);
         }
         catch
         {
-            return "Unknown Device";
+            return (Unknown, Unknown, Unknown);
         }
         finally
         {
             if (store != null) Marshal.FinalReleaseComObject(store);
+        }
+    }
+
+    private static string? ReadStringProperty(IPropertyStore store, PROPERTYKEY key)
+    {
+        try
+        {
+            PROPERTYKEY local = key;
+            store.GetValue(ref local, out PROPVARIANT pv);
+            try { return pv.GetString(); }
+            finally { Ole32.PropVariantClear(ref pv); }
+        }
+        catch
+        {
+            return null;
         }
     }
 

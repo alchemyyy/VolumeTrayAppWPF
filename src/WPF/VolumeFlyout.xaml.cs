@@ -1,3 +1,8 @@
+// Uncomment to pad the flyout cell list with 40 dummy cells cloned from the first real device.
+// Verifies PositionNearTray / ClampTopForCriticalElement when the flyout overflows the work area.
+// Flip the sibling toggle at the top of App.xaml.cs to test the tray context menu too.
+#define DEBUG_OVERFLOW_DUMMIES
+
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -74,6 +79,14 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // Cell wrappers indexed by device for incremental rebuild without disposing the wrapper on every
     // ordering change. Pruning happens when the device drops out of the visible list.
     private readonly Dictionary<AudioDevice, VolumeFlyoutCell> _cellsByDevice = new();
+
+    // Shared CollectionChanged delegate hooked onto _cells and each cell's VisibleGroups so that
+    // slider add / remove mutations while the flyout is hidden trigger a deferred UpdateLayout.
+    // Caching the delegate lets us add / remove with the same reference per cell.
+    private readonly NotifyCollectionChangedEventHandler _onSliderListChanged;
+
+    // Coalesces a burst of slider list mutations into a single UpdateLayout post when hidden.
+    private bool _hiddenLayoutQueued;
 
     private HwndSource? _hwndSource;
     private readonly AppSettings? _appSettings;
@@ -152,6 +165,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     public bool AllowFlyoutUndock => _appSettings?.AllowFlyoutUndock ?? true;
 
+    // Bound by the listen button's visibility trigger in DeviceRowTemplate. Defaults true so the
+    // button stays visible when the settings instance hasn't been wired (test harness / early init).
+    public bool ShowListenButtonInFlyout => _appSettings?.ShowListenButtonInFlyout ?? true;
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>Raised after the flyout finishes its hide cycle so the host can toggle scroll bindings, etc.</summary>
@@ -170,6 +187,9 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         // so an exact string compare in the cell filter suffices.
         string? ownPath = ProcessHelper.GetProcessImagePath((uint)Environment.ProcessId);
         _ownAppId = string.IsNullOrEmpty(ownPath) ? null : ownPath.ToLowerInvariant();
+
+        _onSliderListChanged = (_, _) => QueueLayoutWhileHidden();
+        ((INotifyCollectionChanged)_cells).CollectionChanged += _onSliderListChanged;
 
         InitializeComponent();
         DataContext = this;
@@ -211,6 +231,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         {
             if (_isUndocked && _appSettings?.AllowFlyoutUndock == false) Redock();
             OnPropertyChanged(nameof(AllowFlyoutUndock));
+            OnPropertyChanged(nameof(ShowListenButtonInFlyout));
 
             FlyoutDeviceLayoutStyle currentLayout = _appSettings?.FlyoutDeviceLayout
                 ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
@@ -252,7 +273,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _subscribedDevices.Clear();
         if (_appSettings != null) _appSettings.Changed -= OnAppSettingsChanged;
 
-        foreach (VolumeFlyoutCell cell in _cellsByDevice.Values) cell.Dispose();
+        ((INotifyCollectionChanged)_cells).CollectionChanged -= _onSliderListChanged;
+        foreach (VolumeFlyoutCell cell in _cellsByDevice.Values)
+        {
+            ((INotifyCollectionChanged)cell.VisibleGroups).CollectionChanged -= _onSliderListChanged;
+            cell.Dispose();
+        }
         _cellsByDevice.Clear();
         _cells.Clear();
 
@@ -345,12 +371,21 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             _cells.Clear();
         }
 
+#if DEBUG_OVERFLOW_DUMMIES
+        // Drop the previous rebuild's dummy cells (anything not tracked by _cellsByDevice) so
+        // re-rebuilds don't accumulate dummies on top of dummies.
+        HashSet<VolumeFlyoutCell> realCells = new(_cellsByDevice.Values);
+        for (int dummyIndex = _cells.Count - 1; dummyIndex >= 0; dummyIndex--)
+            if (!realCells.Contains(_cells[dummyIndex])) _cells.RemoveAt(dummyIndex);
+#endif
+
         // Step 1: prune cells whose device left the visible list.
         HashSet<AudioDevice> orderedSet = new(ordered);
         foreach (KeyValuePair<AudioDevice, VolumeFlyoutCell> kv in _cellsByDevice.ToArray())
         {
             if (!orderedSet.Contains(kv.Key))
             {
+                ((INotifyCollectionChanged)kv.Value.VisibleGroups).CollectionChanged -= _onSliderListChanged;
                 _cells.Remove(kv.Value);
                 kv.Value.Dispose();
                 _cellsByDevice.Remove(kv.Key);
@@ -364,6 +399,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             if (!_cellsByDevice.TryGetValue(device, out VolumeFlyoutCell? cell))
             {
                 cell = new VolumeFlyoutCell(device, _ownAppId);
+                ((INotifyCollectionChanged)cell.VisibleGroups).CollectionChanged += _onSliderListChanged;
                 _cellsByDevice[device] = cell;
             }
 
@@ -381,12 +417,33 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             _cells[i].IsLast = i == _cells.Count - 1;
         }
 
+#if DEBUG_OVERFLOW_DUMMIES
+        // Append 40 dummy cells reusing the first real device so the flyout grows past the screen.
+        // The duplicates piggy-back the device's CollectionChanged subscription - cheap, leaks one
+        // handler ref per dummy if the flag is toggled at runtime, fine for a debug test.
+        if (_cells.Count > 0)
+        {
+            AudioDevice template = _cells[0].Device;
+            for (int dummyIndex = 0; dummyIndex < 40; dummyIndex++)
+                _cells.Add(new VolumeFlyoutCell(template, _ownAppId));
+            for (int i = 0; i < _cells.Count; i++)
+            {
+                _cells[i].IsFirst = i == 0;
+                _cells[i].IsLast = i == _cells.Count - 1;
+            }
+        }
+#endif
+
         OnPropertyChanged(nameof(HasCells));
     }
 
     /// <summary>
     /// Positions the flyout. Anchors to the bottom-right of the working area when docked, or
-    /// restores the user's saved undocked coordinates when undocked.
+    /// restores the user's saved undocked coordinates when undocked. The final Top is clamped
+    /// through <see cref="ClampTopForCriticalElement"/> so the Settings button stays inside the
+    /// work area even when the cell list grows taller than the screen. The clamp is applied at
+    /// each call - the saved undocked Top is not mutated, so the user's chosen position is
+    /// restored verbatim once the content shrinks back to fit.
     /// </summary>
     public void PositionNearTray()
     {
@@ -395,16 +452,47 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _dockedLeft = workArea.Right - Width - padding;
         _dockedTop = workArea.Bottom - ActualHeight - padding;
 
+        double targetLeft;
+        double targetTop;
         if (_isUndocked && _appSettings?.FlyoutHasSavedPosition == true)
         {
-            Left = _appSettings.FlyoutLeft;
-            Top = _appSettings.FlyoutTop;
+            targetLeft = _appSettings.FlyoutLeft;
+            targetTop = _appSettings.FlyoutTop;
         }
         else
         {
-            Left = _dockedLeft;
-            Top = _dockedTop;
+            targetLeft = _dockedLeft;
+            targetTop = _dockedTop;
         }
+
+        Left = targetLeft;
+        Top = ClampTopForCriticalElement(targetTop, SettingsButton, workArea, padding);
+    }
+
+    /// <summary>
+    /// Clamps a proposed window Top so the named critical child element stays inside the work area.
+    /// Layout-agnostic in both directions - works whether the element sits near the top of the
+    /// window (current header) or near the bottom (future layouts). When the constraints conflict
+    /// (window taller than the work area), the upper bound wins so the critical element is kept
+    /// visible at the top edge while the opposite side of the window spills off-screen.
+    /// No-op until the element has been laid out at least once - the next render pass re-fires
+    /// <see cref="OnRenderSizeChanged"/>, which re-anchors with a valid offset.
+    /// </summary>
+    private double ClampTopForCriticalElement(double proposedTop, FrameworkElement critical, Rect workArea, double padding)
+    {
+        if (critical == null || !critical.IsLoaded || critical.ActualHeight <= 0) return proposedTop;
+
+        System.Windows.Point offset = critical.TransformToAncestor(this).Transform(new System.Windows.Point(0, 0));
+        double criticalHeight = critical.ActualHeight;
+
+        // The element's screen-space top under the proposed window top is proposedTop + offset.Y.
+        // Constraint: that top must sit inside [workArea.Top + padding, workArea.Bottom - height - padding].
+        // Solved for proposedTop, the allowed band is:
+        double minTopAllowed = workArea.Top + padding - offset.Y;
+        double maxTopAllowed = workArea.Bottom - criticalHeight - padding - offset.Y;
+        if (maxTopAllowed < minTopAllowed) maxTopAllowed = minTopAllowed;
+
+        return Math.Clamp(proposedTop, minTopAllowed, maxTopAllowed);
     }
 
     private double CaptureDockedPosition()
@@ -458,12 +546,14 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// <summary>Shows the flyout near the tray and starts peak metering.</summary>
     public new void Show()
     {
+        ApplyWorkAreaMaxHeight();
         base.Show();
         UpdateLayout();
         PositionNearTray();
         Activate();
         Focus();
         _deviceManager.StartMetering();
+        ScrollCellsToBottom();
     }
 
     /// <summary>
@@ -472,6 +562,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     public void ShowWithoutActivating()
     {
+        ApplyWorkAreaMaxHeight();
+
         bool previousShowActivated = ShowActivated;
         ShowActivated = false;
         try { base.Show(); }
@@ -480,6 +572,30 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         UpdateLayout();
         PositionNearTray();
         _deviceManager.StartMetering();
+        ScrollCellsToBottom();
+    }
+
+    /// <summary>
+    /// Caps the flyout's height to the work area so an overflowing cell list scrolls inside the
+    /// flyout rather than the window growing past the screen and pushing the header (Settings
+    /// button) off the top edge. SizeToContent="Height" still auto-sizes when the cells fit;
+    /// MaxHeight only takes effect when they don't.
+    /// </summary>
+    private void ApplyWorkAreaMaxHeight()
+    {
+        const double Padding = 8;
+        MaxHeight = SystemParameters.WorkArea.Height - 2 * Padding;
+    }
+
+    /// <summary>
+    /// Scrolls <see cref="CellsScrollViewer"/> to the bottom so the default device (which sits
+    /// at the bottom of the cell list per FlyoutDeviceOrdering) is visible by default when the
+    /// list overflows. Deferred to Loaded priority because ScrollableHeight is 0 until layout
+    /// completes - an immediate call against an unmeasured ScrollViewer is a no-op.
+    /// </summary>
+    private void ScrollCellsToBottom()
+    {
+        Dispatcher.BeginInvoke(new Action(() => CellsScrollViewer.ScrollToBottom()), DispatcherPriority.Loaded);
     }
 
     /// <summary>Hides the flyout and stops peak metering.</summary>
@@ -487,6 +603,27 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         _deviceManager.StopMetering();
         base.Hide();
+    }
+
+    /// <summary>
+    /// Forces a deferred layout pass while the flyout is hidden. Hooked from collection-change
+    /// events on the cell list and each cell's visible-groups list, so a session arriving or
+    /// leaving while closed walks Measure / Arrange immediately instead of piling up on the first
+    /// frame of <see cref="Show"/>. Coalesced through one Background dispatcher post per burst so
+    /// rapid-fire mutations only trigger a single UpdateLayout. Background priority lets binding
+    /// and container generation flush before we measure. No-op while visible - WPF runs layout
+    /// naturally then.
+    /// </summary>
+    private void QueueLayoutWhileHidden()
+    {
+        if (_hiddenLayoutQueued || IsVisible) return;
+        _hiddenLayoutQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _hiddenLayoutQueued = false;
+            if (IsVisible) return;
+            UpdateLayout();
+        }, DispatcherPriority.Background);
     }
 
     /// <summary>True when the OS-level foreground window is this flyout's HWND.</summary>
@@ -637,9 +774,15 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         return null;
     }
 
-    private void SessionRow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    /// <summary>
+    /// Mouse wheel over a session slider scrolls that app's volume. Wired on the slider (not the
+    /// whole row) so wheel over the row's icon / name / percent text bubbles up to the flyout's
+    /// outer ScrollViewer instead of being absorbed for volume control. The slider inherits the
+    /// AudioAppGroup as its DataContext from the SessionRowTemplate.
+    /// </summary>
+    private void SessionSlider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (sender is not FrameworkElement fe || fe.Tag is not AudioAppGroup group) return;
+        if (sender is not FrameworkElement fe || fe.DataContext is not AudioAppGroup group) return;
 
         double currentPercent = group.Volume * 100.0;
         double next = currentPercent + (e.Delta > 0 ? WheelVolumeStepPercent : -WheelVolumeStepPercent);
@@ -653,11 +796,13 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Mouse wheel over a device row scrolls that device's volume. The owning device is resolved
-    /// via the row's DataContext (the device-row content control sets DataContext to the cell's
-    /// Device, so scroll events bubble back here with that context).
+    /// Mouse wheel over a device slider scrolls that device's volume. Wired on the slider (not the
+    /// whole row) so wheel over the row's mute button / device-icon button / percent text bubbles
+    /// up to the flyout's outer ScrollViewer instead of being absorbed for volume control. The
+    /// owning device is resolved via the slider's DataContext chain (the device-row content
+    /// control sets DataContext to the cell's Device).
     /// </summary>
-    private void DeviceRow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    private void DeviceSlider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not FrameworkElement fe) return;
         AudioDevice? device = ResolveDeviceFromContext(fe);
@@ -894,10 +1039,9 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         if (shift) device.SetAsDefaultCommunications();
         else if (ctrl)
         {
-            device.SetAsDefault();
-            DeviceShellLinks.OpenDeviceProperties(device);
+            device.SetEnabled(!device.IsActive);
         }
-        else device.SetEnabled(!device.IsActive);
+        else device.SetAsDefault();
     }
 
     /// <summary>Footer Settings button. Hands off to the host; App.xaml.cs opens SettingsWindow.</summary>
@@ -910,6 +1054,169 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         if (device == null) return;
         DeviceShellLinks.OpenDeviceProperties(device);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Listen-to-this-device button click. Plain click toggles the enable bit and leaves the
+    /// previously-configured target alone; ctrl-click forces enable AND resets the target to
+    /// "Default Playback Device" (pid 0 deleted). Right-click is handled separately and opens
+    /// the target-picker context menu.
+    /// </summary>
+    private void ListenButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null || !device.IsCaptureDevice) return;
+
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        if (ctrl)
+        {
+            // Force-on with follow-default target. Matches the user's "literal default device"
+            // expectation: the target follows whatever IS the default render endpoint at any
+            // moment, rather than being pinned to today's choice.
+            device.SetListenTarget(null, enable: true);
+        }
+        else
+        {
+            device.SetListenEnabled(!device.IsListeningToThisDevice);
+        }
+    }
+
+    private void ListenButton_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null || !device.IsCaptureDevice) return;
+
+        ShowListenTargetMenu(fe, device);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Builds and opens the listen-target picker. First entry is "Default Playback Device" (null
+    /// target id = follow whichever endpoint is default). Subsequent entries are the active render
+    /// endpoints, sorted alphabetically. The current selection is checkmarked. Picking any entry
+    /// writes both pid 0 (target id) and pid 1 (enable=true) in a single property-store commit -
+    /// choosing a target is an implicit "turn on" gesture.
+    /// </summary>
+    private void ShowListenTargetMenu(FrameworkElement anchor, AudioDevice captureDevice)
+    {
+        System.Windows.Controls.ContextMenu menu = new()
+        {
+            PlacementTarget = anchor,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
+
+        string? currentTarget = captureDevice.ListenTargetDeviceId;
+
+        System.Windows.Controls.MenuItem followDefault = new()
+        {
+            Header = Localization.Strings.Flyout_ListenMenu_DefaultPlaybackDevice,
+            IsCheckable = true,
+            IsChecked = currentTarget == null,
+        };
+        followDefault.Click += (_, _) => captureDevice.SetListenTarget(null, enable: true);
+        menu.Items.Add(followDefault);
+        menu.Items.Add(new System.Windows.Controls.Separator());
+
+        List<AudioDevice> renderTargets = new();
+        foreach (AudioDevice d in _deviceManager.Devices)
+        {
+            if (d.DataFlow == Audio.Interop.EDataFlow.eRender && d.IsActive) renderTargets.Add(d);
+        }
+        renderTargets.Sort((a, b) => string.Compare(a.FriendlyName, b.FriendlyName, StringComparison.CurrentCultureIgnoreCase));
+
+        foreach (AudioDevice target in renderTargets)
+        {
+            string targetId = target.Id;
+            System.Windows.Controls.MenuItem item = new()
+            {
+                Header = target.FriendlyName,
+                IsCheckable = true,
+                IsChecked = string.Equals(currentTarget, targetId, StringComparison.Ordinal),
+            };
+            item.Click += (_, _) => captureDevice.SetListenTarget(targetId, enable: true);
+            menu.Items.Add(item);
+        }
+
+        menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Double-click on the device-name TextBlock enters inline rename mode. The sibling TextBox
+    /// (same Grid cell) is seeded with the current FriendlyName, made visible, focused, and its
+    /// text selected. Single clicks bubble through untouched so they don't disturb the row's
+    /// existing hit testing on the icon button or the slider below.
+    /// </summary>
+    private void DeviceNameText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        if (sender is not TextBlock tb) return;
+
+        System.Windows.Controls.TextBox? edit = FindSiblingNameEditor(tb);
+        if (edit == null) return;
+
+        AudioDevice? device = ResolveDeviceFromContext(tb);
+        if (device == null) return;
+
+        edit.Text = device.FriendlyName;
+        edit.Tag = device;
+        tb.Visibility = Visibility.Collapsed;
+        edit.Visibility = Visibility.Visible;
+        edit.Focus();
+        edit.SelectAll();
+        e.Handled = true;
+    }
+
+    private void DeviceNameEdit_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        if (sender is not System.Windows.Controls.TextBox box) return;
+        CommitDeviceNameEdit(box);
+        e.Handled = true;
+    }
+
+    private void DeviceNameEdit_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.TextBox box) return;
+        // Enter commits by collapsing the box first, which fires LostKeyboardFocus a second time
+        // as focus leaves; the visibility check is the guard against a duplicate commit.
+        if (box.Visibility != Visibility.Visible) return;
+        CommitDeviceNameEdit(box);
+    }
+
+    private static void CommitDeviceNameEdit(System.Windows.Controls.TextBox box)
+    {
+        AudioDevice? device = box.Tag as AudioDevice;
+        box.Tag = null;
+        box.Visibility = Visibility.Collapsed;
+
+        TextBlock? label = FindSiblingNameLabel(box);
+        if (label != null) label.Visibility = Visibility.Visible;
+
+        // Empty / whitespace clears the property store override and the OS-synthesized name
+        // returns - matches the Sound Control Panel rename gesture.
+        device?.SetCustomFriendlyName(box.Text);
+    }
+
+    private static System.Windows.Controls.TextBox? FindSiblingNameEditor(FrameworkElement element)
+    {
+        if (element.Parent is not Grid parent) return null;
+        foreach (object child in parent.Children)
+        {
+            if (child is System.Windows.Controls.TextBox box) return box;
+        }
+        return null;
+    }
+
+    private static TextBlock? FindSiblingNameLabel(FrameworkElement element)
+    {
+        if (element.Parent is not Grid parent) return null;
+        foreach (object child in parent.Children)
+        {
+            if (child is TextBlock tb) return tb;
+        }
+        return null;
     }
 
     private void AppIcon_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

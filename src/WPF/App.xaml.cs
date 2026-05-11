@@ -1,3 +1,8 @@
+// Uncomment to pad the tray context menu with 40 dummy device entries.
+// Verifies ShowContextMenu positioning when the menu overflows the work area.
+// Flip the sibling toggle at the top of VolumeFlyout.xaml.cs to test the flyout too.
+#define DEBUG_OVERFLOW_DUMMIES
+
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -276,6 +281,9 @@ public partial class App
 
     private ContextMenu CreateContextMenu()
     {
+        // Items-host (BottomAnchoredItemsPanel) is wired into the ContextMenu Template in App.xaml,
+        // not here - the template hard-codes the items host directly (no ItemsPresenter), so a
+        // programmatic ContextMenu.ItemsPanel setter has no effect.
         ContextMenu contextMenu = new();
 
         // Section 1: visible devices, sourced from FlyoutDeviceOrdering so the tray menu and the
@@ -286,9 +294,16 @@ public partial class App
         {
             List<AudioDevice> orderedForFlyout = FlyoutDeviceOrdering.Build(_audioManager.Devices, _appSettings);
             for (int i = orderedForFlyout.Count - 1; i >= 0; i--)
-                contextMenu.Items.Add(BuildDeviceMenuItem(orderedForFlyout[i]));
+                contextMenu.Items.Add(BuildDeviceMenuItem(orderedForFlyout[i], _appSettings));
             if (orderedForFlyout.Count > 0) contextMenu.Items.Add(new Separator());
         }
+
+#if DEBUG_OVERFLOW_DUMMIES
+        // Pad with 40 dummy entries so the menu overflows the work area.
+        for (int debugIndex = 0; debugIndex < 40; debugIndex++)
+            contextMenu.Items.Add(new MenuItem { Header = $"Dummy Playback Device {debugIndex + 1:00}" });
+        contextMenu.Items.Add(new Separator());
+#endif
 
         MenuItem soundDevicesItem = new() { Header = LocalizationManager.Instance["Tray_SoundDevices"] };
         soundDevicesItem.Click += (_, _) => OpenSoundDevicesPanel();
@@ -342,11 +357,45 @@ public partial class App
         }
     }
 
-    private static MenuItem BuildDeviceMenuItem(AudioDevice device)
+    private static MenuItem BuildDeviceMenuItem(AudioDevice device, AppSettings settings)
     {
-        MenuItem item = new() { Header = device.FriendlyName };
+        MenuItem item = new() { Header = FormatTrayMenuDeviceName(device, settings) };
         item.Click += (_, _) => device.SetAsDefault();
         return item;
+    }
+
+    // 2-dot ellipsis (".."), per the per-flow tray-menu name spec.
+    // Distinct from the Unicode horizontal ellipsis the OS uses elsewhere so the truncation reads
+    // as deliberate to anyone who has tuned the max length.
+    private const string TrayMenuTruncationSuffix = "..";
+
+    /// <summary>
+    /// Picks the slice of <paramref name="device"/>'s name to render in the tray context menu
+    /// based on the per-flow style setting, then truncates with a 2-dot ellipsis when the slice
+    /// exceeds <see cref="AppSettings.TrayMenuDeviceNameMaxLength"/>.
+    /// </summary>
+    private static string FormatTrayMenuDeviceName(AudioDevice device, AppSettings settings)
+    {
+        TrayMenuDeviceNameStyle style = device.IsCaptureDevice
+            ? settings.TrayMenuRecordingDeviceNameStyle
+            : settings.TrayMenuPlaybackDeviceNameStyle;
+
+        string raw = style switch
+        {
+            TrayMenuDeviceNameStyle.Name => device.DeviceDescription,
+            TrayMenuDeviceNameStyle.Model => device.InterfaceFriendlyName,
+            _ => device.FriendlyName,
+        };
+
+        if (string.IsNullOrEmpty(raw)) return device.FriendlyName;
+
+        int max = settings.TrayMenuDeviceNameMaxLength;
+        if (raw.Length <= max) return raw;
+
+        // Keep room for the suffix inside the cap; if max is smaller than the suffix itself we
+        // degrade to a hard cut at max chars rather than producing a string longer than requested.
+        int keep = Math.Max(0, max - TrayMenuTruncationSuffix.Length);
+        return keep == 0 ? raw[..Math.Min(raw.Length, max)] : raw[..keep] + TrayMenuTruncationSuffix;
     }
 
     // Opens the classic Sound control panel on the Playback tab via mmsys.cpl.

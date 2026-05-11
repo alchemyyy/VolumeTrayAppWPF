@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Models;
 using Point = System.Windows.Point;
@@ -354,17 +355,25 @@ internal sealed class ShellNotifyIcon : IDisposable
         contextMenu.StaysOpen = true;
         contextMenu.Placement = PlacementMode.AbsolutePoint;
 
+        Rect workArea = SystemParameters.WorkArea;
+
+        // Cap MaxHeight to the work area before measuring. This is the "handle it earlier" half:
+        // an unbounded menu that's taller than the screen would trip WPF Popup's virtual-screen
+        // auto-reposition, which slides the popup back inside virtualScreen and pushes the menu's
+        // bottom (Settings, Exit) off the taskbar edge. With MaxHeight capped, the menu always fits,
+        // WPF places it correctly in one pass, and items beyond the cap engage the default
+        // ContextMenu template's MenuScrollViewer; OnContextMenuOpened scrolls to the bottom so the
+        // critical items are visible by default and the overflow is hidden up top.
+        contextMenu.MaxHeight = workArea.Height - 2 * ModernMenuPadding;
+
+        // Pre-measure with the cap applied so DesiredSize reflects the rendered popup size.
+        // The menu is fully built with all items added, so Measure produces a valid DesiredSize
+        // without opening the popup first. SystemParameters.WorkArea is already in DIPs, matching WPF.
+        contextMenu.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        System.Windows.Size desiredMenuSize = contextMenu.DesiredSize;
+
         if (placement == ContextMenuPosition.Modern)
         {
-            // Pre-measure so we can place the menu inside the work area.
-            // The menu is fully built with all items added,
-            // so Measure produces a valid DesiredSize without opening the popup first.
-            // SystemParameters.WorkArea is already in DIPs, matching WPF's coord space.
-            contextMenu.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
-            System.Windows.Size desiredMenuSize = contextMenu.DesiredSize;
-
-            Rect workArea = SystemParameters.WorkArea;
-
             // Center the menu on the tray icon in both axes, clamped inside the work area.
             // For a standard bottom taskbar, the icon lives below the work area,
             // so the vertical clamp pins the menu's bottom to workArea.Bottom - padding
@@ -396,10 +405,17 @@ internal sealed class ShellNotifyIcon : IDisposable
         }
         else
         {
-            // Convert physical screen pixels to WPF DIPs.
+            // Convert physical screen pixels to WPF DIPs and clamp the cursor-anchored top so the
+            // menu's bottom never lands below workArea.Bottom - padding. The lower bound (top edge
+            // clamped to workArea.Top + padding) holds too because MaxHeight keeps desiredMenuSize.Height
+            // <= workArea.Height - 2*padding, which means maxTopDips >= minTopDips.
             double dpiScale = GetDpiScale();
+            double cursorTopDips = point.Y / dpiScale;
+            double minTopDips = workArea.Top + ModernMenuPadding;
+            double maxTopDips = workArea.Bottom - desiredMenuSize.Height - ModernMenuPadding;
+            if (maxTopDips < minTopDips) maxTopDips = minTopDips;
             contextMenu.HorizontalOffset = point.X / dpiScale;
-            contextMenu.VerticalOffset = point.Y / dpiScale;
+            contextMenu.VerticalOffset = Math.Clamp(cursorTopDips, minTopDips, maxTopDips);
         }
 
         contextMenu.Opened += OnContextMenuOpened;
@@ -472,7 +488,30 @@ internal sealed class ShellNotifyIcon : IDisposable
 
             // Disable exit animation for snappier feel.
             if (menu.Parent is Popup popup) popup.PopupAnimation = PopupAnimation.None;
+
+            // Scroll the items ScrollViewer to the bottom so the critical footer items
+            // (Settings, Exit) are visible by default when the list overflows MaxHeight.
+            // Deferred to Loaded priority because ScrollableHeight is 0 until layout completes -
+            // calling ScrollToBottom in Opened is a no-op against an unmeasured ScrollViewer.
+            menu.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                ScrollViewer? scrollViewer = FindFirstVisualDescendant<ScrollViewer>(menu);
+                scrollViewer?.ScrollToBottom();
+            }), DispatcherPriority.Loaded);
         }
+    }
+
+    private static T? FindFirstVisualDescendant<T>(DependencyObject root) where T : DependencyObject
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) return match;
+            T? deeper = FindFirstVisualDescendant<T>(child);
+            if (deeper != null) return deeper;
+        }
+        return null;
     }
 
     private void OnContextMenuClosed(object sender, RoutedEventArgs e)

@@ -91,5 +91,16 @@
                           Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowListenButton_Title}"
+                            Description="{loc:Loc Settings_Flyout_ShowListenButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowListenButtonInFlyoutToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowListenButtonInFlyout"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
     </StackPanel>
 </UserControl>

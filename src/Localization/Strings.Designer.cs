@@ -10,8 +10,8 @@
 
 namespace VolumeTrayAppWPF.Localization {
     using System;
-
-
+    
+    
     /// <summary>
     ///   A strongly-typed resource class, for looking up localized strings, etc.
     /// </summary>
@@ -23,15 +23,15 @@ namespace VolumeTrayAppWPF.Localization {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     public class Strings {
-
+        
         private static global::System.Resources.ResourceManager resourceMan;
-
+        
         private static global::System.Globalization.CultureInfo resourceCulture;
-
+        
         [global::System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
         internal Strings() {
         }
-
+        
         /// <summary>
         ///   Returns the cached ResourceManager instance used by this class.
         /// </summary>
@@ -45,7 +45,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return resourceMan;
             }
         }
-
+        
         /// <summary>
         ///   Overrides the current thread's CurrentUICulture property for all
         ///   resource lookups using this strongly typed resource class.
@@ -59,7 +59,7 @@ namespace VolumeTrayAppWPF.Localization {
                 resourceCulture = value;
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to argb hex:.
         /// </summary>
@@ -68,7 +68,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_ArgbHexLabel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to alpha.
         /// </summary>
@@ -77,7 +77,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_ChannelLabel_Alpha", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to b.
         /// </summary>
@@ -86,7 +86,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_ChannelLabel_B", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to g.
         /// </summary>
@@ -95,7 +95,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_ChannelLabel_G", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to hue.
         /// </summary>
@@ -104,7 +104,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_ChannelLabel_Hue", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to r.
         /// </summary>
@@ -113,7 +113,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_ChannelLabel_R", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Close.
         /// </summary>
@@ -122,7 +122,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_CloseTooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Default.
         /// </summary>
@@ -131,7 +131,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_DefaultButton", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to ColorPicker.
         /// </summary>
@@ -140,7 +140,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_DefaultTitle", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Reset.
         /// </summary>
@@ -149,7 +149,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_ResetButton", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to rgba hex:.
         /// </summary>
@@ -158,97 +158,61 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("ColorPicker_RgbaHexLabel", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Close.
+        ///   Looks up a localized string similar to Click: set as default. Ctrl+click: enable / disable. Shift+click: set as default communications..
         /// </summary>
-        public static string SettingsWindow_Caption_Close {
+        public static string Flyout_DeviceIcon_Tooltip {
             get {
-                return ResourceManager.GetString("SettingsWindow_Caption_Close", resourceCulture);
+                return ResourceManager.GetString("Flyout_DeviceIcon_Tooltip", resourceCulture);
             }
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to Maximize.
+        ///   Looks up a localized string similar to Click: toggle Listen to this device. Ctrl+click: enable with Default Playback target. Right-click: pick target device..
         /// </summary>
-        public static string SettingsWindow_Caption_Maximize {
+        public static string Flyout_ListenButton_Tooltip {
             get {
-                return ResourceManager.GetString("SettingsWindow_Caption_Maximize", resourceCulture);
+                return ResourceManager.GetString("Flyout_ListenButton_Tooltip", resourceCulture);
             }
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to Minimize.
+        ///   Looks up a localized string similar to Default Playback Device.
         /// </summary>
-        public static string SettingsWindow_Caption_Minimize {
+        public static string Flyout_ListenMenu_DefaultPlaybackDevice {
             get {
-                return ResourceManager.GetString("SettingsWindow_Caption_Minimize", resourceCulture);
+                return ResourceManager.GetString("Flyout_ListenMenu_DefaultPlaybackDevice", resourceCulture);
             }
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to Cancel.
+        ///   Looks up a localized string similar to Redock.
         /// </summary>
-        public static string SettingsWindow_ConfirmOverlay_Cancel {
+        public static string Flyout_Redock_Tooltip {
             get {
-                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_Cancel", resourceCulture);
+                return ResourceManager.GetString("Flyout_Redock_Tooltip", resourceCulture);
             }
         }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Clear.
-        /// </summary>
-        public static string SettingsWindow_ConfirmOverlay_Confirm {
-            get {
-                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_Confirm", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Are you sure?.
-        /// </summary>
-        public static string SettingsWindow_ConfirmOverlay_DefaultMessage {
-            get {
-                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_DefaultMessage", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Clear all saved display data?.
-        /// </summary>
-        public static string SettingsWindow_ConfirmOverlay_DefaultTitle {
-            get {
-                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_DefaultTitle", resourceCulture);
-            }
-        }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Settings.
         /// </summary>
-        public static string SettingsWindow_Header {
+        public static string Flyout_Settings_Tooltip {
             get {
-                return ResourceManager.GetString("SettingsWindow_Header", resourceCulture);
+                return ResourceManager.GetString("Flyout_Settings_Tooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Open settings folder.
+        ///   Looks up a localized string similar to Undock.
         /// </summary>
-        public static string SettingsWindow_OpenSettingsFolder {
+        public static string Flyout_Undock_Tooltip {
             get {
-                return ResourceManager.GetString("SettingsWindow_OpenSettingsFolder", resourceCulture);
+                return ResourceManager.GetString("Flyout_Undock_Tooltip", resourceCulture);
             }
         }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Settings.
-        /// </summary>
-        public static string SettingsWindow_Title {
-            get {
-                return ResourceManager.GetString("SettingsWindow_Title", resourceCulture);
-            }
-        }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Author.
         /// </summary>
@@ -257,7 +221,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_About_AuthorLabel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Build.
         /// </summary>
@@ -266,7 +230,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_About_BuildLabel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Github.
         /// </summary>
@@ -275,7 +239,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_About_GithubLabel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Runtime.
         /// </summary>
@@ -284,7 +248,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_About_RuntimeLabel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to About.
         /// </summary>
@@ -293,7 +257,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_About_SectionHeader", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to A WPF tray app skeleton..
         /// </summary>
@@ -302,7 +266,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_About_Tagline", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to About.
         /// </summary>
@@ -311,7 +275,25 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Common_Tab_About", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Devices.
+        /// </summary>
+        public static string Settings_Common_Tab_Devices {
+            get {
+                return ResourceManager.GetString("Settings_Common_Tab_Devices", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Flyout.
+        /// </summary>
+        public static string Settings_Common_Tab_Flyout {
+            get {
+                return ResourceManager.GetString("Settings_Common_Tab_Flyout", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to General.
         /// </summary>
@@ -320,7 +302,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Common_Tab_General", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Hotkeys.
         /// </summary>
@@ -329,7 +311,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Common_Tab_Hotkeys", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Theme.
         /// </summary>
@@ -338,7 +320,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Common_Tab_Theme", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Tray Icon.
         /// </summary>
@@ -347,7 +329,493 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Common_Tab_TrayIcon", resourceCulture);
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Defaulting.
+        /// </summary>
+        public static string Settings_Devices_Defaulting_Header {
+            get {
+                return ResourceManager.GetString("Settings_Devices_Defaulting_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Recording visibility.
+        /// </summary>
+        public static string Settings_Devices_RecordingVisibility_Header {
+            get {
+                return ResourceManager.GetString("Settings_Devices_RecordingVisibility_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Devices.
+        /// </summary>
+        public static string Settings_Devices_SectionHeader {
+            get {
+                return ResourceManager.GetString("Settings_Devices_SectionHeader", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to When you set a default device through this app, also promote it to the communications-role default. Only triggered by your own clicks; never reacts to other apps&apos; default-changes..
+        /// </summary>
+        public static string Settings_Devices_SetDefaultCommsToDefault_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_SetDefaultCommsToDefault_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Tie default comms device to default device.
+        /// </summary>
+        public static string Settings_Devices_SetDefaultCommsToDefault_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_SetDefaultCommsToDefault_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Always include the communications-role default playback device, even when it&apos;s disabled in Windows..
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show default comms playback device even if disabled.
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Always include the communications-role default recording device, even when it&apos;s disabled in Windows..
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show default comms recording device even if disabled.
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Always include the default playback device in lists, even when it&apos;s disabled in Windows..
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show default playback device even if disabled.
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Always include the default recording device, even when it&apos;s disabled in Windows..
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show default recording device even if disabled.
+        /// </summary>
+        public static string Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to List playback devices that are disabled in Windows. Off by default..
+        /// </summary>
+        public static string Settings_Devices_ShowDisabledPlayback_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDisabledPlayback_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show disabled playback devices.
+        /// </summary>
+        public static string Settings_Devices_ShowDisabledPlayback_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDisabledPlayback_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to List recording devices that are disabled in Windows..
+        /// </summary>
+        public static string Settings_Devices_ShowDisabledRecording_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDisabledRecording_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show disabled recording devices.
+        /// </summary>
+        public static string Settings_Devices_ShowDisabledRecording_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDisabledRecording_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to List playback devices Windows reports as currently unplugged but still recognized. Registry-only ghost endpoints have their own setting below..
+        /// </summary>
+        public static string Settings_Devices_ShowDisconnectedPlayback_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDisconnectedPlayback_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show disconnected playback devices.
+        /// </summary>
+        public static string Settings_Devices_ShowDisconnectedPlayback_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowDisconnectedPlayback_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to List endpoints Windows still has on file but no driver is currently loaded for - old USB DACs, removed GPUs&apos; HDMI outputs, paired Bluetooth headsets. Most surface as &quot;Unknown Device&quot;. Off by default..
+        /// </summary>
+        public static string Settings_Devices_ShowNotPresent_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowNotPresent_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show registry ghost devices.
+        /// </summary>
+        public static string Settings_Devices_ShowNotPresent_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowNotPresent_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Master switch for recording-device entries. When off, every recording-side option below is ignored..
+        /// </summary>
+        public static string Settings_Devices_ShowRecording_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecording_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show recording devices.
+        /// </summary>
+        public static string Settings_Devices_ShowRecording_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecording_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Add an entry that opens the classic Sound control panel on the Communications tab..
+        /// </summary>
+        public static string Settings_Devices_ShowTrayCommunicationsLink_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTrayCommunicationsLink_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show &quot;Communications&quot; link in tray menu.
+        /// </summary>
+        public static string Settings_Devices_ShowTrayCommunicationsLink_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTrayCommunicationsLink_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Add a sub-menu entry per visible enabled device. Each entry opens the matching classic Sound tab (same as Ctrl+click on the device icon in the flyout)..
+        /// </summary>
+        public static string Settings_Devices_ShowTrayDeviceLinks_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTrayDeviceLinks_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show per-device links in tray menu.
+        /// </summary>
+        public static string Settings_Devices_ShowTrayDeviceLinks_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTrayDeviceLinks_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Add an entry that opens the classic Sound control panel on the Recording tab..
+        /// </summary>
+        public static string Settings_Devices_ShowTrayRecordingLink_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTrayRecordingLink_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show &quot;Recording&quot; link in tray menu.
+        /// </summary>
+        public static string Settings_Devices_ShowTrayRecordingLink_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTrayRecordingLink_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Add an entry that opens the classic Sound control panel on the Sounds tab..
+        /// </summary>
+        public static string Settings_Devices_ShowTraySoundsLink_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTraySoundsLink_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show &quot;Sounds&quot; link in tray menu.
+        /// </summary>
+        public static string Settings_Devices_ShowTraySoundsLink_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowTraySoundsLink_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Tray menu.
+        /// </summary>
+        public static string Settings_Devices_TrayMenu_Header {
+            get {
+                return ResourceManager.GetString("Settings_Devices_TrayMenu_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Playback visibility.
+        /// </summary>
+        public static string Settings_Devices_Visibility_Header {
+            get {
+                return ResourceManager.GetString("Settings_Devices_Visibility_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Apps above device.
+        /// </summary>
+        public static string Settings_Flyout_DeviceLayout_AppsAbove {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceLayout_AppsAbove", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Apps below device.
+        /// </summary>
+        public static string Settings_Flyout_DeviceLayout_AppsBelow {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceLayout_AppsBelow", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Where each device&apos;s row sits relative to its app sliders..
+        /// </summary>
+        public static string Settings_Flyout_DeviceLayout_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceLayout_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Device layout.
+        /// </summary>
+        public static string Settings_Flyout_DeviceLayout_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceLayout_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Device list.
+        /// </summary>
+        public static string Settings_Flyout_DeviceList_Header {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceList_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Default sort: default, default communications, enabled, disabled, disconnected. The default device sits at the bottom of the flyout. Windows sort: untouched MMDevice enumeration order..
+        /// </summary>
+        public static string Settings_Flyout_DeviceSort_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceSort_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Default.
+        /// </summary>
+        public static string Settings_Flyout_DeviceSort_StateGrouped {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceSort_StateGrouped", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Device sort.
+        /// </summary>
+        public static string Settings_Flyout_DeviceSort_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceSort_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Windows order.
+        /// </summary>
+        public static string Settings_Flyout_DeviceSort_WindowsEnumeration {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceSort_WindowsEnumeration", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to When on, recording devices interleave with playback devices inside each sort bucket. When off, all playback devices show first and recording devices group together at the top of the list..
+        /// </summary>
+        public static string Settings_Flyout_IntermixRecording_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_IntermixRecording_Description", resourceCulture);
+            }
+        }
 
+        /// <summary>
+        ///   Looks up a localized string similar to Show "Listen to this device" button.
+        /// </summary>
+        public static string Settings_Flyout_ShowListenButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowListenButton_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Adds a button to each recording device row that toggles the Windows "Listen to this device" feature..
+        /// </summary>
+        public static string Settings_Flyout_ShowListenButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowListenButton_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Intermix recording with playback.
+        /// </summary>
+        public static string Settings_Flyout_IntermixRecording_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_IntermixRecording_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to When the app launches, restore the flyout&apos;s docked or undocked state from the previous session. When off, the flyout always opens docked..
+        /// </summary>
+        public static string Settings_Flyout_RestoreUndockState_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_RestoreUndockState_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Restore undock state on startup.
+        /// </summary>
+        public static string Settings_Flyout_RestoreUndockState_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_RestoreUndockState_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Flyout.
+        /// </summary>
+        public static string Settings_Flyout_SectionHeader {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_SectionHeader", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Include capture endpoints (microphones, line-in) in the flyout&apos;s device list. Still gated by the global recording-devices toggle on the Devices page..
+        /// </summary>
+        public static string Settings_Flyout_ShowRecordingDevices_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowRecordingDevices_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show recording devices.
+        /// </summary>
+        public static string Settings_Flyout_ShowRecordingDevices_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowRecordingDevices_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show the undock button in the flyout. When off, the flyout always stays anchored to the tray..
+        /// </summary>
+        public static string Settings_Flyout_ShowUndockButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowUndockButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show undock button.
+        /// </summary>
+        public static string Settings_Flyout_ShowUndockButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowUndockButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Visibility.
+        /// </summary>
+        public static string Settings_Flyout_Visibility_Header {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_Visibility_Header", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Apply.
         /// </summary>
@@ -356,7 +824,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Apply_Button", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Automatically save changes..
         /// </summary>
@@ -365,7 +833,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Autosave_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Auto-save.
         /// </summary>
@@ -374,7 +842,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Autosave_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Cancel.
         /// </summary>
@@ -383,61 +851,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Cancel_Button", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Currently running from "{0}"..
+        ///   Looks up a localized string similar to Currently running from &quot;{0}&quot;..
         /// </summary>
         public static string Settings_General_CurrentlyRunning_Format {
             get {
                 return ResourceManager.GetString("Settings_General_CurrentlyRunning_Format", resourceCulture);
             }
         }
-
-        /// <summary>
-        ///   Looks up a localized string similar to This will copy the running exe to "{0}" and register it in Windows Settings &gt; Apps..
-        /// </summary>
-        public static string Settings_General_InstallConfirm_Message_Format {
-            get {
-                return ResourceManager.GetString("Settings_General_InstallConfirm_Message_Format", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Install VolumeTrayAppWPF?.
-        /// </summary>
-        public static string Settings_General_InstallConfirm_Title {
-            get {
-                return ResourceManager.GetString("Settings_General_InstallConfirm_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Install failed.
-        /// </summary>
-        public static string Settings_General_InstallFailed_Title {
-            get {
-                return ResourceManager.GetString("Settings_General_InstallFailed_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to This will copy the running exe to "{0}" and register it in Windows Settings &gt; Apps. Requires admin..
-        /// </summary>
-        public static string Settings_General_InstallSystemWideConfirm_Message_Format {
-            get {
-                return ResourceManager.GetString("Settings_General_InstallSystemWideConfirm_Message_Format", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Install VolumeTrayAppWPF system-wide?.
-        /// </summary>
-        public static string Settings_General_InstallSystemWideConfirm_Title {
-            get {
-                return ResourceManager.GetString("Settings_General_InstallSystemWideConfirm_Title", resourceCulture);
-            }
-        }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Install.
         /// </summary>
@@ -446,7 +869,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Install_Button", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Installation.
         /// </summary>
@@ -455,25 +878,43 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Installation_Header", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Peak meter.
+        ///   Looks up a localized string similar to This will copy the running exe to &quot;{0}&quot; and register it in Windows Settings &gt; Apps..
         /// </summary>
-        public static string Settings_General_PeakMeter_Header {
+        public static string Settings_General_InstallConfirm_Message_Format {
             get {
-                return ResourceManager.GetString("Settings_General_PeakMeter_Header", resourceCulture);
+                return ResourceManager.GetString("Settings_General_InstallConfirm_Message_Format", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Installed (older build) at "{0}".{1}.
+        ///   Looks up a localized string similar to Install VolumeTrayAppWPF?.
+        /// </summary>
+        public static string Settings_General_InstallConfirm_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_InstallConfirm_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Installed at &quot;{0}&quot;..
+        /// </summary>
+        public static string Settings_General_Installed_Format {
+            get {
+                return ResourceManager.GetString("Settings_General_Installed_Format", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Installed (older build) at &quot;{0}&quot;.{1}.
         /// </summary>
         public static string Settings_General_InstalledOlderBuild_Format {
             get {
                 return ResourceManager.GetString("Settings_General_InstalledOlderBuild_Format", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Installed build {0}, running build {1}. Click Update to overwrite.{2}.
         /// </summary>
@@ -482,25 +923,43 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_InstalledOutOfDate_Format", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Installed (build {0}) at "{1}"..
+        ///   Looks up a localized string similar to Installed (build {0}) at &quot;{1}&quot;..
         /// </summary>
         public static string Settings_General_InstalledWithBuild_Format {
             get {
                 return ResourceManager.GetString("Settings_General_InstalledWithBuild_Format", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Installed at "{0}"..
+        ///   Looks up a localized string similar to Install failed.
         /// </summary>
-        public static string Settings_General_Installed_Format {
+        public static string Settings_General_InstallFailed_Title {
             get {
-                return ResourceManager.GetString("Settings_General_Installed_Format", resourceCulture);
+                return ResourceManager.GetString("Settings_General_InstallFailed_Title", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to This will copy the running exe to &quot;{0}&quot; and register it in Windows Settings &gt; Apps. Requires admin..
+        /// </summary>
+        public static string Settings_General_InstallSystemWideConfirm_Message_Format {
+            get {
+                return ResourceManager.GetString("Settings_General_InstallSystemWideConfirm_Message_Format", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Install VolumeTrayAppWPF system-wide?.
+        /// </summary>
+        public static string Settings_General_InstallSystemWideConfirm_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_InstallSystemWideConfirm_Title", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Local user.
         /// </summary>
@@ -509,7 +968,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_LocalUser_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Map the slider to volume on a perceptual curve so equal slider deltas feel like equal loudness deltas..
         /// </summary>
@@ -518,7 +977,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_LogarithmicVolumeScale_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Use logarithmic volume scale.
         /// </summary>
@@ -527,16 +986,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_LogarithmicVolumeScale_Title", resourceCulture);
             }
         }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Not installed. Will be placed at "{0}".{1}.
-        /// </summary>
-        public static string Settings_General_NotInstalled_Format {
-            get {
-                return ResourceManager.GetString("Settings_General_NotInstalled_Format", resourceCulture);
-            }
-        }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Notifications.
         /// </summary>
@@ -545,16 +995,34 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Notifications_Header", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Play a Windows notification sound when you change a per-app slider, scaled to the app's mixed volume so quieter apps preview quieter..
+        ///   Looks up a localized string similar to Not installed. Will be placed at &quot;{0}&quot;.{1}.
+        /// </summary>
+        public static string Settings_General_NotInstalled_Format {
+            get {
+                return ResourceManager.GetString("Settings_General_NotInstalled_Format", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Peak meter.
+        /// </summary>
+        public static string Settings_General_PeakMeter_Header {
+            get {
+                return ResourceManager.GetString("Settings_General_PeakMeter_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Play a Windows notification sound when you change a per-app slider, scaled to the app&apos;s mixed volume so quieter apps preview quieter..
         /// </summary>
         public static string Settings_General_PlayAppVolumeChangeSound_Description {
             get {
                 return ResourceManager.GetString("Settings_General_PlayAppVolumeChangeSound_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Play a sound when changing app volume.
         /// </summary>
@@ -563,7 +1031,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_PlayAppVolumeChangeSound_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Play the Windows default beep when you change the volume on the device slider. Per-app sliders stay silent..
         /// </summary>
@@ -572,7 +1040,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_PlayDeviceVolumeChangeSound_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Play a sound when changing device volume.
         /// </summary>
@@ -581,16 +1049,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_PlayDeviceVolumeChangeSound_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to (requires admin).
+        ///   Looks up a localized string similar to  (requires admin).
         /// </summary>
         public static string Settings_General_RequiresAdmin_Suffix {
             get {
                 return ResourceManager.GetString("Settings_General_RequiresAdmin_Suffix", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Launch VolumeTrayAppWPF when you sign in to Windows..
         /// </summary>
@@ -599,16 +1067,17 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_RunOnStartup_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to {0} Target: {1}.
+        ///   Looks up a localized string similar to {0}
+        ///Target: {1}.
         /// </summary>
         public static string Settings_General_RunOnStartup_OnDescriptionFormat {
             get {
                 return ResourceManager.GetString("Settings_General_RunOnStartup_OnDescriptionFormat", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Autostart shortcut placed in shell:startup..
         /// </summary>
@@ -617,7 +1086,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_RunOnStartup_OnHeaderLine", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Run on startup automatically.
         /// </summary>
@@ -626,7 +1095,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_RunOnStartup_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to s.
         /// </summary>
@@ -635,7 +1104,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Seconds_Suffix", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to General.
         /// </summary>
@@ -644,7 +1113,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_SectionHeader", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to System wide.
         /// </summary>
@@ -653,25 +1122,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_SystemWide_Title", resourceCulture);
             }
         }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Uninstall completed with warnings. Some files or registry entries may need manual removal. Check the install location and Windows Settings &gt; Apps..
-        /// </summary>
-        public static string Settings_General_UninstallIncomplete_Message {
-            get {
-                return ResourceManager.GetString("Settings_General_UninstallIncomplete_Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Uninstall incomplete.
-        /// </summary>
-        public static string Settings_General_UninstallIncomplete_Title {
-            get {
-                return ResourceManager.GetString("Settings_General_UninstallIncomplete_Title", resourceCulture);
-            }
-        }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Uninstall.
         /// </summary>
@@ -680,7 +1131,25 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Uninstall_Button", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Uninstall completed with warnings. Some files or registry entries may need manual removal. Check the install location and Windows Settings &gt; Apps..
+        /// </summary>
+        public static string Settings_General_UninstallIncomplete_Message {
+            get {
+                return ResourceManager.GetString("Settings_General_UninstallIncomplete_Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Uninstall incomplete.
+        /// </summary>
+        public static string Settings_General_UninstallIncomplete_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_UninstallIncomplete_Title", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Update.
         /// </summary>
@@ -689,7 +1158,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Update_Button", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Add.
         /// </summary>
@@ -698,7 +1167,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Add_Button", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to delete this hotkey.
         /// </summary>
@@ -707,7 +1176,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_DeleteHotkey_ToolTip", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Exists.
         /// </summary>
@@ -716,7 +1185,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Exists_Button", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Enter.
         /// </summary>
@@ -725,7 +1194,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Key_Enter", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Esc.
         /// </summary>
@@ -734,7 +1203,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Key_Escape", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to PageDown.
         /// </summary>
@@ -743,7 +1212,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Key_PageDown", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to PageUp.
         /// </summary>
@@ -752,7 +1221,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Key_PageUp", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Space.
         /// </summary>
@@ -761,7 +1230,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Key_Space", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Alt.
         /// </summary>
@@ -770,7 +1239,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_Alt", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Alt+Shift.
         /// </summary>
@@ -779,7 +1248,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_AltShift", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Alt+Shift+Win.
         /// </summary>
@@ -788,7 +1257,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_AltShiftWin", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Alt+Win.
         /// </summary>
@@ -797,7 +1266,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_AltWin", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl.
         /// </summary>
@@ -806,7 +1275,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_Ctrl", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl+Alt.
         /// </summary>
@@ -815,7 +1284,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_CtrlAlt", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl+Alt+Shift.
         /// </summary>
@@ -824,7 +1293,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_CtrlAltShift", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl+Alt+Shift+Win.
         /// </summary>
@@ -833,7 +1302,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_CtrlAltShiftWin", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl+Alt+Win.
         /// </summary>
@@ -842,7 +1311,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_CtrlAltWin", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl+Shift.
         /// </summary>
@@ -851,7 +1320,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_CtrlShift", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl+Shift+Win.
         /// </summary>
@@ -860,7 +1329,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_CtrlShiftWin", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl+Win.
         /// </summary>
@@ -869,7 +1338,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_CtrlWin", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Shift.
         /// </summary>
@@ -878,7 +1347,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_Shift", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Shift+Win.
         /// </summary>
@@ -887,7 +1356,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_ShiftWin", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Win.
         /// </summary>
@@ -896,7 +1365,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Modifier_Win", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Open this settings window..
         /// </summary>
@@ -905,7 +1374,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_OpenSettings_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Open settings.
         /// </summary>
@@ -914,7 +1383,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_OpenSettings_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Remove.
         /// </summary>
@@ -923,7 +1392,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Remove_Button", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Search:.
         /// </summary>
@@ -932,7 +1401,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_SearchLabel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Bind a system-wide keyboard shortcut to each action. Bindings require at least one modifier key (Ctrl, Alt, Shift, or Win). All actions start unbound..
         /// </summary>
@@ -941,7 +1410,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_SectionDescription", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Keyboard shortcuts.
         /// </summary>
@@ -950,7 +1419,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_SectionHeader", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Hotkey service not available..
         /// </summary>
@@ -959,7 +1428,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Status_HotkeyServiceUnavailable", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Registered..
         /// </summary>
@@ -968,7 +1437,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Hotkeys_Status_Registered", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Appearance.
         /// </summary>
@@ -977,7 +1446,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_Appearance_Header", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Dark theme background color.
         /// </summary>
@@ -986,7 +1455,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_BackgroundColor_DarkTooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Override the default background color. Each variant falls back to the default when unset..
         /// </summary>
@@ -995,7 +1464,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_BackgroundColor_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Light theme background color.
         /// </summary>
@@ -1004,7 +1473,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_BackgroundColor_LightTooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Background color.
         /// </summary>
@@ -1013,7 +1482,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_BackgroundColor_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Controls the overall size of the tray context menu. All elements scale from font size..
         /// </summary>
@@ -1022,7 +1491,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_FontSize_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Font size.
         /// </summary>
@@ -1031,7 +1500,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_FontSize_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Peak meter.
         /// </summary>
@@ -1040,106 +1509,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_MeterPeak_Header", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Color of the peak meter overlay drawn on top of the volume slider track.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakColor_Description {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakColor_Description", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Peak meter color.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakColor_Title {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakColor_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Edit peak meter color.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakColor_Tooltip {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakColor_Tooltip", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Color of the stereo overlay drawn on top of the base bar to the loudest channel. Translucent by default so the channel mismatch reads as a halo extending past the base.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakStereoColor_Description {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Description", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Peak meter stereo color.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakStereoColor_Title {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Edit peak meter stereo color.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakStereoColor_Tooltip {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Tooltip", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to How often the meter is redrawn. Higher than the sample rate buys smoothness via linear interpolation between samples; equal to the sample rate snaps with no interpolation.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakFps_Description {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakFps_Description", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Peak meter refresh rate (FPS).
-        /// </summary>
-        public static string Settings_Theme_MeterPeakFps_Title {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakFps_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to How often the raw audio peak is read from Windows. Lower than the refresh rate to enable smoothing; higher than the refresh rate wastes CPU.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakSampleRate_Description {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakSampleRate_Description", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Peak meter sample rate.
-        /// </summary>
-        public static string Settings_Theme_MeterPeakSampleRate_Title {
-            get {
-                return ResourceManager.GetString("Settings_Theme_MeterPeakSampleRate_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Maximum amount, in volume units (0 to 100), that the peak meter can move in a single redraw. Caps single-frame jumps so a sudden silence-to-loud transition ramps over a few frames. 0 freezes the meter; 100 disables the cap.
+        ///   Looks up a localized string similar to Maximum amount, in volume units (0 to 100), that the peak meter can move in a single redraw. Caps single-frame jumps so a sudden silence-to-loud transition ramps over a few frames. 0 freezes the meter; 100 disables the cap..
         /// </summary>
         public static string Settings_Theme_MeterPeakChangeCeiling_Description {
             get {
                 return ResourceManager.GetString("Settings_Theme_MeterPeakChangeCeiling_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Peak meter change ceiling.
         /// </summary>
@@ -1148,43 +1527,97 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_MeterPeakChangeCeiling_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Combine the left and right channels into a single weighted bar instead of drawing the stereo overlay on top of the base meter.
+        ///   Looks up a localized string similar to Color of the peak meter overlay drawn on top of the volume slider track..
         /// </summary>
-        public static string Settings_Theme_UnifiedPeakMeter_Description {
+        public static string Settings_Theme_MeterPeakColor_Description {
             get {
-                return ResourceManager.GetString("Settings_Theme_UnifiedPeakMeter_Description", resourceCulture);
+                return ResourceManager.GetString("Settings_Theme_MeterPeakColor_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Unified peak meter.
+        ///   Looks up a localized string similar to Peak meter color.
         /// </summary>
-        public static string Settings_Theme_UnifiedPeakMeter_Title {
+        public static string Settings_Theme_MeterPeakColor_Title {
             get {
-                return ResourceManager.GetString("Settings_Theme_UnifiedPeakMeter_Title", resourceCulture);
+                return ResourceManager.GetString("Settings_Theme_MeterPeakColor_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to How strongly the quieter channel weights the combined value. 0 keeps the louder channel; 1 averages the channels; higher values dampen stereo flutter by biasing the result toward the quieter channel.
+        ///   Looks up a localized string similar to Edit peak meter color.
         /// </summary>
-        public static string Settings_Theme_UnifiedMeterBias_Description {
+        public static string Settings_Theme_MeterPeakColor_Tooltip {
             get {
-                return ResourceManager.GetString("Settings_Theme_UnifiedMeterBias_Description", resourceCulture);
+                return ResourceManager.GetString("Settings_Theme_MeterPeakColor_Tooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Unified meter low channel bias multiplier.
+        ///   Looks up a localized string similar to How often the meter is redrawn. Higher than the sample rate buys smoothness via linear interpolation between samples; equal to the sample rate snaps with no interpolation..
         /// </summary>
-        public static string Settings_Theme_UnifiedMeterBias_Title {
+        public static string Settings_Theme_MeterPeakFps_Description {
             get {
-                return ResourceManager.GetString("Settings_Theme_UnifiedMeterBias_Title", resourceCulture);
+                return ResourceManager.GetString("Settings_Theme_MeterPeakFps_Description", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Peak meter refresh rate (FPS).
+        /// </summary>
+        public static string Settings_Theme_MeterPeakFps_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakFps_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to How often the raw audio peak is read from Windows. Lower than the refresh rate to enable smoothing; higher than the refresh rate wastes CPU..
+        /// </summary>
+        public static string Settings_Theme_MeterPeakSampleRate_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakSampleRate_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Peak meter sample rate.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakSampleRate_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakSampleRate_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Color of the stereo overlay drawn on top of the base bar to the loudest channel. Translucent by default so the channel mismatch reads as a halo extending past the base..
+        /// </summary>
+        public static string Settings_Theme_MeterPeakStereoColor_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Peak meter stereo color.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakStereoColor_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Edit peak meter stereo color.
+        /// </summary>
+        public static string Settings_Theme_MeterPeakStereoColor_Tooltip {
+            get {
+                return ResourceManager.GetString("Settings_Theme_MeterPeakStereoColor_Tooltip", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to dark.
         /// </summary>
@@ -1193,7 +1626,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_PickerTitle_DarkVariant", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to {0} ({1}).
         /// </summary>
@@ -1202,7 +1635,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_PickerTitle_Format", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to light.
         /// </summary>
@@ -1211,7 +1644,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_PickerTitle_LightVariant", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Reset.
         /// </summary>
@@ -1220,7 +1653,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_Reset", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Applies rounded corners to the flyout, settings cards, buttons, and menus. Turn off for a squared-off look..
         /// </summary>
@@ -1229,7 +1662,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_RoundedCorners_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Rounded corners.
         /// </summary>
@@ -1238,7 +1671,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_RoundedCorners_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Theme.
         /// </summary>
@@ -1247,7 +1680,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_SectionHeader", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to The shape drawn as the volume-slider thumb. Each option keeps its own font and proportions..
         /// </summary>
@@ -1256,7 +1689,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_SliderIndicator_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Slider indicator.
         /// </summary>
@@ -1265,7 +1698,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_SliderIndicator_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Dark theme text color.
         /// </summary>
@@ -1274,7 +1707,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_TextColor_DarkTooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Override the default text color. Each variant falls back to the default when unset..
         /// </summary>
@@ -1283,7 +1716,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_TextColor_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Light theme text color.
         /// </summary>
@@ -1292,7 +1725,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_TextColor_LightTooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Text color.
         /// </summary>
@@ -1301,7 +1734,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_TextColor_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Dark.
         /// </summary>
@@ -1310,7 +1743,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_ThemeStyle_Dark", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Follow Windows, or force light / dark mode for this app..
         /// </summary>
@@ -1319,7 +1752,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_ThemeStyle_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Light.
         /// </summary>
@@ -1328,7 +1761,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_ThemeStyle_Light", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to System.
         /// </summary>
@@ -1337,7 +1770,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_ThemeStyle_System", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Theme style.
         /// </summary>
@@ -1346,7 +1779,43 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Theme_ThemeStyle_Title", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to How strongly the quieter channel weights the combined value. 0 keeps the louder channel; 1 averages the channels; higher values dampen stereo flutter by biasing the result toward the quieter channel..
+        /// </summary>
+        public static string Settings_Theme_UnifiedMeterBias_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedMeterBias_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unified meter low channel bias multiplier.
+        /// </summary>
+        public static string Settings_Theme_UnifiedMeterBias_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedMeterBias_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Combine the left and right channels into a single weighted bar instead of drawing the stereo overlay on top of the base meter..
+        /// </summary>
+        public static string Settings_Theme_UnifiedPeakMeter_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedPeakMeter_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unified peak meter.
+        /// </summary>
+        public static string Settings_Theme_UnifiedPeakMeter_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_UnifiedPeakMeter_Title", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Alt + double left click.
         /// </summary>
@@ -1355,7 +1824,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_AltDoubleLeftClick_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Alt + left click.
         /// </summary>
@@ -1364,7 +1833,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_AltLeftClick_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Alt + right click.
         /// </summary>
@@ -1373,7 +1842,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_AltRightClick_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Nothing.
         /// </summary>
@@ -1382,7 +1851,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_ClickAction_Nothing", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Context menu.
         /// </summary>
@@ -1391,7 +1860,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_ContextMenu_Header", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl + double left click.
         /// </summary>
@@ -1400,7 +1869,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_CtrlDoubleLeftClick_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl + left click.
         /// </summary>
@@ -1409,13 +1878,58 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_CtrlLeftClick_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Ctrl + right click.
         /// </summary>
         public static string Settings_TrayIcon_CtrlRightClick_Title {
             get {
                 return ResourceManager.GetString("Settings_TrayIcon_CtrlRightClick_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Model.
+        /// </summary>
+        public static string Settings_TrayIcon_DeviceName_Model {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_DeviceName_Model", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Name.
+        /// </summary>
+        public static string Settings_TrayIcon_DeviceName_Name {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_DeviceName_Name", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Name+Model.
+        /// </summary>
+        public static string Settings_TrayIcon_DeviceName_NameAndModel {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_DeviceName_NameAndModel", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Names longer than this character count are truncated with a 2-dot ellipsis suffix..
+        /// </summary>
+        public static string Settings_TrayIcon_DeviceNameMaxLength_Description {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_DeviceNameMaxLength_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Device name max length.
+        /// </summary>
+        public static string Settings_TrayIcon_DeviceNameMaxLength_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_DeviceNameMaxLength_Title", resourceCulture);
             }
         }
 
@@ -1427,7 +1941,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_DoubleLeftClick_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Classic.
         /// </summary>
@@ -1436,16 +1950,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Classic", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Classic opens at the cursor. Modern docks the menu above the taskbar like the Windows 11 system flyouts.
+        ///   Looks up a localized string similar to Classic opens at the cursor. Modern docks the menu above the taskbar like the Windows 11 system flyouts..
         /// </summary>
         public static string Settings_TrayIcon_MenuPosition_Description {
             get {
                 return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Modern.
         /// </summary>
@@ -1454,7 +1968,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Modern", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Menu position.
         /// </summary>
@@ -1463,16 +1977,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_MenuPosition_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Assign actions to modified clicks on the tray icon. Entries set to Nothing fall back to the default behavior.
+        ///   Looks up a localized string similar to Assign actions to modified clicks on the tray icon. Entries set to Nothing fall back to the default behavior..
         /// </summary>
         public static string Settings_TrayIcon_ModifiedActions_Description {
             get {
                 return ResourceManager.GetString("Settings_TrayIcon_ModifiedActions_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Modified actions.
         /// </summary>
@@ -1481,22 +1995,58 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_ModifiedActions_Header", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Scroll the mouse wheel over the tray icon to adjust the default device&apos;s volume. Does *not* use an always-active global mouse hook.
+        ///   Looks up a localized string similar to Scroll the mouse wheel over the tray icon to adjust the default device&apos;s volume. Does *not* use an always-active global mouse hook..
         /// </summary>
         public static string Settings_TrayIcon_MouseWheel_Description {
             get {
                 return ResourceManager.GetString("Settings_TrayIcon_MouseWheel_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Mouse wheel.
         /// </summary>
         public static string Settings_TrayIcon_MouseWheel_Title {
             get {
                 return ResourceManager.GetString("Settings_TrayIcon_MouseWheel_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Which slice of each playback device&apos;s name appears in the tray context menu..
+        /// </summary>
+        public static string Settings_TrayIcon_PlaybackDeviceName_Description {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_PlaybackDeviceName_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Playback device names.
+        /// </summary>
+        public static string Settings_TrayIcon_PlaybackDeviceName_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_PlaybackDeviceName_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Which slice of each recording device&apos;s name appears in the tray context menu..
+        /// </summary>
+        public static string Settings_TrayIcon_RecordingDeviceName_Description {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_RecordingDeviceName_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Recording device names.
+        /// </summary>
+        public static string Settings_TrayIcon_RecordingDeviceName_Title {
+            get {
+                return ResourceManager.GetString("Settings_TrayIcon_RecordingDeviceName_Title", resourceCulture);
             }
         }
 
@@ -1508,7 +2058,97 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_SectionHeader", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Close.
+        /// </summary>
+        public static string SettingsWindow_Caption_Close {
+            get {
+                return ResourceManager.GetString("SettingsWindow_Caption_Close", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Maximize.
+        /// </summary>
+        public static string SettingsWindow_Caption_Maximize {
+            get {
+                return ResourceManager.GetString("SettingsWindow_Caption_Maximize", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Minimize.
+        /// </summary>
+        public static string SettingsWindow_Caption_Minimize {
+            get {
+                return ResourceManager.GetString("SettingsWindow_Caption_Minimize", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Cancel.
+        /// </summary>
+        public static string SettingsWindow_ConfirmOverlay_Cancel {
+            get {
+                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_Cancel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Clear.
+        /// </summary>
+        public static string SettingsWindow_ConfirmOverlay_Confirm {
+            get {
+                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_Confirm", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Are you sure?.
+        /// </summary>
+        public static string SettingsWindow_ConfirmOverlay_DefaultMessage {
+            get {
+                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_DefaultMessage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Clear all saved display data?.
+        /// </summary>
+        public static string SettingsWindow_ConfirmOverlay_DefaultTitle {
+            get {
+                return ResourceManager.GetString("SettingsWindow_ConfirmOverlay_DefaultTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Settings.
+        /// </summary>
+        public static string SettingsWindow_Header {
+            get {
+                return ResourceManager.GetString("SettingsWindow_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Open settings folder.
+        /// </summary>
+        public static string SettingsWindow_OpenSettingsFolder {
+            get {
+                return ResourceManager.GetString("SettingsWindow_OpenSettingsFolder", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Settings.
+        /// </summary>
+        public static string SettingsWindow_Title {
+            get {
+                return ResourceManager.GetString("SettingsWindow_Title", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Bluetooth.
         /// </summary>
@@ -1517,7 +2157,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Tray_Bluetooth", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Communications.
+        /// </summary>
+        public static string Tray_Communications {
+            get {
+                return ResourceManager.GetString("Tray_Communications", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Exit.
         /// </summary>
@@ -1526,7 +2175,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Tray_Exit", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Recording.
+        /// </summary>
+        public static string Tray_Recording {
+            get {
+                return ResourceManager.GetString("Tray_Recording", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Settings.
         /// </summary>
@@ -1535,7 +2193,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Tray_Settings", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Sound devices.
         /// </summary>
@@ -1544,7 +2202,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Tray_SoundDevices", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sounds.
+        /// </summary>
+        public static string Tray_Sounds {
+            get {
+                return ResourceManager.GetString("Tray_Sounds", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Cancel.
         /// </summary>
@@ -1553,7 +2220,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_Cancel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Close.
         /// </summary>
@@ -1562,7 +2229,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_Caption_Close", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to This will remove the installed copy of VolumeTrayAppWPF and its registration in Windows Apps. Choose what to do with your settings..
         /// </summary>
@@ -1571,7 +2238,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_DefaultDescription", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Also remove the VolumeTrayAppWPF folder under %LOCALAPPDATA%, including settings.xml..
         /// </summary>
@@ -1580,16 +2247,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_DeleteSettings_DefaultDescription", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to Also remove "{0}" including settings.xml..
+        ///   Looks up a localized string similar to Also remove &quot;{0}&quot; including settings.xml..
         /// </summary>
         public static string Uninstaller_DeleteSettings_Description_Format {
             get {
                 return ResourceManager.GetString("Uninstaller_DeleteSettings_Description_Format", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Delete my settings.
         /// </summary>
@@ -1598,16 +2265,16 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_DeleteSettings_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
-        ///   Looks up a localized string similar to This will remove VolumeTrayAppWPF installed at "{0}" and its entry in Windows Settings &gt; Apps. Choose what to do with your settings..
+        ///   Looks up a localized string similar to This will remove VolumeTrayAppWPF installed at &quot;{0}&quot; and its entry in Windows Settings &gt; Apps. Choose what to do with your settings..
         /// </summary>
         public static string Uninstaller_Description_Format {
             get {
                 return ResourceManager.GetString("Uninstaller_Description_Format", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Leave settings.xml in place so a future install picks them up..
         /// </summary>
@@ -1616,7 +2283,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_KeepSettings_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Keep my settings.
         /// </summary>
@@ -1625,7 +2292,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_KeepSettings_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Uninstall VolumeTrayAppWPF.
         /// </summary>
@@ -1634,7 +2301,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_SectionHeader", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Uninstall VolumeTrayAppWPF.
         /// </summary>
@@ -1643,7 +2310,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Uninstall.
         /// </summary>
@@ -1652,7 +2319,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Uninstaller_UninstallButton", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Uninstalling....
         /// </summary>
