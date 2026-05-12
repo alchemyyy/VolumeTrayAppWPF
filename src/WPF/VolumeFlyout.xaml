@@ -363,13 +363,15 @@
                   <!-- Mini glyph overlay slot. Empty by default; on a capture-device drawer, shows
                          GlyphCatalog.CIRCLE for any app whose AudioAppGroup.State is Active (i.e. the
                          app currently has the microphone stream open). Cell ancestor walk matches the
-                         existing Device.IsMuted trigger pattern. -->
+                         existing Device.IsMuted trigger pattern. The exclusive-control-holder lock
+                         overlay takes precedence (last DataTrigger wins): when this app's group is
+                         holding the parent device in exclusive mode, swap the mic-activity dot for
+                         a LOCK glyph so the gesture reads "this is the app holding the device". -->
                   <Grid Width="12" Height="12"
                         HorizontalAlignment="Left" VerticalAlignment="Bottom"
                         Margin="11,0,0,-2"
                         IsHitTestVisible="False">
                     <TextBlock FontFamily="Segoe Fluent Icons"
-                               FontSize="6"
                                FontWeight="ExtraBold"
                                Foreground="{DynamicResource ThemeIconForeground}"
                                HorizontalAlignment="Center"
@@ -378,6 +380,7 @@
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Text" Value=""/>
+                                <Setter Property="FontSize" Value="6"/>
                                 <Style.Triggers>
                                     <MultiDataTrigger>
                                         <MultiDataTrigger.Conditions>
@@ -387,6 +390,12 @@
                                         </MultiDataTrigger.Conditions>
                                         <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CIRCLE}"/>
                                     </MultiDataTrigger>
+                                    <!-- Lock overrides the mic-activity dot when present. Needs a
+                                         larger font size than the dot to read clearly at the same anchor. -->
+                                    <DataTrigger Binding="{Binding IsExclusiveControlHolder}" Value="True">
+                                        <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.LOCK}"/>
+                                        <Setter Property="FontSize" Value="9"/>
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
@@ -429,12 +438,20 @@
                 </Grid.RowDefinitions>
 
                 <!-- Title + control buttons row. Grouped in one Grid so the whole header
-                     band (name text, listen button, device icon button) moves as a unit.
+                     band (name text + all per-device action buttons) moves as a unit.
                      Placed below the slider (Grid.Row=1) so the slider reads as the primary
-                     control and the title/buttons act as the row's footer chrome. -->
+                     control and the title/buttons act as the row's footer chrome.
+                     Column layout left to right:
+                       0  device name (takes remaining width)
+                       1  exclusive-mode toggle (lock / unlock)
+                       2  Equalizer APO state / install
+                       3  Listen-to-this-device (capture endpoints only; collapses to zero on render)
+                       4  device icon (set as default / enable-disable hub). -->
                 <Grid Grid.Row="1" Margin="-1,2,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -445,10 +462,12 @@
                         <TextBlock x:Name="DeviceNameText"
                                    Text="{Binding FriendlyName, FallbackValue='No audio device'}"
                                    Foreground="{DynamicResource ThemeForeground}"
+                                   Background="Transparent"
                                    FontSize="14"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
-                                   MouseLeftButtonDown="DeviceNameText_MouseLeftButtonDown"/>
+                                   MouseLeftButtonDown="DeviceNameText_MouseLeftButtonDown"
+                                   PreviewMouseRightButtonUp="DeviceFormatMenu_PreviewMouseRightButtonUp"/>
                         <TextBox x:Name="DeviceNameEdit"
                                  Visibility="Collapsed"
                                  FontSize="14"
@@ -461,7 +480,148 @@
                                  Margin="0"
                                  KeyDown="DeviceNameEdit_KeyDown"
                                  LostKeyboardFocus="DeviceNameEdit_LostKeyboardFocus"/>
+                        <!-- Compact PKEY_AudioEngine_DeviceFormat readout, drawn just below the
+                             name baseline. Hosted in a Canvas so its size doesn't feed back into
+                             the row's measure - the title row stays sized by the icon buttons and
+                             the format text overflows downward into the band below. The TextBlock's
+                             transparent background widens the hit area to the whole bounding box
+                             so the right-click format picker is reachable on glyph gaps too. -->
+                        <Canvas ClipToBounds="False"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center">
+                          <TextBlock x:Name="DeviceFormatText"
+                                     Text="{Binding DefaultFormat}"
+                                     Canvas.Top="9"
+                                     FontSize="8"
+                                     Foreground="{DynamicResource ThemeForeground}"
+                                     Background="Transparent"
+                                     Opacity="0.45"
+                                     PreviewMouseRightButtonUp="DeviceFormatMenu_PreviewMouseRightButtonUp"/>
+                        </Canvas>
                     </Grid>
+                    <!-- Exclusive-mode toggle. Three visual states driven by two bindings:
+                           IsExclusiveModeAllowed=False  -> Unlock glyph, dimmed (mmsys.cpl checkbox off)
+                           IsExclusiveModeAllowed=True,  IsExclusiveControlHeld=False -> Unlock, full bright
+                           IsExclusiveModeAllowed=True,  IsExclusiveControlHeld=True  -> Lock,   full bright
+                         Click toggles the allow bit on the endpoint. Held / not-held is observed
+                         from the audio engine, not user-toggleable from this button. -->
+                    <Button x:Name="ExclusiveModeButton" Grid.Column="1"
+                            Margin="0,3,0,-3"
+                            Click="ExclusiveModeButton_Click">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
+                                <Setter Property="Opacity" Value="1.0"/>
+                                <Setter Property="ToolTip" Value="{loc:Loc Flyout_ExclusiveMode_Tooltip_Allowed}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsExclusiveControlHeld}" Value="True">
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_ExclusiveMode_Tooltip_Held}"/>
+                                    </DataTrigger>
+                                    <!-- Disallowed wins last so the dim + disallowed-tooltip always paint
+                                         when the checkbox is off, regardless of held state. -->
+                                    <DataTrigger Binding="{Binding IsExclusiveModeAllowed}" Value="False">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_ExclusiveMode_Tooltip_Disallowed}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <TextBlock FontFamily="Segoe Fluent Icons"
+                                   FontSize="15"
+                                   Foreground="{DynamicResource ThemeIconForeground}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.UNLOCK}"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsExclusiveModeAllowed}" Value="True"/>
+                                                <Condition Binding="{Binding IsExclusiveControlHeld}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.LOCK}"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Button>
+
+                    <!-- Equalizer APO state. EQUALIZER glyph dim / bright tracks whether the chain is
+                         actually running on this endpoint; the SIGNAL_NOT_CONNECTED overlay rides on top
+                         (full bright) when the APO binary can't be found anywhere on the system. Click
+                         is a two-state toggle (Running -> uninstall; everything else -> install + enable);
+                         NotAvailable click routes through the not-available dialog in code-behind. -->
+                    <Button x:Name="EqualizerApoButton" Grid.Column="2"
+                            Margin="0,3,0,-3"
+                            Click="EqualizerApoButton_Click"
+                            PreviewMouseRightButtonUp="EqualizerApoButton_PreviewMouseRightButtonUp">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
+                                <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_NotAvailable}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding EqualizerApoState}"
+                                                 Value="{x:Static audio:EqualizerApoState.Running}">
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_Running}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding EqualizerApoState}"
+                                                 Value="{x:Static audio:EqualizerApoState.EnhancementsOff}">
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_EnhancementsOff}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding EqualizerApoState}"
+                                                 Value="{x:Static audio:EqualizerApoState.NotInstalled}">
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_NotInstalled}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Grid>
+                            <!-- Main glyph. Opacity binds via the per-state trigger below: only Running
+                                 reads full bright; every other state dims so the button visually says
+                                 "not in effect right now". -->
+                            <TextBlock x:Name="EqualizerApoGlyph"
+                                       Text="{x:Static visuals:GlyphCatalog.EQUALIZER}"
+                                       FontFamily="Segoe Fluent Icons"
+                                       FontSize="15"
+                                       Foreground="{DynamicResource ThemeIconForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding EqualizerApoState}"
+                                                         Value="{x:Static audio:EqualizerApoState.Running}">
+                                                <Setter Property="Opacity" Value="1.0"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <!-- "APO not detected on this system" mini-glyph overlay. Anchored bottom-right
+                                 so it reads as a badge on the equalizer glyph. Stays full bright while the
+                                 base glyph dims; only visible in the NotAvailable state. -->
+                            <TextBlock x:Name="EqualizerApoMissingOverlay"
+                                       Text="{x:Static visuals:GlyphCatalog.SIGNAL_NOT_CONNECTED}"
+                                       FontFamily="Segoe Fluent Icons"
+                                       FontSize="11"
+                                       FontWeight="ExtraBold"
+                                       Foreground="{DynamicResource ThemeIconForeground}"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Bottom"
+                                       Margin="0,0,-2,-1"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding EqualizerApoState}"
+                                                         Value="{x:Static audio:EqualizerApoState.NotAvailable}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Button>
+
                     <!-- Listen-to-this-device button. Capture endpoints only - collapsed on
                          playback rows so the slot stays empty and the icon button hugs the right.
                          Left click toggles the listen-enable bit (pid 1) and leaves the existing
@@ -469,7 +629,7 @@
                          playback device" (pid 0 deleted). Right click opens a context menu to pick
                          a specific target. Opacity binds to (listening AND target active) so the
                          button reads dim whenever no audio is actually flowing. -->
-                    <Button x:Name="ListenButton" Grid.Column="1"
+                    <Button x:Name="ListenButton" Grid.Column="3"
                             Margin="0,3,0,-3"
                             Click="ListenButton_Click"
                             PreviewMouseRightButtonUp="ListenButton_PreviewMouseRightButtonUp"
@@ -494,10 +654,10 @@
                         <TextBlock Text="{x:Static visuals:GlyphCatalog.EAR_LISTEN}"
                                    Opacity="{Binding IsListenButtonActive, Converter={StaticResource DeviceIconOpacity}}"
                                    FontFamily="Segoe Fluent Icons"
-                                   FontSize="18"
+                                   FontSize="15"
                                    Foreground="{DynamicResource ThemeIconForeground}"/>
                     </Button>
-                    <Button Grid.Column="2"
+                    <Button Grid.Column="4"
                             Style="{StaticResource DeviceIconButtonStyle}"
                             Margin="6,3,-1,-3"
                             Click="DeviceIcon_Click"
@@ -777,9 +937,16 @@
                     </Style>
                 </Grid.Style>
 
-                <!-- Hover background ringing the icon so the click target reads as a button. -->
+                <!-- Hover background ringing the icon so the click target reads as a button. Sized
+                     to AppDrawerHoverPillSize (icon size + 2 px, clamped to GridSlotSize) and
+                     centered inside the 36x36 AppIconRoot Grid - the outer Grid keeps the full
+                     hit-test region while the visible pill hugs the icon. -->
                 <Border CornerRadius="{DynamicResource CornerRadiusMedium}"
-                        IsHitTestVisible="False">
+                        IsHitTestVisible="False"
+                        Width="{Binding AppDrawerHoverPillSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Height="{Binding AppDrawerHoverPillSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Background" Value="Transparent"/>
@@ -850,15 +1017,16 @@
                     </TextBlock.Style>
                 </TextBlock>
 
-                <!-- ActiveGlyph indicator. Capture cells only; shows a small dot on apps whose
-                     session is currently capturing audio. Pinned bottom-right inside the slot so
-                     it sits at a consistent offset regardless of the icon's natural size. -->
+                <!-- Mini-glyph indicator. Capture cells default to a small dot on apps whose session
+                     is currently capturing audio; the exclusive-control-holder lock overrides that dot
+                     (last trigger wins) so an app holding the parent device in exclusive mode shows
+                     LOCK regardless of capture state. Pinned bottom-right inside the slot so the badge
+                     sits at a consistent offset regardless of the icon's natural size. -->
                 <Grid Width="10" Height="10"
                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
                       Margin="0,0,2,2"
                       IsHitTestVisible="False">
                     <TextBlock FontFamily="Segoe Fluent Icons"
-                               FontSize="6"
                                FontWeight="ExtraBold"
                                Foreground="{DynamicResource ThemeIconForeground}"
                                HorizontalAlignment="Center"
@@ -867,6 +1035,7 @@
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Text" Value=""/>
+                                <Setter Property="FontSize" Value="6"/>
                                 <Style.Triggers>
                                     <MultiDataTrigger>
                                         <MultiDataTrigger.Conditions>
@@ -876,6 +1045,10 @@
                                         </MultiDataTrigger.Conditions>
                                         <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CIRCLE}"/>
                                     </MultiDataTrigger>
+                                    <DataTrigger Binding="{Binding IsExclusiveControlHolder}" Value="True">
+                                        <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.LOCK}"/>
+                                        <Setter Property="FontSize" Value="8"/>
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
@@ -924,14 +1097,16 @@
                             <ItemsPanelTemplate>
                                 <!-- CenteringWrapPanel column count comes from the Window's icons-per-row
                                      setting; slot size is a hot-reloadable resource (GridSlotSize) so the
-                                     cell pitch can be tuned at runtime. CenterLastRow (bound to the
-                                     Window's AppDrawerIconsCentered setting) shifts only the trailing
-                                     partial row to the row's horizontal center; full rows are
-                                     left-anchored in either mode. -->
+                                     cell pitch can be tuned at runtime. CenterMode (with CenterSoftMax)
+                                     picks how the trailing partial row anchors along the cross axis:
+                                     Off (left), Centered (mid), CenteredSoftMax (left-anchored at the
+                                     soft-max-centered position, swapping to fully centered past the cap).
+                                     Full rows stay left-anchored regardless of mode. -->
                                 <wpf:CenteringWrapPanel ItemWidth="{DynamicResource GridSlotSize}"
                                                         ItemHeight="{DynamicResource GridSlotSize}"
                                                         Columns="{Binding AppDrawerIconsPerRow, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CenterLastRow="{Binding AppDrawerIconsCentered, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CenterMode="{Binding AppDrawerIconsCenterMode, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CenterSoftMax="{Binding AppDrawerIconsCenterSoftMax, RelativeSource={RelativeSource AncestorType=Window}}"
                                                         StackDirection="{Binding AppDrawerStackDirection, RelativeSource={RelativeSource AncestorType=Window}}"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>

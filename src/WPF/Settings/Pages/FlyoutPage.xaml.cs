@@ -45,7 +45,15 @@ public partial class FlyoutPage : UserControl
             IntermixRecordingWithPlaybackInFlyoutToggle.IsChecked = settings.IntermixRecordingWithPlaybackInFlyout;
             ShowListenButtonInFlyoutToggle.IsChecked = settings.ShowListenButtonInFlyout;
 
-            AppDrawerIconsCenteredToggle.IsChecked = settings.AppDrawerIconsCentered;
+            SettingsBindings.SelectComboByTag(
+                AppDrawerIconsCenterModeCombo,
+                settings.AppDrawerIconsCenterMode.ToString());
+            SettingsBindings.BindSpinner(
+                AppDrawerIconsCenterSoftMaxBox,
+                () => settings.AppDrawerIconsCenterSoftMax,
+                v => settings.AppDrawerIconsCenterSoftMax = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
             SettingsBindings.BindSpinner(
                 AppDrawerIconScaleBox,
                 () => settings.AppDrawerIconScalePercent,
@@ -143,6 +151,11 @@ public partial class FlyoutPage : UserControl
         AppDrawerIconScaleCard.Visibility = iconChildVisibility;
         AppDrawerIconsPerRowCard.Visibility = iconChildVisibility;
         AppDrawerStackDirectionCard.Visibility = iconChildVisibility;
+        // Soft-max width spinner is only meaningful in CenteredSoftMax; hide it under the other modes
+        // (and outside the icons drawer entirely) so the card list doesn't show a dead knob.
+        bool softMaxActive = iconsActive
+            && _settings.AppDrawerIconsCenterMode == AppDrawerIconsCenterMode.CenteredSoftMax;
+        AppDrawerIconsCenterSoftMaxCard.Visibility = softMaxActive ? Visibility.Visible : Visibility.Collapsed;
 
         bool perColumn = _settings.AppDrawerStackDirection is AppDrawerStackDirection.LeftRight
             or AppDrawerStackDirection.RightLeft;

@@ -16,7 +16,7 @@
 // Counter is tracked separately from the rebuild's trim loop so the spawns accumulate across
 // CollectionChanged events and only reset when the cell is disposed.
 // Independent of the other two debug flags above.
- #define DEBUG_SPAWN_APP_DUMMY_ON_DEVICE_VOLUME_CHANGE
+// #define DEBUG_SPAWN_APP_DUMMY_ON_DEVICE_VOLUME_CHANGE
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;

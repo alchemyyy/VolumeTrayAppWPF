@@ -384,6 +384,19 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Update one device's PKEY_AudioEngine_DeviceFormat readout in place when the OS reports the
+    /// format pid changed - typically the user clicking Apply on the Sound Control Panel's
+    /// Advanced tab.
+    /// </summary>
+    private void RefreshDeviceDefaultFormat(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        AudioDevice? match = FindDeviceById(id);
+        if (match == null) return;
+        match.RefreshDefaultFormatFromStore();
+    }
+
+    /// <summary>
     /// Refresh one capture device's Listen-feature state (enable bit + target endpoint id) when the
     /// OS reports a change to either listen-fmtid pid. Capture-only; render endpoints have no
     /// listen state. The target-active dim flag is recomputed off the new target id.
@@ -705,6 +718,15 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             {
                 string id = pwstrDeviceId;
                 _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceListenState(id));
+            }
+            // Sound Control Panel's Advanced > Default Format change lands here as a write to the
+            // engine-format pid. Refresh the cached readout so the flyout's compact format label
+            // doesn't show a stale rate / bit depth.
+            else if (key.fmtid == PropertyKeys.PKEY_AudioEngine_DeviceFormat.fmtid &&
+                key.pid == PropertyKeys.PKEY_AudioEngine_DeviceFormat.pid)
+            {
+                string id = pwstrDeviceId;
+                _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceDefaultFormat(id));
             }
             return 0;
         }

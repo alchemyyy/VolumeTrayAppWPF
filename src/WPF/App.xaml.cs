@@ -360,7 +360,7 @@ public partial class App
     private static MenuItem BuildDeviceMenuItem(AudioDevice device, AppSettings settings)
     {
         MenuItem item = new() { Header = FormatTrayMenuDeviceName(device, settings) };
-        item.Click += (_, _) => device.SetAsDefault();
+        item.Click += (_, _) => DeviceShellLinks.OpenDeviceProperties(device);
         return item;
     }
 

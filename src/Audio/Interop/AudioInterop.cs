@@ -37,6 +37,21 @@ internal enum AudioSessionDisconnectReason
     ExclusiveModeOverride = 5,
 }
 
+internal enum AudioClientShareMode
+{
+    Shared = 0,
+    Exclusive = 1,
+}
+
+// Common Core Audio HRESULTs we branch on directly. Everything else funnels through
+// generic 'hr < 0 = failed' checks.
+internal static class AudioHResults
+{
+    public const int S_OK = 0;
+    public const int S_FALSE = 1;
+    public const int AUDCLNT_E_UNSUPPORTED_FORMAT = unchecked((int)0x88890008);
+}
+
 [Flags]
 internal enum DeviceState : uint
 {
@@ -68,9 +83,8 @@ internal struct PROPERTYKEY
 
 // PROPVARIANT minimal layout. On x64 the natural size is 24 bytes (8-byte header + 16-byte union),
 // and on x86 it's 16 bytes (8 + 8). Two IntPtr fields after the header match that on both archs.
-// We only ever read VT_LPWSTR (pwszVal), VT_UI4 (ulVal), and VT_BOOL/VT_BLOB cases -
-// pwszVal is reachable via the first pointer field; the second is padding to keep the layout
-// safely aligned with the native size so PropVariantClear doesn't read past the struct.
+// VT_LPWSTR / VT_UI4 / VT_BOOL all live in p1; VT_BLOB uses both - cbSize in the low 32 bits
+// of p1 (with 4 bytes of padding above it on x64) and the data pointer in p2.
 [StructLayout(LayoutKind.Sequential)]
 internal struct PROPVARIANT
 {
@@ -91,6 +105,18 @@ internal struct PROPVARIANT
     public string? GetString() => vt == VT_LPWSTR ? Marshal.PtrToStringUni(p1) : null;
 
     public uint GetUInt32() => vt == VT_UI4 ? (uint)p1.ToInt64() : 0u;
+
+    // VT_BLOB: low 32 bits of p1 hold cbSize (rest is alignment padding), p2 holds the data
+    // pointer. Returns null on type mismatch or empty payload so callers don't have to recheck vt.
+    public byte[]? GetBlobBytes()
+    {
+        if (vt != VT_BLOB) return null;
+        int size = (int)p1.ToInt64();
+        if (size <= 0 || p2 == IntPtr.Zero) return null;
+        byte[] buf = new byte[size];
+        Marshal.Copy(p2, buf, 0, size);
+        return buf;
+    }
 }
 
 // Well-known Function-Discovery property keys. Verified against
@@ -128,6 +154,88 @@ internal static class PropertyKeys
     // Verified empirically against the registry; same fmtid as the listen-enable bool.
     public static readonly PROPERTYKEY PKEY_AudioEndpoint_ListenTargetDeviceId = new(
         new Guid(0x24DBB0FC, 0x9311, 0x4B3D, 0x9C, 0xF0, 0x18, 0xFF, 0x15, 0x56, 0x39, 0xD4), 0);
+
+    // Endpoint default mix format. VT_BLOB holding a WAVEFORMATEX (or WAVEFORMATEXTENSIBLE when
+    // wFormatTag == 0xFFFE). Same value the Sound Control Panel's Advanced tab edits, and what the
+    // audio engine resamples / mixes to before handing buffers to the driver.
+    public static readonly PROPERTYKEY PKEY_AudioEngine_DeviceFormat = new(
+        new Guid(0xF19F064D, 0x082C, 0x4E27, 0xBC, 0x73, 0x68, 0x82, 0xA1, 0xBB, 0x8E, 0x4C), 0);
+
+    // KSDATAFORMAT_SUBTYPE_PCM. The SubFormat GUID inside a WAVEFORMATEXTENSIBLE that says "this
+    // is integer PCM" (vs IEEE float, AC-3, etc). Synthesized into format blobs we hand to
+    // IPolicyConfig::SetDeviceFormat when the existing format wasn't already EXTENSIBLE so we
+    // have nothing to copy from.
+    public static readonly Guid KSDATAFORMAT_SUBTYPE_PCM = new(
+        0x00000001, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71);
+}
+
+// Activatable on an IMMDevice. Vtable layout matches audioclient.h: every slot we don't call
+// is left as a stubbed Unused_* so the slots we do call (Initialize / GetBufferSize /
+// GetCurrentPadding / IsFormatSupported / Start / Stop / GetService) land at the right indices.
+// PreserveSig lets us read back S_OK / S_FALSE / AUDCLNT_E_UNSUPPORTED_FORMAT directly;
+// ppClosestMatch on IsFormatSupported is allocated via CoTaskMemAlloc and the caller owns the free.
+[ComImport]
+[Guid("1CB9AD4C-DBFA-4C32-B178-C2F568A703B2")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioClient
+{
+    // Shared-mode initialize. hnsBufferDuration is the requested engine buffer in 100-ns ticks;
+    // hnsPeriodicity must be 0 in shared mode. audioSessionGuid passed as IntPtr.Zero opts into the
+    // default cross-process session. AUTOCONVERTPCM | SRC_DEFAULT_QUALITY in streamFlags lets us
+    // submit any PCM format and have the engine resample / remix to the device's mix format.
+    [PreserveSig]
+    int Initialize(
+        AudioClientShareMode shareMode,
+        uint streamFlags,
+        long hnsBufferDuration,
+        long hnsPeriodicity,
+        IntPtr pFormat,
+        IntPtr audioSessionGuid);
+
+    [PreserveSig]
+    int GetBufferSize(out uint numBufferFrames);
+
+    void Unused_GetStreamLatency();
+
+    [PreserveSig]
+    int GetCurrentPadding(out uint numPaddingFrames);
+
+    [PreserveSig]
+    int IsFormatSupported(AudioClientShareMode shareMode, IntPtr pFormat, out IntPtr ppClosestMatch);
+
+    void Unused_GetMixFormat();
+    void Unused_GetDevicePeriod();
+
+    [PreserveSig] int Start();
+    [PreserveSig] int Stop();
+
+    void Unused_Reset();
+    void Unused_SetEventHandle();
+
+    [PreserveSig]
+    int GetService([In, MarshalAs(UnmanagedType.LPStruct)] Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+}
+
+// Render-side service obtained via IAudioClient.GetService. GetBuffer hands back a writable
+// pointer into the engine's shared ring buffer; the caller copies PCM in and ReleaseBuffer
+// commits the write. Frame count must be <= (BufferSize - CurrentPadding).
+[ComImport]
+[Guid("F294ACFC-3146-4483-A7BF-ADDCA7C260E2")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioRenderClient
+{
+    [PreserveSig] int GetBuffer(uint numFramesRequested, out IntPtr ppData);
+    [PreserveSig] int ReleaseBuffer(uint numFramesWritten, uint dwFlags);
+}
+
+// IAudioClient.Initialize streamFlags. NoPersist keeps our short feedback wav from leaking a
+// per-app entry into the OS volume mixer history; AutoConvertPcm + SrcDefaultQuality let us
+// submit the wav in its native PCM format and have the engine resample / remix transparently.
+internal static class AudioClientStreamFlags
+{
+    public const uint NoPersist = 0x00080000;
+    public const uint AutoConvertPcm = 0x80000000;
+    public const uint SrcDefaultQuality = 0x08000000;
 }
 
 // IPropertyStore: read-only side used to pull endpoint properties out of an IMMDevice.

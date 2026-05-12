@@ -49,6 +49,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private string _friendlyName;
     private string _deviceDescription;
     private string _interfaceFriendlyName;
+    private string? _defaultFormat;
     private float _volume;
     private bool _isMuted;
     private bool _isDefault;
@@ -56,6 +57,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private bool _isListeningToThisDevice;
     private string? _listenTargetDeviceId;
     private bool _isListenTargetActive;
+    private bool _isExclusiveModeAllowed;
+    private bool _isExclusiveControlHeld;
+    private uint? _exclusiveControlHolderPid;
+    private EqualizerApoState _equalizerApoState;
     private DeviceState _state;
     private bool _disposed;
 
@@ -119,6 +124,16 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         get => _interfaceFriendlyName;
         private set { if (_interfaceFriendlyName != value) { _interfaceFriendlyName = value; OnPropertyChanged(); } }
+    }
+
+    // Compact summary of PKEY_AudioEngine_DeviceFormat, e.g. "2 channel, 16 bit, 48000 Hz".
+    // Null when the property is missing or the blob is too short to parse - bound TextBlocks
+    // collapse to empty in that case. Refreshed in place when the OS reports a format change
+    // from the Sound Control Panel's Advanced tab.
+    public string? DefaultFormat
+    {
+        get => _defaultFormat;
+        private set { if (_defaultFormat != value) { _defaultFormat = value; OnPropertyChanged(); } }
     }
 
     public bool IsDefault
@@ -223,6 +238,97 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// happening - either Listen is off, or it's on but pointing at a disabled / disconnected target.
     /// </summary>
     public bool IsListenButtonActive => _isListeningToThisDevice && _isListenTargetActive;
+
+    /// <summary>
+    /// Mirrors mmsys.cpl Advanced > "Allow applications to take exclusive control of this device".
+    /// Drives the flyout's exclusive-mode button between full-bright (allowed) and dim (disallowed).
+    /// Backend stub - the read path returns the field default (false) until the endpoint property
+    /// store layout has been verified against an authoritative reference. The setter is wired so
+    /// future detection code (re-probing on OnPropertyValueChanged) lights the UI up unchanged.
+    /// </summary>
+    public bool IsExclusiveModeAllowed
+    {
+        get => _isExclusiveModeAllowed;
+        internal set
+        {
+            if (_isExclusiveModeAllowed == value) return;
+            _isExclusiveModeAllowed = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// True when an audio session on this endpoint is currently holding the device in exclusive
+    /// mode, i.e. has called IAudioClient::Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE) successfully and
+    /// is streaming. Drives the lock / unlock glyph swap on the device-row button. Backend stub -
+    /// requires either an active IAudioClient probe per device or an IAudioSessionEvents subscription
+    /// for the disconnect-reason ExclusiveModeOverride; until that lands the property stays false.
+    /// </summary>
+    public bool IsExclusiveControlHeld
+    {
+        get => _isExclusiveControlHeld;
+        internal set
+        {
+            if (_isExclusiveControlHeld == value) return;
+            _isExclusiveControlHeld = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// PID of the process currently holding exclusive control of this endpoint, or null when
+    /// nothing is. Bound by the mini-glyph overlay on app icons so the holding app's tile gets
+    /// the lock decoration. Stays null while <see cref="IsExclusiveControlHeld"/> backend is stubbed.
+    /// </summary>
+    public uint? ExclusiveControlHolderPid
+    {
+        get => _exclusiveControlHolderPid;
+        internal set
+        {
+            if (_exclusiveControlHolderPid == value) return;
+            _exclusiveControlHolderPid = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Equalizer APO state for this endpoint. Drives the equalizer-button glyph between
+    /// full-bright (Running) and dim (everything else), and selects the click action between
+    /// uninstall and install / locate. Stub - always reports the system-wide
+    /// <see cref="EqualizerApoState.NotAvailable"/> until the detection backend lands.
+    /// </summary>
+    public EqualizerApoState EqualizerApoState
+    {
+        get => _equalizerApoState;
+        internal set
+        {
+            if (_equalizerApoState == value) return;
+            _equalizerApoState = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Flips the "Allow applications to take exclusive control" bit. Stub - the registry write +
+    /// audio service notify path is not implemented yet. The intent shape is preserved here so
+    /// the click handler can call into one method and the wiring stays unchanged once the backend
+    /// lands.
+    /// </summary>
+    internal void ToggleAllowExclusiveControl()
+    {
+        WPFLog.Log($"AudioDevice.ToggleAllowExclusiveControl({FriendlyName}): backend not implemented (stub)");
+    }
+
+    /// <summary>
+    /// Two-state toggle on the equalizer-APO button. Running -> uninstall; anything else -> install
+    /// and enable enhancements. Stub - the install / uninstall paths are not implemented yet per
+    /// project plan (UI lands first; the integration goes in once the EAPO detection / install
+    /// scaffolding is filled in).
+    /// </summary>
+    internal void ToggleEqualizerApo()
+    {
+        WPFLog.Log($"AudioDevice.ToggleEqualizerApo({FriendlyName}, state={EqualizerApoState}): backend not implemented (stub)");
+    }
 
     // Registry-only ghost: the endpoint exists in the user's audio device registry but no driver
     // is currently loaded for it. NotPresent endpoints accumulate across years of plugged USB DACs,
@@ -428,6 +534,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         _volumeThrottlerKey = "endpoint:" + Id;
 
         (_friendlyName, _deviceDescription, _interfaceFriendlyName) = ResolveDeviceNames(device);
+        _defaultFormat = ResolveDefaultFormat(device);
 
         device.GetState(out uint stateRaw);
         _state = (DeviceState)stateRaw;
@@ -640,6 +747,21 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     internal void UpgradeFromActiveState()
     {
         if (_endpointVolume == null) TryActivateProxies();
+    }
+
+    /// <summary>
+    /// Plays a short PCM wav through this endpoint via WASAPI shared mode. Used by the volume-
+    /// change feedback ding so the sound comes out of the device the user just adjusted instead
+    /// of the system default. No-op on capture endpoints (microphones don't render audio) and on
+    /// devices not currently in the Active state.
+    /// We pass the endpoint id (not _device) because the playback runs on a threadpool worker and
+    /// the IMMDevice RCW is bound to the WPF UI-thread STA - re-acquiring on the worker is the
+    /// supported way to cross apartments.
+    /// </summary>
+    internal void PlayChangeFeedback(byte[] wavBytes)
+    {
+        if (_disposed || DataFlow != EDataFlow.eRender || !IsActive || string.IsNullOrEmpty(Id)) return;
+        EndpointSoundPlayback.PlayAsync(Id, wavBytes);
     }
 
     /// <summary>
@@ -966,6 +1088,121 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         InterfaceFriendlyName = iface;
     }
 
+    /// <summary>
+    /// Re-read PKEY_AudioEngine_DeviceFormat and update <see cref="DefaultFormat"/>. Invoked by
+    /// the manager when OnPropertyValueChanged fires for the format pid on this device id, so the
+    /// flyout's compact format readout tracks live changes from the Sound Control Panel.
+    /// </summary>
+    internal void RefreshDefaultFormatFromStore()
+    {
+        if (_disposed) return;
+        DefaultFormat = ResolveDefaultFormat(_device);
+    }
+
+    /// <summary>
+    /// Probes which (bit depth, sample rate) combinations the audio engine accepts on this
+    /// endpoint in shared mode. Channel count and channel mask come from the endpoint's current
+    /// default format - we vary only bits and rate, matching mmsys.cpl's Default Format dropdown.
+    /// Returns an empty list (not null) when the endpoint can't be activated or has no readable
+    /// current format, so callers can branch on Count alone.
+    /// </summary>
+    internal List<(int Bits, int SampleRate)> EnumerateSupportedFormats()
+    {
+        List<(int, int)> empty = new();
+        if (_disposed || !IsActive) return empty;
+
+        byte[]? template = ReadCurrentFormatBlob();
+        if (template == null || template.Length < 18) return empty;
+
+        // No Initialize required - IsFormatSupported is a pre-init query.
+        int hr = _device.Activate(typeof(IAudioClient).GUID, ClsCtx.ALL, IntPtr.Zero, out object? clientObj);
+        if (hr < 0 || clientObj == null) return empty;
+        IAudioClient client = (IAudioClient)clientObj;
+
+        try
+        {
+            ushort channels = BitConverter.ToUInt16(template, 2);
+            // Sort: channel count, then bit depth, then sample rate. Channel count is locked to
+            // the current format here, so the iteration is bit-depth-grouped with rate ascending
+            // inside each group - the menu reads "all 16-bit options, then all 24-bit, then 32".
+            int[] bitDepths = { 16, 24, 32 };
+            int[] sampleRates = { 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
+
+            List<(int, int)> accepted = new();
+            foreach (int bits in bitDepths)
+            {
+                foreach (int rate in sampleRates)
+                {
+                    byte[] candidate = BuildFormatBlob(channels, (ushort)bits, (uint)rate);
+                    IntPtr p = Marshal.AllocHGlobal(candidate.Length);
+                    IntPtr closest = IntPtr.Zero;
+                    try
+                    {
+                        Marshal.Copy(candidate, 0, p, candidate.Length);
+                        // Shared-mode probe with the "structurally valid?" predicate. The HRESULTs:
+                        //   S_OK     - format equals the engine's current mix format
+                        //   S_FALSE  - format valid; engine would resample to it (closest in ppClosest)
+                        //   AUDCLNT_E_UNSUPPORTED_FORMAT - structurally invalid
+                        // mmsys.cpl's Default Format list is the S_OK-or-S_FALSE set: anything the
+                        // engine accepts via shared-mode resampling. Filtering to just S_OK collapses
+                        // the menu to a single row (the current format).
+                        int probeHr = client.IsFormatSupported(AudioClientShareMode.Shared, p, out closest);
+                        if (probeHr == AudioHResults.S_OK || probeHr == AudioHResults.S_FALSE)
+                            accepted.Add((bits, rate));
+                    }
+                    finally
+                    {
+                        if (closest != IntPtr.Zero) Marshal.FreeCoTaskMem(closest);
+                        Marshal.FreeHGlobal(p);
+                    }
+                }
+            }
+            return accepted;
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.EnumerateSupportedFormats({FriendlyName}): {ex.Message}");
+            return empty;
+        }
+        finally
+        {
+            Marshal.FinalReleaseComObject(client);
+        }
+    }
+
+    /// <summary>
+    /// Writes a new default mix format to this endpoint via IPolicyConfig::SetDeviceFormat,
+    /// preserving the endpoint's current channel layout / SubFormat from PKEY_AudioEngine_DeviceFormat.
+    /// Off-loaded to the threadpool through the shared single-flight gate (same as SetAsDefault /
+    /// SetEnabled) - the audio service blocks for hundreds of ms here while it tears the engine
+    /// down and back up at the new rate. The DefaultFormat property updates when the resulting
+    /// OnPropertyValueChanged callback fires for the format pid.
+    /// </summary>
+    internal void SetDeviceFormat(int bits, int sampleRate)
+    {
+        if (_disposed || string.IsNullOrEmpty(Id)) return;
+
+        byte[]? template = ReadCurrentFormatBlob();
+        if (template == null || template.Length < 18) return;
+        ushort channels = BitConverter.ToUInt16(template, 2);
+        byte[] blob = BuildFormatBlob(channels, (ushort)bits, (uint)sampleRate);
+
+        string id = Id;
+        string friendlyName = FriendlyName;
+
+        RunPolicyConfigCall(client =>
+        {
+            IntPtr pBlob = Marshal.AllocHGlobal(blob.Length);
+            try
+            {
+                Marshal.Copy(blob, 0, pBlob, blob.Length);
+                int hr = client.SetDeviceFormat(id, pBlob, pBlob);
+                if (hr < 0) WPFLog.Log($"AudioDevice.SetDeviceFormat({friendlyName}, {bits}-bit/{sampleRate}Hz): hr=0x{hr:X8}");
+            }
+            finally { Marshal.FreeHGlobal(pBlob); }
+        }, $"SetDeviceFormat({friendlyName}, {bits}-bit/{sampleRate}Hz)");
+    }
+
     // Reads the trio of name properties off the endpoint property store in one pass:
     // composite FriendlyName, endpoint DeviceDesc ("Speakers"), and DeviceInterface FriendlyName
     // ("Realtek(R) Audio"). Each component falls back to the composite name when its specific
@@ -1007,6 +1244,133 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         {
             return null;
         }
+    }
+
+    // Reads PKEY_AudioEngine_DeviceFormat as a raw byte[] - the WAVEFORMATEX(TENSIBLE) blob
+    // backing both the format readout and the format-picker probe. Returns null on disabled /
+    // unplugged endpoints (no property or empty blob) and on COM exceptions.
+    private byte[]? ReadCurrentFormatBlob()
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            _device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            PROPERTYKEY key = PropertyKeys.PKEY_AudioEngine_DeviceFormat;
+            store.GetValue(ref key, out PROPVARIANT pv);
+            try { return pv.GetBlobBytes(); }
+            finally { Ole32.PropVariantClear(ref pv); }
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (store != null) Marshal.FinalReleaseComObject(store);
+        }
+    }
+
+    // Synthesizes a 40-byte WAVEFORMATEXTENSIBLE byte image for the given (channels, bits, rate).
+    // SubFormat is always KSDATAFORMAT_SUBTYPE_PCM and the channel mask is the standard
+    // KSAUDIO_SPEAKER_* layout for the channel count - no carry-over from the device's current
+    // format. Mirrors the integer-PCM-only set mmsys.cpl's Default Format dropdown emits.
+    private static byte[] BuildFormatBlob(ushort channels, ushort bits, uint sampleRate)
+    {
+        const ushort WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
+        const ushort EXTENSIBLE_CB_SIZE = 22;
+
+        ushort blockAlign = (ushort)(channels * (bits / 8));
+        uint avgBytesPerSec = sampleRate * blockAlign;
+        uint mask = channels switch
+        {
+            1 => 0x4u,                              // KSAUDIO_SPEAKER_MONO (FRONT_CENTER)
+            2 => 0x3u,                              // KSAUDIO_SPEAKER_STEREO (FL | FR)
+            4 => 0x33u,                             // KSAUDIO_SPEAKER_QUAD
+            6 => 0x3Fu,                             // KSAUDIO_SPEAKER_5POINT1
+            8 => 0xFFu,                             // KSAUDIO_SPEAKER_7POINT1
+            _ => channels >= 32 ? 0u : (1u << channels) - 1,
+        };
+
+        byte[] ext = new byte[40];
+        BitConverter.GetBytes(WAVE_FORMAT_EXTENSIBLE).CopyTo(ext, 0);
+        BitConverter.GetBytes(channels).CopyTo(ext, 2);
+        BitConverter.GetBytes(sampleRate).CopyTo(ext, 4);
+        BitConverter.GetBytes(avgBytesPerSec).CopyTo(ext, 8);
+        BitConverter.GetBytes(blockAlign).CopyTo(ext, 12);
+        BitConverter.GetBytes(bits).CopyTo(ext, 14);
+        BitConverter.GetBytes(EXTENSIBLE_CB_SIZE).CopyTo(ext, 16);
+        BitConverter.GetBytes(bits).CopyTo(ext, 18);
+        BitConverter.GetBytes(mask).CopyTo(ext, 20);
+        PropertyKeys.KSDATAFORMAT_SUBTYPE_PCM.ToByteArray().CopyTo(ext, 24);
+        return ext;
+    }
+
+    // Reads PKEY_AudioEngine_DeviceFormat and reduces the WAVEFORMATEX(TENSIBLE) blob to the
+    // three numbers Sound Control Panel surfaces: channel count, bit depth, sample rate. Returns
+    // null on disabled / unplugged endpoints (no property or empty blob), on parse failures, and
+    // on any COM exception - bound TextBlocks just render empty in those cases.
+    private static string? ResolveDefaultFormat(IMMDevice device)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            device.OpenPropertyStore(0 /* STGM_READ */, out store);
+
+            PROPERTYKEY key = PropertyKeys.PKEY_AudioEngine_DeviceFormat;
+            store.GetValue(ref key, out PROPVARIANT pv);
+            try
+            {
+                (ushort channels, ushort bits, uint sampleRate)? parsed = ParseFormatBlob(pv.GetBlobBytes());
+                if (parsed == null) return null;
+                (ushort channels, ushort bits, uint sampleRate) p = parsed.Value;
+                return $"{p.channels} channel, {p.bits} bit, {p.sampleRate} Hz";
+            }
+            finally { Ole32.PropVariantClear(ref pv); }
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (store != null) Marshal.FinalReleaseComObject(store);
+        }
+    }
+
+    // Pulls (channels, bits, rate) out of a WAVEFORMATEX(TENSIBLE) blob. For EXTENSIBLE the
+    // surfaced bit depth is wValidBitsPerSample (the actually-used bits), not wBitsPerSample
+    // (the container size) - matches how mmsys.cpl labels 24-in-32 as "24 bit". Returns null
+    // when the blob is too short to parse.
+    private static (ushort Channels, ushort Bits, uint SampleRate)? ParseFormatBlob(byte[]? blob)
+    {
+        // WAVEFORMATEX is 18 bytes (16 fixed + 2 cbSize). Anything shorter can't be parsed.
+        if (blob == null || blob.Length < 18) return null;
+
+        ushort formatTag = BitConverter.ToUInt16(blob, 0);
+        ushort channels = BitConverter.ToUInt16(blob, 2);
+        uint sampleRate = BitConverter.ToUInt32(blob, 4);
+        ushort bits = BitConverter.ToUInt16(blob, 14);
+
+        const ushort WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
+        if (formatTag == WAVE_FORMAT_EXTENSIBLE && blob.Length >= 22)
+        {
+            ushort valid = BitConverter.ToUInt16(blob, 18);
+            if (valid > 0) bits = valid;
+        }
+        return (channels, bits, sampleRate);
+    }
+
+    /// <summary>
+    /// Current default format split into raw numbers - the channel-count prefix and the
+    /// (bits, rate) selection the format-picker context menu highlights. Null when the property
+    /// is missing or the blob is too short.
+    /// </summary>
+    internal (int Channels, int Bits, int SampleRate)? GetCurrentFormat()
+    {
+        (ushort, ushort, uint)? parsed = ParseFormatBlob(ReadCurrentFormatBlob());
+        if (parsed == null) return null;
+        (ushort channels, ushort bits, uint rate) = parsed.Value;
+        return ((int)channels, (int)bits, (int)rate);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

@@ -23,6 +23,7 @@ internal sealed class AudioAppGroup(string appId, Dispatcher dispatcher) : INoti
 
     private float _peakValueMin;
     private float _peakValueMax;
+    private bool _isExclusiveControlHolder;
     private bool _disposed;
 
     public string AppId { get; } = appId;
@@ -89,6 +90,18 @@ internal sealed class AudioAppGroup(string appId, Dispatcher dispatcher) : INoti
     {
         get => _peakValueMax;
         private set { if (Math.Abs(value - _peakValueMax) > 0.001f) { _peakValueMax = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>
+    /// True when one of this group's sessions is the process currently holding the parent device
+    /// in exclusive mode. Drives the mini-glyph lock overlay on the app icon. Backend stub:
+    /// AudioDevice pushes this true when its <see cref="AudioDevice.ExclusiveControlHolderPid"/>
+    /// matches any session's PID. Until that detection lands the flag stays false.
+    /// </summary>
+    public bool IsExclusiveControlHolder
+    {
+        get => _isExclusiveControlHolder;
+        internal set { if (_isExclusiveControlHolder != value) { _isExclusiveControlHolder = value; OnPropertyChanged(); } }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -135,6 +135,22 @@ public enum AppDrawerStackDirection
 }
 
 /// <summary>
+/// How the icon grid anchors its trailing partial row (or partial column, in vertical-flow stack
+/// directions).
+///   Off            -- partial group hugs the left / top edge, full rows always left-anchored.
+///   Centered       -- partial group is centered along the cross axis; full rows still left-anchored.
+///   CenteredSoftMax -- partial group is left-anchored at the position a centered "soft-max"-icon
+///                      row would occupy, so icons don't shift as the row grows from 1 up to soft-max.
+///                      Past the soft-max count, the row switches to fully centered behavior.
+/// </summary>
+public enum AppDrawerIconsCenterMode
+{
+    Off,
+    Centered,
+    CenteredSoftMax,
+}
+
+/// <summary>
 /// A selectable volume-slider thumb glyph, stored with its own display properties
 /// (font family, font size, width, height, horizontal scale) so that differently-proportioned glyphs
 /// render correctly both in the dropdown preview and on the slider itself.
@@ -357,9 +373,10 @@ public class AppSettings
     // Apply a perceptual (exponential) curve when mapping the slider position to the system volume,
     // so equal slider deltas feel like equal loudness deltas. Off by default; raw linear mapping.
     public bool UseLogarithmicVolumeScale { get; set; } = false;
-    // Audible feedback on device-slider changes only (not per-app sliders).
-    // Plays the Windows default-beep system sound on mouse-up after a click/drag and on each wheel notch
-    // over the device row, mirroring the OS volume slider's release feedback.
+    // Audible feedback on playback-device slider changes only (not per-app sliders, not capture devices).
+    // Plays the same wav per-app feedback uses but routed through the specific render endpoint the user
+    // just adjusted (WASAPI shared mode), so the ding comes out of that device instead of the system
+    // default. Fires on mouse-up after a click/drag and on each wheel notch over the device row.
     public bool PlayDeviceVolumeChangeSound { get; set; } = true;
     // Same idea for per-app sliders. The wav plays through this app's audio session at MediaPlayer.Volume
     // scaled to the target app's slider value, so the feedback's loudness matches what the user just dialed
@@ -697,12 +714,20 @@ public class AppSettings
     // Sliders for visual consistency with the playback drawers.
     public AppDrawerDisplayType RecordingAppDrawerDisplayType { get; set; } = AppDrawerDisplayType.Icons;
 
-    // Icon-grid sub-options. Centered flips the grid from left-anchored (the default) to
-    // center-anchored, which only changes how a partial last row reads. Scale is an integer percent
-    // applied to the icon visuals (Image + fallback / mute glyphs) so the user can bump them larger
-    // without changing the 8-per-row slot grid. Defaults to 115 so the icons read a touch larger
-    // than the slider-drawer baseline.
-    public bool AppDrawerIconsCentered { get; set; } = false;
+    // Icon-grid sub-options. Center mode picks how a partial trailing row reads: Off keeps it
+    // left-anchored; Centered shifts it to the cross-axis center; CenteredSoftMax left-anchors it
+    // at the position a centered soft-max-icon row would occupy (so icons don't visibly shift as
+    // the row grows from 1 up to soft-max), then crosses over to fully centered once exceeded.
+    // Scale is an integer percent applied to the icon visuals (Image + fallback / mute glyphs) so
+    // the user can bump them larger without changing the slot grid. Defaults to 115 so icons read
+    // a touch larger than the slider-drawer baseline.
+    // Soft-max + icons-per-row defaults / clamps are exposed as consts so the WPF panel DP, the
+    // Window-side sanitiser, and the property initializer all reference one source of truth.
+    public const int AppDrawerIconsCenterSoftMaxDefault = 7;
+    public const int AppDrawerIconsCenterSoftMaxMin = 1;
+    public const int AppDrawerIconsCenterSoftMaxMax = 16;
+    public AppDrawerIconsCenterMode AppDrawerIconsCenterMode { get; set; } = AppDrawerIconsCenterMode.Off;
+    public int AppDrawerIconsCenterSoftMax { get; set; } = AppDrawerIconsCenterSoftMaxDefault;
     public int AppDrawerIconScalePercent { get; set; } = 115;
 
     // Maximum icons per row in the grid drawer. The slot grid auto-shrinks the cell width when this
@@ -710,7 +735,10 @@ public class AppSettings
     // the grid is just visually narrower.
     // In vertical stack-direction modes (LeftRight / RightLeft) this same value caps icons per
     // column instead -- one knob covers both axes.
-    public int AppDrawerIconsPerRow { get; set; } = 9;
+    public const int AppDrawerIconsPerRowDefault = 9;
+    public const int AppDrawerIconsPerRowMin = 1;
+    public const int AppDrawerIconsPerRowMax = 16;
+    public int AppDrawerIconsPerRow { get; set; } = AppDrawerIconsPerRowDefault;
 
     // Stack direction for the icon grid. Auto resolves at render time against FlyoutDeviceLayout so
     // the first app always sits closest to its device row regardless of which side the apps are on.

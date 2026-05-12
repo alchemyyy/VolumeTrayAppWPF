@@ -242,10 +242,25 @@
     <value>Full sliders</value>
   </data>
   <data name="Settings_Flyout_AppDrawerIconsCentered_Title" xml:space="preserve">
-    <value>Center the icon grid</value>
+    <value>Icon grid centering</value>
   </data>
   <data name="Settings_Flyout_AppDrawerIconsCentered_Description" xml:space="preserve">
-    <value>Center-anchors the icon grid inside the drawer so a partial last row sits in the middle instead of hugging the left edge.</value>
+    <value>How the trailing partial row anchors. Off keeps it left-aligned; Centered shifts it to the middle; Centered soft-max left-anchors at the position a centered soft-max-icon row would occupy until the row exceeds soft-max, then crosses over to fully centered.</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsCenterMode_Off" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsCenterMode_Centered" xml:space="preserve">
+    <value>Centered</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsCenterMode_SoftMax" xml:space="preserve">
+    <value>Centered soft-max</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsCenterSoftMax_Title" xml:space="preserve">
+    <value>Soft-max width (icons)</value>
+  </data>
+  <data name="Settings_Flyout_AppDrawerIconsCenterSoftMax_Description" xml:space="preserve">
+    <value>Anchors the growing row at the position a centered row of this many icons would occupy. Past this count the layout switches to fully centered.</value>
   </data>
   <data name="Settings_Flyout_AppDrawerIconScale_Title" xml:space="preserve">
     <value>Icon scale (percent)</value>
@@ -377,10 +392,10 @@
     <value>Play a sound when changing app volume</value>
   </data>
   <data name="Settings_General_PlayDeviceVolumeChangeSound_Description" xml:space="preserve">
-    <value>Play the Windows default beep when you change the volume on the device slider. Per-app sliders stay silent.</value>
+    <value>Play a beep through the playback device whose slider you adjust. Recording devices and per-app sliders stay silent.</value>
   </data>
   <data name="Settings_General_PlayDeviceVolumeChangeSound_Title" xml:space="preserve">
-    <value>Play a sound when changing device volume</value>
+    <value>Play a sound when changing playback device volume</value>
   </data>
   <data name="Settings_General_RequiresAdmin_Suffix" xml:space="preserve">
     <value> (requires admin)</value>
@@ -751,6 +766,39 @@ Target: {1}</value>
   </data>
   <data name="Flyout_ListenMenu_DefaultPlaybackDevice" xml:space="preserve">
     <value>Default Playback Device</value>
+  </data>
+  <data name="Flyout_ExclusiveMode_Tooltip_Allowed" xml:space="preserve">
+    <value>Exclusive mode is allowed. Click to disallow apps from taking exclusive control of this device.</value>
+  </data>
+  <data name="Flyout_ExclusiveMode_Tooltip_Held" xml:space="preserve">
+    <value>An app is currently holding this device in exclusive mode. Click to disallow exclusive control.</value>
+  </data>
+  <data name="Flyout_ExclusiveMode_Tooltip_Disallowed" xml:space="preserve">
+    <value>Exclusive mode is disallowed. Click to allow apps to take exclusive control of this device.</value>
+  </data>
+  <data name="Flyout_EqualizerApo_Tooltip_Running" xml:space="preserve">
+    <value>Equalizer APO is running on this device. Click to uninstall. Ctrl+click or right-click: open the Configuration Editor.</value>
+  </data>
+  <data name="Flyout_EqualizerApo_Tooltip_EnhancementsOff" xml:space="preserve">
+    <value>Equalizer APO is installed but enhancements are disabled for this device. Click to enable. Ctrl+click or right-click: open the Configuration Editor.</value>
+  </data>
+  <data name="Flyout_EqualizerApo_Tooltip_NotInstalled" xml:space="preserve">
+    <value>Equalizer APO is not installed on this device. Click to install. Ctrl+click or right-click: open the Configuration Editor.</value>
+  </data>
+  <data name="Flyout_EqualizerApo_Tooltip_NotAvailable" xml:space="preserve">
+    <value>Equalizer APO is not detected on this system. Click for installation options.</value>
+  </data>
+  <data name="EqualizerApo_NotAvailable_Title" xml:space="preserve">
+    <value>Equalizer APO not detected</value>
+  </data>
+  <data name="EqualizerApo_NotAvailable_Body" xml:space="preserve">
+    <value>Equalizer APO was not found on this system. Set its install location in the app settings, or download the latest x64 installer.</value>
+  </data>
+  <data name="EqualizerApo_NotAvailable_DownloadButton" xml:space="preserve">
+    <value>Download installer</value>
+  </data>
+  <data name="EqualizerApo_NotAvailable_OpenSettingsButton" xml:space="preserve">
+    <value>Open settings</value>
   </data>
   <data name="Tray_Bluetooth" xml:space="preserve">
     <value>Bluetooth</value>

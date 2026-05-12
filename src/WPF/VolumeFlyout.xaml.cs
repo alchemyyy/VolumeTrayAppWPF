@@ -17,6 +17,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio;
 using VolumeTrayAppWPF.Interop;
+using VolumeTrayAppWPF.Localization;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.WPF.Utils;
@@ -186,9 +187,24 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     public AppDrawerDisplayType RecordingAppDrawerDisplayType =>
         _appSettings?.RecordingAppDrawerDisplayType ?? AppDrawerDisplayType.Icons;
 
-    // True when the icon grid is configured to center its rows instead of left-anchoring them.
-    // Drives the WrapPanel / ItemsControl style triggers in AppsGridRowTemplate.
-    public bool AppDrawerIconsCentered => _appSettings?.AppDrawerIconsCentered ?? false;
+    // Icon-grid centering mode. Drives the CenteringWrapPanel.CenterMode binding in
+    // AppsGridRowTemplate; AppDrawerIconsCenterSoftMax below feeds the soft-max-specific arm.
+    public AppDrawerIconsCenterMode AppDrawerIconsCenterMode =>
+        _appSettings?.AppDrawerIconsCenterMode ?? AppDrawerIconsCenterMode.Off;
+
+    // Sanitised soft-max width for CenterMode = CenteredSoftMax. Bound to CenteringWrapPanel.CenterSoftMax.
+    // Clamped to [1, 16] so a corrupt settings.xml can't push the value outside the spinner range;
+    // the panel itself further clamps to the current primary-axis count at layout time.
+    public int AppDrawerIconsCenterSoftMax
+    {
+        get
+        {
+            int n = _appSettings?.AppDrawerIconsCenterSoftMax ?? AppSettings.AppDrawerIconsCenterSoftMaxDefault;
+            if (n < AppSettings.AppDrawerIconsCenterSoftMaxMin) return AppSettings.AppDrawerIconsCenterSoftMaxMin;
+            if (n > AppSettings.AppDrawerIconsCenterSoftMaxMax) return AppSettings.AppDrawerIconsCenterSoftMaxMax;
+            return n;
+        }
+    }
 
     // Base icon / glyph sizes routed through DPs so XAML Hot Reload edits to the AppIconImageSize /
     // AppIconGlyphSize resources flow through this property too. The Window's XAML root sets both
@@ -220,6 +236,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         VolumeFlyout self = (VolumeFlyout)d;
         self.OnPropertyChanged(nameof(AppDrawerIconImageSize));
         self.OnPropertyChanged(nameof(AppDrawerIconGlyphSize));
+        self.OnPropertyChanged(nameof(AppDrawerHoverPillSize));
     }
 
     // Per-icon pixel size for the grid drawer's Image. The base comes from BaseAppIconImageSize
@@ -233,6 +250,20 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     public double AppDrawerIconGlyphSize =>
         BaseAppIconGlyphSize * ((_appSettings?.AppDrawerIconScalePercent ?? 100) / 100.0);
 
+    // Side length of the visible hover Border in GridIconTemplate. Icon size plus a 2-px ring,
+    // clamped to the GridSlotSize resource so a high AppDrawerIconScalePercent never bleeds into
+    // adjacent cells. Sits inside the 36x36 AppIconRoot Grid that owns the hit-test, so shrinking
+    // this leaves the click region and grid pitch alone.
+    public double AppDrawerHoverPillSize
+    {
+        get
+        {
+            double slot = (double)FindResource("GridSlotSize");
+            double raw = AppDrawerIconImageSize + 2;
+            return raw > slot ? slot : raw;
+        }
+    }
+
     // Sanitised column count for the icon grid. Bound to CenteringWrapPanel.Columns so the panel
     // wraps at exactly this many cells per row and sizes itself from its own ItemWidth. Clamped to
     // [1, 16] so a corrupt settings.xml can't collapse the grid or blow it past the screen.
@@ -242,9 +273,9 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         get
         {
-            int n = _appSettings?.AppDrawerIconsPerRow ?? 9;
-            if (n < 1) return 1;
-            if (n > 16) return 16;
+            int n = _appSettings?.AppDrawerIconsPerRow ?? AppSettings.AppDrawerIconsPerRowDefault;
+            if (n < AppSettings.AppDrawerIconsPerRowMin) return AppSettings.AppDrawerIconsPerRowMin;
+            if (n > AppSettings.AppDrawerIconsPerRowMax) return AppSettings.AppDrawerIconsPerRowMax;
             return n;
         }
     }
@@ -342,9 +373,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(ShowListenButtonInFlyout));
             OnPropertyChanged(nameof(CaptureActivityIndicator));
             OnPropertyChanged(nameof(RecordingAppDrawerDisplayType));
-            OnPropertyChanged(nameof(AppDrawerIconsCentered));
+            OnPropertyChanged(nameof(AppDrawerIconsCenterMode));
+            OnPropertyChanged(nameof(AppDrawerIconsCenterSoftMax));
             OnPropertyChanged(nameof(AppDrawerIconImageSize));
             OnPropertyChanged(nameof(AppDrawerIconGlyphSize));
+            OnPropertyChanged(nameof(AppDrawerHoverPillSize));
             OnPropertyChanged(nameof(AppDrawerIconsPerRow));
             OnPropertyChanged(nameof(AppDrawerStackDirection));
 
@@ -851,7 +884,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         // Branch on DataContext type rather than element identity: the slider's data context is the
         // device wrapper for device sliders (set on the device-row template) and the AudioAppGroup
         // for session sliders.
-        if (slider.DataContext is AudioDevice) PlayDeviceVolumeFeedback();
+        if (slider.DataContext is AudioDevice device) PlayDeviceVolumeFeedback(device);
         else if (slider.DataContext is AudioAppGroup group) PlayAppVolumeFeedback(group.Volume);
     }
 
@@ -934,7 +967,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
         bool changed = Math.Abs(next - currentPercent) > 0.001;
         device.Volume = (float)(next / 100.0);
-        if (changed) PlayDeviceVolumeFeedback();
+        if (changed) PlayDeviceVolumeFeedback(device);
         e.Handled = true;
     }
 
@@ -955,23 +988,25 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         return null;
     }
 
-    private void PlayDeviceVolumeFeedback()
+    // Routes the volume-change ding through the specific render endpoint the user just adjusted,
+    // so the sound comes out of that device rather than the system default. Capture endpoints are
+    // skipped outright - microphones don't render audio. The throttler key is per-device so a rapid
+    // adjustment to two different devices fires both dings instead of the latest replacing the prior.
+    private void PlayDeviceVolumeFeedback(AudioDevice device)
     {
         if (_appSettings?.PlayDeviceVolumeChangeSound != true) return;
+        if (device.IsCaptureDevice) return;
 
-        Dispatcher uiDispatcher = Dispatcher;
-        _ = _feedbackThrottler.RunAsync(DeviceDingThrottleKey, async ctx =>
+        EnsureAppFeedbackData();
+        byte[]? wav = _wavTemplate;
+        if (wav == null) return;
+
+        string throttleKey = DeviceDingThrottleKey + ":" + device.Id;
+        _ = _feedbackThrottler.RunAsync(throttleKey, async ctx =>
         {
             if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
-            try
-            {
-                await uiDispatcher.InvokeAsync(static () =>
-                {
-                    try { System.Media.SystemSounds.Beep.Play(); }
-                    catch { /* sound playback is best-effort */ }
-                });
-            }
-            catch { /* dispatcher torn down */ }
+            try { device.PlayChangeFeedback(wav); }
+            catch { /* feedback is best-effort */ }
         });
     }
 
@@ -1176,6 +1211,97 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Exclusive-mode button click. Flips the "Allow applications to take exclusive control of this
+    /// device" bit on the endpoint. The held-vs-not-held state is observed (not controlled) by this
+    /// button - clicking it never wrests control from an app already streaming exclusively; it only
+    /// reshapes whether the next exclusive-mode initialization is permitted.
+    /// </summary>
+    private void ExclusiveModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null) return;
+        device.ToggleAllowExclusiveControl();
+    }
+
+    /// <summary>
+    /// Equalizer APO button click. Plain click is the two-state toggle (Running -> uninstall;
+    /// everything else -> install + enable). Ctrl+click opens the Configuration Editor scoped to
+    /// this device. When the APO binary can't be found anywhere on the system, plain click routes
+    /// to the not-available dialog; ctrl+click still tries the editor (no-op stub) so the gesture
+    /// stays consistent across states.
+    /// </summary>
+    private void EqualizerApoButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null) return;
+
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            EqualizerApoMonitor.OpenConfigurationEditor(device);
+            return;
+        }
+
+        if (device.EqualizerApoState == EqualizerApoState.NotAvailable)
+        {
+            ShowEqualizerApoNotAvailableDialog();
+            return;
+        }
+        device.ToggleEqualizerApo();
+    }
+
+    /// <summary>
+    /// Right-click on the equalizer button. Opens the Configuration Editor scoped to this device,
+    /// matching the ctrl+left-click gesture so power users have two equivalent paths to the editor.
+    /// </summary>
+    private void EqualizerApoButton_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null) return;
+        EqualizerApoMonitor.OpenConfigurationEditor(device);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Surfaces the "Equalizer APO not detected" message with two actions: download the latest x64
+    /// installer in the user's browser, or open this app's settings so the user can point us at a
+    /// custom install path. Implemented with a MessageBox for now - matches the existing dialog
+    /// style elsewhere in the app and keeps the touch-up small.
+    /// </summary>
+    private void ShowEqualizerApoNotAvailableDialog()
+    {
+        string title = LocalizationManager.Instance["EqualizerApo_NotAvailable_Title"];
+        string body = LocalizationManager.Instance["EqualizerApo_NotAvailable_Body"];
+        string downloadBtn = LocalizationManager.Instance["EqualizerApo_NotAvailable_DownloadButton"];
+
+        // Simple two-choice prompt: Yes = open the installer page in the default browser; No = cancel.
+        // A richer custom-dialog with a third "Open settings" button would mean introducing a new
+        // window class; deferring that until the settings entry for a custom EAPO path actually exists.
+        MessageBoxResult result = System.Windows.MessageBox.Show(
+            this,
+            $"{body}\n\n{downloadBtn}?",
+            title,
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Information);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                using System.Diagnostics.Process? _ = System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = EqualizerApoMonitor.LatestInstallerUrl,
+                        UseShellExecute = true,
+                    });
+            }
+            catch (Exception ex) { WPFLog.Log($"VolumeFlyout.ShowEqualizerApoNotAvailableDialog: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>
     /// Listen-to-this-device button click. Plain click toggles the enable bit and leaves the
     /// previously-configured target alone; ctrl-click forces enable AND resets the target to
     /// "Default Playback Device" (pid 0 deleted). Right-click is handled separately and opens
@@ -1209,6 +1335,106 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
         ShowListenTargetMenu(fe, device);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Right-click on the device name OR the compact format label opens a picker of every
+    /// (bit depth, sample rate) combination this endpoint accepts in shared mode. Mirrors
+    /// mmsys.cpl's Advanced > Default Format dropdown but inline - the user doesn't have to
+    /// leave the flyout. Wired to both labels so the gesture works on the bigger, easier-to-hit
+    /// name target as well as the small format readout.
+    /// </summary>
+    private void DeviceFormatMenu_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        AudioDevice? device = ResolveDeviceFromContext(fe);
+        if (device == null) return;
+        ShowDefaultFormatMenu(fe, device);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Builds and opens the default-format picker for a single endpoint. Items are
+    /// "{bits} bit, {rate} Hz", grouped by sample rate ascending then bit depth ascending. The
+    /// currently-selected (bits, rate) is checkmarked. Picking an item dispatches
+    /// IPolicyConfig::SetDeviceFormat through the shared single-flight gate; the format label
+    /// updates when the resulting OnPropertyValueChanged callback lands. Probe runs synchronously
+    /// on the dispatcher because IsFormatSupported is a sub-millisecond pre-init query and the
+    /// total candidate count is small (~24).
+    /// </summary>
+    private static void ShowDefaultFormatMenu(FrameworkElement anchor, AudioDevice device)
+    {
+        List<(int Bits, int SampleRate)> formats = device.EnumerateSupportedFormats();
+        if (formats.Count == 0) return;
+
+        // Channel count is locked to the endpoint's current format - prefixed onto every label
+        // so the menu reads the same way the inline format readout does.
+        (int Channels, int Bits, int SampleRate)? current = device.GetCurrentFormat();
+        int channels = current?.Channels ?? 0;
+
+        System.Windows.Controls.ContextMenu menu = new()
+        {
+            PlacementTarget = anchor,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
+
+        foreach ((int bits, int rate) in formats)
+        {
+            int capturedBits = bits;
+            int capturedRate = rate;
+            string label = $"{channels} channel, {bits} bit, {rate} Hz";
+            bool isCurrent = current.HasValue && current.Value.Bits == bits && current.Value.SampleRate == rate;
+
+            // Selected row gets a filled-circle glyph in front of its label so its text shifts
+            // right by the glyph's width - only this item is indented, which makes the active
+            // format pop out of the column. Others use a plain string Header so they stay flush
+            // left. IsCheckable is intentionally NOT set: the global MenuItem template strips the
+            // default check column to avoid a stray white block, so we render our own indicator.
+            object header = isCurrent
+                ? BuildSelectedFormatHeader(label)
+                : label;
+
+            System.Windows.Controls.MenuItem item = new() { Header = header };
+            item.Click += (_, _) => device.SetDeviceFormat(capturedBits, capturedRate);
+            menu.Items.Add(item);
+        }
+
+        // Cap visible height to 8 items; the global ContextMenu template (App.xaml) wraps items in
+        // a ScrollViewer with VerticalScrollBarVisibility=Auto, so anything above the cap scrolls
+        // instead of clipping. Same MaxHeight-only approach the tray icon menu uses, just sized to
+        // a fixed item count instead of the work area. Item-height math: FontSize 14 line-height
+        // (~18) + MenuItem Padding 6,6 (12) + Top/Bottom gap rows 2+2 = ~34px; +8px slack covers
+        // the ContextMenu's Padding and the ScrollViewer's bar gutter.
+        const double FormatMenuItemHeight = 34;
+        const int FormatMenuMaxVisibleItems = 8;
+        if (formats.Count > FormatMenuMaxVisibleItems)
+        {
+            menu.MaxHeight = FormatMenuMaxVisibleItems * FormatMenuItemHeight + 8;
+        }
+
+        menu.IsOpen = true;
+    }
+
+    // Header visual for the selected format row: filled circle glyph + spacer + label text.
+    // The glyph FontSize is small (8) so it visually reads as a bullet rather than competing
+    // with the label, and Center-aligned vertically against the 14pt label baseline.
+    private static StackPanel BuildSelectedFormatHeader(string label)
+    {
+        StackPanel panel = new() { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        panel.Children.Add(new TextBlock
+        {
+            Text = Visuals.GlyphCatalog.CIRCLE,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe Fluent Icons"),
+            FontSize = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0),
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return panel;
     }
 
     /// <summary>

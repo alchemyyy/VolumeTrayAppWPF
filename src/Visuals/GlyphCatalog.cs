@@ -40,6 +40,24 @@ internal static class GlyphCatalog
     public const string MICROPHONE_LISTENING = "\uF12E";  // Mic Listening
     public const string EAR_LISTEN = "\uF270";  // Ear (glyph for capture-device 'Listen to this device' toggle)
 
+    // ===========================================================================
+    // Device-row control button glyphs (exclusive mode, sound settings, equalizer APO)
+    // ===========================================================================
+
+    // Exclusive mode. The "allow applications to take exclusive control" checkbox state and
+    // the "is an app currently holding exclusive control" state are projected onto the same
+    // button - UNLOCK reads "free", LOCK reads "held".
+    public const string LOCK = "\uE72E";  // Lock
+    public const string UNLOCK = "\uE785";  // Unlock
+
+    // Open the device's Windows 11 modern Sound settings page.
+    public const string SETTINGS_SOLID = "\uF8B0";  // Settings Solid
+
+    // Equalizer APO availability. EQUALIZER is the main button glyph; SIGNAL_NOT_CONNECTED is
+    // overlaid via the mini-glyph slot when the APO binary can't be found on the system.
+    public const string EQUALIZER = "\uE9E9";  // Equalizer
+    public const string SIGNAL_NOT_CONNECTED = "\uE871";  // Signal Not Connected
+
 
 
     // Single source of truth for volume-tier glyph selection. Shared by the tray-icon renderer

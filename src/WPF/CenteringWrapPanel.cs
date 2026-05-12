@@ -12,9 +12,11 @@ namespace VolumeTrayAppWPF.WPF;
 /// top-to-bottom. StackDirection swaps this to vertical-flow (items fill top-to-bottom within a
 /// column, columns fill left-to-right) and / or reverses either axis (BottomTop, RightLeft).
 /// Columns caps the primary-axis group: items-per-row in horizontal modes, items-per-column in
-/// vertical ones. CenterLastRow shifts the trailing partial group to be centered along the
-/// cross-axis; full groups stay anchored at the leading edge in either mode.
-/// Auto resolution happens upstream; the panel only sees the four explicit directions.
+/// vertical ones. CenterMode controls how a trailing partial group anchors along the cross axis:
+/// Off (left / top), Centered (mid), CenteredSoftMax (left-anchored at the soft-max-row centered
+/// position, switching to fully centered past CenterSoftMax items). Full groups stay anchored at
+/// the leading edge in all modes.
+/// Auto-direction resolution happens upstream; the panel only sees the four explicit directions.
 /// </summary>
 internal sealed class CenteringWrapPanel : Panel
 {
@@ -26,9 +28,17 @@ internal sealed class CenteringWrapPanel : Panel
         nameof(ItemHeight), typeof(double), typeof(CenteringWrapPanel),
         new FrameworkPropertyMetadata(double.NaN, FrameworkPropertyMetadataOptions.AffectsMeasure));
 
-    public static readonly DependencyProperty CenterLastRowProperty = DependencyProperty.Register(
-        nameof(CenterLastRow), typeof(bool), typeof(CenteringWrapPanel),
-        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsArrange));
+    public static readonly DependencyProperty CenterModeProperty = DependencyProperty.Register(
+        nameof(CenterMode), typeof(AppDrawerIconsCenterMode), typeof(CenteringWrapPanel),
+        new FrameworkPropertyMetadata(
+            AppDrawerIconsCenterMode.Off,
+            FrameworkPropertyMetadataOptions.AffectsArrange));
+
+    public static readonly DependencyProperty CenterSoftMaxProperty = DependencyProperty.Register(
+        nameof(CenterSoftMax), typeof(int), typeof(CenteringWrapPanel),
+        new FrameworkPropertyMetadata(
+            AppSettings.AppDrawerIconsCenterSoftMaxDefault,
+            FrameworkPropertyMetadataOptions.AffectsArrange));
 
     public static readonly DependencyProperty ColumnsProperty = DependencyProperty.Register(
         nameof(Columns), typeof(int), typeof(CenteringWrapPanel),
@@ -52,10 +62,16 @@ internal sealed class CenteringWrapPanel : Panel
         set => SetValue(ItemHeightProperty, value);
     }
 
-    public bool CenterLastRow
+    public AppDrawerIconsCenterMode CenterMode
     {
-        get => (bool)GetValue(CenterLastRowProperty);
-        set => SetValue(CenterLastRowProperty, value);
+        get => (AppDrawerIconsCenterMode)GetValue(CenterModeProperty);
+        set => SetValue(CenterModeProperty, value);
+    }
+
+    public int CenterSoftMax
+    {
+        get => (int)GetValue(CenterSoftMaxProperty);
+        set => SetValue(CenterSoftMaxProperty, value);
     }
 
     // When greater than zero, caps items along the primary axis (per row in horizontal modes, per
@@ -122,11 +138,9 @@ internal sealed class CenteringWrapPanel : Panel
         {
             int perColumn = ResolvePrimary(finalSize.Height, itemH, n);
             int cols = (int)Math.Ceiling((double)n / perColumn);
-            // Trailing partial column is the one whose items spill past a full perColumn fill of preceding columns.
             int lastColStart = (n / perColumn) * perColumn;
             int lastColCount = n - lastColStart;
-            bool centerLast = CenterLastRow && lastColCount > 0 && lastColCount < perColumn;
-            double lastColOffset = centerLast ? (perColumn - lastColCount) * itemH / 2.0 : 0;
+            double lastColOffset = ResolveTrailingGroupOffset(lastColCount, perColumn, itemH);
 
             for (int i = 0; i < n; i++)
             {
@@ -145,11 +159,9 @@ internal sealed class CenteringWrapPanel : Panel
         {
             int perRow = ResolvePrimary(finalSize.Width, itemW, n);
             int rows = (int)Math.Ceiling((double)n / perRow);
-            // Trailing partial row: same logic as before, just renamed for clarity now that vertical-flow exists.
             int lastRowStart = (n / perRow) * perRow;
             int lastRowCount = n - lastRowStart;
-            bool centerLast = CenterLastRow && lastRowCount > 0 && lastRowCount < perRow;
-            double lastRowOffset = centerLast ? (perRow - lastRowCount) * itemW / 2.0 : 0;
+            double lastRowOffset = ResolveTrailingGroupOffset(lastRowCount, perRow, itemW);
 
             for (int i = 0; i < n; i++)
             {
@@ -166,6 +178,34 @@ internal sealed class CenteringWrapPanel : Panel
         }
 
         return finalSize;
+    }
+
+    // Resolves the cross-axis offset applied to every item in the trailing partial group, based on
+    // the current CenterMode. Returns 0 for full groups (lastCount == primary) and empty groups
+    // (lastCount == 0) under every mode -- only a partial trailing group ever shifts.
+    private double ResolveTrailingGroupOffset(int lastCount, int primary, double itemSize)
+    {
+        if (lastCount <= 0 || lastCount >= primary) return 0;
+
+        switch (CenterMode)
+        {
+            case AppDrawerIconsCenterMode.Centered:
+                return (primary - lastCount) * itemSize / 2.0;
+
+            case AppDrawerIconsCenterMode.CenteredSoftMax:
+                int softMax = CenterSoftMax;
+                if (softMax < 1) softMax = 1;
+                if (softMax > primary) softMax = primary;
+                // <= softMax: left-anchored at the position a centered softMax-icon row would occupy,
+                // so adding icons up to softMax doesn't shift earlier items.
+                // > softMax: behave like fully Centered.
+                return lastCount <= softMax
+                    ? (primary - softMax) * itemSize / 2.0
+                    : (primary - lastCount) * itemSize / 2.0;
+
+            default:
+                return 0;
+        }
     }
 
     // Resolves the per-row (horizontal flow) or per-column (vertical flow) cap for one layout pass.
