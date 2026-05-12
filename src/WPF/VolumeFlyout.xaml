@@ -224,12 +224,14 @@
              ControlTemplate.Triggers because Background flows in through TemplateBinding. -->
         <Style x:Key="HeaderIconButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
             <Setter Property="Width" Value="40"/>
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="Template">
+      <Setter Property="Height" Value="28"/>
+            <Setter Property="Margin" Value="0,-3,0,1"/>
+      <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="{DynamicResource CornerRadiusMedium}">
+
+                      <Border Background="{TemplateBinding Background}"
+                              CornerRadius="{DynamicResource CornerRadiusMedium}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -1168,7 +1170,7 @@
                                      AppsBelow flip trigger can override it. -->
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="0"/>
-                                    <Setter Property="Padding" Value="14,10,12,0"/>
+                                    <Setter Property="Padding" Value="14,30,12,0"/>
                                     <Style.Triggers>
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
@@ -1450,7 +1452,7 @@
                         <!-- BasedOn pulls the HeaderIconButtonStyle visuals; the trigger flips the
                              Margin between top-edge and bottom-edge breathing room. -->
                         <Style TargetType="Button" BasedOn="{StaticResource HeaderIconButtonStyle}">
-                            <Setter Property="Margin" Value="0,6,7,0"/>
+                            <Setter Property="Margin" Value="0,3,7,1"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding FlyoutHeaderDock, RelativeSource={RelativeSource AncestorType=Window}}" Value="Bottom">
                                     <Setter Property="Margin" Value="0,0,7,6"/>
