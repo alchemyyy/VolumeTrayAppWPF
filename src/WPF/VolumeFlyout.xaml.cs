@@ -171,6 +171,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     public bool AllowFlyoutUndock => _appSettings?.AllowFlyoutUndock ?? true;
 
+    // Drives DockPanel.Dock for the title-bar row. The cells Grid is the DockPanel's last child so
+    // it always fills the remaining space, regardless of which edge this property docks to. XAML
+    // style triggers also pivot on this property to flip the buttons' Margin between top-edge and
+    // bottom-edge breathing room (see VolumeFlyout.xaml).
+    public Dock FlyoutHeaderDock => _appSettings?.FlyoutHeaderAtBottom == true ? Dock.Bottom : Dock.Top;
+
     // Bound by the listen button's visibility trigger in DeviceRowTemplate. Defaults true so the
     // button stays visible when the settings instance hasn't been wired (test harness / early init).
     public bool ShowListenButtonInFlyout => _appSettings?.ShowListenButtonInFlyout ?? true;
@@ -381,6 +387,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         {
             if (_isUndocked && _appSettings?.AllowFlyoutUndock == false) Redock();
             OnPropertyChanged(nameof(AllowFlyoutUndock));
+            OnPropertyChanged(nameof(FlyoutHeaderDock));
             OnPropertyChanged(nameof(ShowListenButtonInFlyout));
             OnPropertyChanged(nameof(DeviceTitleRowIndex));
             OnPropertyChanged(nameof(DeviceSliderRowIndex));
@@ -404,6 +411,15 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             _renderedRecordingAppDrawer = currentRecordingDrawer;
 
             RebuildCellList(forceFullRebuild: layoutChanged);
+
+            // Header dock flip changes the SettingsButton's window-space Y offset but not the
+            // window height, so OnRenderSizeChanged will not re-clamp on its own. Force a layout
+            // pass and re-anchor so ClampTopForCriticalElement sees the new offset.
+            if (IsVisible)
+            {
+                UpdateLayout();
+                PositionNearTray();
+            }
         });
     }
 
@@ -1213,6 +1229,17 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     /// <summary>Footer Settings button. Hands off to the host; App.xaml.cs opens SettingsWindow.</summary>
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
+
+    /// <summary>
+    /// Titlebar Sound-settings button. Opens the Windows surface picked by
+    /// <see cref="AppSettings.SoundSettingsTarget"/> - mmsys.cpl (classic panel) by default,
+    /// ms-settings:sound when the user has opted into the modern Settings app.
+    /// </summary>
+    private void SoundSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SoundSettingsTarget target = _appSettings?.SoundSettingsTarget ?? SoundSettingsTarget.LegacySoundPanel;
+        DeviceShellLinks.OpenSoundSettings(target);
+    }
 
     private void DeviceIcon_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {

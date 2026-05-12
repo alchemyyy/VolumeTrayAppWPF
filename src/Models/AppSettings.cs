@@ -50,6 +50,18 @@ public enum SliderThumbShape
 }
 
 /// <summary>
+/// Which Windows surface the flyout's Sound-settings titlebar button opens.
+/// LegacySoundPanel: classic mmsys.cpl Sound control panel (the floating window with Playback /
+/// Recording / Sounds / Communications tabs).
+/// WindowsSettingsApp: the modern Settings app's System > Sound page (ms-settings:sound).
+/// </summary>
+public enum SoundSettingsTarget
+{
+    LegacySoundPanel,
+    WindowsSettingsApp,
+}
+
+/// <summary>
 /// Which slice of an audio endpoint's name the tray context menu shows for each device row.
 /// NameAndModel: full FriendlyName, e.g. "Speakers (Realtek(R) Audio)" - displayed as "Name+Model".
 /// Name: PKEY_Device_DeviceDesc only, e.g. "Speakers".
@@ -106,12 +118,14 @@ public enum FlyoutDeviceSortOrder
 /// from the microphone (their session State is Active).
 /// DimInactive (default): icons of non-capturing apps are dimmed, matching how disabled devices are dimmed.
 /// ActiveGlyph: a small overlay glyph is stamped on the icons of actively capturing apps; non-capturers untouched.
+/// HideInactive: non-capturing app rows are collapsed entirely, so only actively-capturing apps remain visible.
 /// None: no visual indication.
 /// </summary>
 public enum CaptureActivityIndicator
 {
     DimInactive,
     ActiveGlyph,
+    HideInactive,
     None,
 }
 
@@ -705,6 +719,16 @@ public class AppSettings
     public bool FlyoutHasSavedPosition { get; set; } = false;
     public double FlyoutLeft { get; set; } = 0;
     public double FlyoutTop { get; set; } = 0;
+
+    // Flyout chrome layout. Flips the title-bar row (Settings cluster + Undock button) between the
+    // top of the flyout (default) and the bottom. Visual only - clamping in PositionNearTray is
+    // layout-agnostic and re-resolves the SettingsButton offset via TransformToAncestor.
+    public bool FlyoutHeaderAtBottom { get; set; } = false;
+
+    // Where the flyout's Sound-settings titlebar button routes. LegacySoundPanel opens mmsys.cpl
+    // (the classic Sound panel) and matches the historical Windows experience; WindowsSettingsApp
+    // routes to ms-settings:sound for users who prefer the modern Settings UI.
+    public SoundSettingsTarget SoundSettingsTarget { get; set; } = SoundSettingsTarget.LegacySoundPanel;
 
     // Flyout device list. FlyoutDeviceLayout governs how each device's row stacks against its apps;
     // FlyoutDeviceSort orders the device list itself. ShowRecordingDevicesInFlyout is the flyout-side

@@ -39,6 +39,9 @@ public partial class DeviceAppDrawersPage : UserControl
             SettingsBindings.SelectComboByTag(
                 AppDrawerIconsCenterModeCombo,
                 settings.AppDrawerIconsCenterMode.ToString());
+            SettingsBindings.SelectComboByTag(
+                CaptureActivityIndicatorCombo,
+                settings.CaptureActivityIndicator.ToString());
 
             SettingsBindings.BindSpinner(
                 AppDrawerIconsCenterSoftMaxBox,

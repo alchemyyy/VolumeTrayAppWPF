@@ -84,10 +84,6 @@ public partial class GeneralPage : UserControl
                 v => settings.IconRetryIntervalMs = v,
                 () => _suppressChangeEvents,
                 SaveAndNotify);
-
-            SettingsBindings.SelectComboByTag(
-                CaptureActivityIndicatorCombo,
-                settings.CaptureActivityIndicator.ToString());
         }
         finally
         {
@@ -160,13 +156,6 @@ public partial class GeneralPage : UserControl
     {
         if (_settings == null) return;
         SettingsBindings.HandleBoolToggle(sender, _settings, SaveAndNotify, () => _suppressChangeEvents);
-    }
-
-    // Tag-based enum combo dispatcher (currently feeds CaptureActivityIndicatorCombo).
-    private void EnumCombo_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        if (_settings == null) return;
-        SettingsBindings.HandleEnumCombo(sender, _settings, SaveAndNotify, () => _suppressChangeEvents, this);
     }
 
     /// <summary>

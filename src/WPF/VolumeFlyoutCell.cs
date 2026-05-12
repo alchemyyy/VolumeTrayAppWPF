@@ -145,6 +145,9 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
     {
         OnPropertyChanged(nameof(SliderDrawerMaxHeight));
         OnPropertyChanged(nameof(GridDrawerMaxHeight));
+        // HideInactive depends on a settings flag, so toggling the indicator must rerun the
+        // filter; cheap enough to do unconditionally on any settings change.
+        RebuildVisibleGroups();
     }
 
 #if DEBUG_SPAWN_APP_DUMMY_ON_DEVICE_VOLUME_CHANGE
@@ -274,6 +277,15 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
         if (g.IsSystemSounds) return false;
         if (g.Sessions.Count == 0) return false;
         if (_ownAppId != null && string.Equals(g.AppId, _ownAppId, StringComparison.Ordinal)) return false;
+        // HideInactive on a capture device: skip sessions that aren't actively using the mic,
+        // so the drawer compacts down to just the live capturers. Identical to DimInactive's
+        // gating conditions (capture + non-Active) but acts on inclusion instead of opacity.
+        if (IsCapture
+            && AppServices.Settings is { CaptureActivityIndicator: CaptureActivityIndicator.HideInactive }
+            && g.State != AudioSessionState.Active)
+        {
+            return false;
+        }
         return true;
     }
 

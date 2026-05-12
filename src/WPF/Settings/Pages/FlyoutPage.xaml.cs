@@ -28,6 +28,9 @@ public partial class FlyoutPage : UserControl
         {
             RestoreFlyoutUndockedOnStartupToggle.IsChecked = settings.RestoreFlyoutUndockedOnStartup;
             AllowFlyoutUndockToggle.IsChecked = settings.AllowFlyoutUndock;
+            FlyoutHeaderAtBottomToggle.IsChecked = settings.FlyoutHeaderAtBottom;
+
+            SettingsBindings.SelectComboByTag(SoundSettingsTargetCombo, settings.SoundSettingsTarget.ToString());
 
             SettingsBindings.SelectComboByTag(FlyoutDeviceLayoutCombo, settings.FlyoutDeviceLayout.ToString());
             SettingsBindings.SelectComboByTag(

@@ -195,20 +195,6 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <utils:SettingsCard Title="{loc:Loc Settings_General_CaptureActivityIndicator_Title}"
-                               Description="{loc:Loc Settings_General_CaptureActivityIndicator_Description}">
-            <utils:SettingsCard.Control>
-                <ComboBox x:Name="CaptureActivityIndicatorCombo"
-                          Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
-                          Tag="CaptureActivityIndicator" SelectionChanged="EnumCombo_Changed">
-                    <ComboBoxItem Tag="DimInactive" Content="{loc:Loc Settings_General_CaptureActivityIndicator_DimInactive}"/>
-                    <ComboBoxItem Tag="ActiveGlyph" Content="{loc:Loc Settings_General_CaptureActivityIndicator_ActiveGlyph}"/>
-                    <ComboBoxItem Tag="None" Content="{loc:Loc Settings_General_CaptureActivityIndicator_None}"/>
-                </ComboBox>
-            </utils:SettingsCard.Control>
-        </utils:SettingsCard>
-
         <utils:SettingsCard x:Name="LogarithmicVolumeScaleCard"
                                Title="{loc:Loc Settings_General_LogarithmicVolumeScale_Title}"
                                Description="{loc:Loc Settings_General_LogarithmicVolumeScale_Description}">

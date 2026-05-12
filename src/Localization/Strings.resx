@@ -97,6 +97,9 @@
   <data name="Flyout_Settings_Tooltip" xml:space="preserve">
     <value>Settings</value>
   </data>
+  <data name="Flyout_SoundSettings_Tooltip" xml:space="preserve">
+    <value>Open Windows sound settings</value>
+  </data>
   <data name="Flyout_Undock_Tooltip" xml:space="preserve">
     <value>Undock</value>
   </data>
@@ -169,6 +172,12 @@
   <data name="Settings_Common_Tab_TrayIcon" xml:space="preserve">
     <value>Tray Icon</value>
   </data>
+  <data name="Settings_Flyout_HeaderAtBottom_Description" xml:space="preserve">
+    <value>Render the flyout's title bar (Settings cluster and Undock button) at the bottom of the flyout instead of the top.</value>
+  </data>
+  <data name="Settings_Flyout_HeaderAtBottom_Title" xml:space="preserve">
+    <value>Title bar at the bottom</value>
+  </data>
   <data name="Settings_Flyout_RestoreUndockState_Description" xml:space="preserve">
     <value>When the app launches, restore the flyout's docked or undocked state from the previous session. When off, the flyout always opens docked.</value>
   </data>
@@ -183,6 +192,18 @@
   </data>
   <data name="Settings_Flyout_ShowUndockButton_Title" xml:space="preserve">
     <value>Show undock button</value>
+  </data>
+  <data name="Settings_Flyout_SoundSettingsTarget_Title" xml:space="preserve">
+    <value>Sound settings button target</value>
+  </data>
+  <data name="Settings_Flyout_SoundSettingsTarget_Description" xml:space="preserve">
+    <value>Which Windows surface the flyout's sound-settings titlebar button opens.</value>
+  </data>
+  <data name="Settings_Flyout_SoundSettingsTarget_Legacy" xml:space="preserve">
+    <value>Classic Sound control panel</value>
+  </data>
+  <data name="Settings_Flyout_SoundSettingsTarget_Modern" xml:space="preserve">
+    <value>Windows Settings app</value>
   </data>
   <data name="Settings_Flyout_Visibility_Header" xml:space="preserve">
     <value>Visibility</value>
@@ -622,6 +643,9 @@ Target: {1}</value>
   </data>
   <data name="Settings_General_CaptureActivityIndicator_ActiveGlyph" xml:space="preserve">
     <value>Active glyph</value>
+  </data>
+  <data name="Settings_General_CaptureActivityIndicator_HideInactive" xml:space="preserve">
+    <value>Hide inactive</value>
   </data>
   <data name="Settings_General_CaptureActivityIndicator_None" xml:space="preserve">
     <value>Don't indicate</value>

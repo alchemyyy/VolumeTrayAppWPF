@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using VolumeTrayAppWPF.Audio.Interop;
+using VolumeTrayAppWPF.Models;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -21,6 +22,9 @@ internal static class DeviceShellLinks
     // EscapeDataString it because the ID contains "{" and "}" which are reserved characters.
     private const string UriDevicePropertiesFormat = "ms-settings:sound-properties?endpointId={0}";
 
+    // Root Sound page in the modern Settings app (System > Sound).
+    private const string UriModernSoundSettings = "ms-settings:sound";
+
     private const string TabPlayback = "playback";
     private const string TabRecording = "recording";
     private const string TabSounds = "sounds";
@@ -41,6 +45,29 @@ internal static class DeviceShellLinks
     public static void OpenRecordingTab() => OpenSoundPanel(TabRecording);
     public static void OpenSoundsTab() => OpenSoundPanel(TabSounds);
     public static void OpenCommunicationsTab() => OpenSoundPanel(TabCommunications);
+
+    /// <summary>
+    /// Opens the modern Settings app on the System > Sound page via the ms-settings:sound URI.
+    /// </summary>
+    public static void OpenModernSoundSettings() => LaunchSettingsUri(UriModernSoundSettings);
+
+    /// <summary>
+    /// Dispatches to the legacy mmsys.cpl Playback tab or the modern Settings Sound page based on
+    /// the user's <see cref="SoundSettingsTarget"/> preference. Used by the flyout's titlebar
+    /// Sound-settings button.
+    /// </summary>
+    public static void OpenSoundSettings(SoundSettingsTarget target)
+    {
+        switch (target)
+        {
+            case SoundSettingsTarget.WindowsSettingsApp:
+                OpenModernSoundSettings();
+                break;
+            default:
+                OpenPlaybackTab();
+                break;
+        }
+    }
 
     // Launches a ms-settings: URI through ShellExecute so the registered URI handler picks it up.
     // UseShellExecute = true is load-bearing: the alternative direct-exec path can't open URIs.

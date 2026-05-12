@@ -155,6 +155,21 @@ internal static class PropertyKeys
     public static readonly PROPERTYKEY PKEY_AudioEndpoint_ListenTargetDeviceId = new(
         new Guid(0x24DBB0FC, 0x9311, 0x4B3D, 0x9C, 0xF0, 0x18, 0xFF, 0x15, 0x56, 0x39, 0xD4), 0);
 
+    // "Allow applications to take exclusive control of this device" - the master checkbox in
+    // mmsys.cpl Advanced > Exclusive Mode. Stored as VT_UI4 in
+    // HKLM\...\MMDevices\Audio\{Render|Capture}\{guid}\Properties as REG_DWORD: 1 = allowed,
+    // 0 = disallowed. Absent / VT_EMPTY when never toggled, in which case the OS default is
+    // "allowed". Not in the public Windows SDK headers; same fmtid as PKEY_AudioEndpoint_FormFactor.
+    public static readonly PROPERTYKEY PKEY_AudioEndpoint_AllowExclusiveControl = new(
+        new Guid(0xB3F8FA53, 0x0004, 0x438E, 0x90, 0x03, 0x51, 0xA4, 0x6E, 0x13, 0x9B, 0xFC), 3);
+
+    // "Give exclusive mode applications priority" - the sub-checkbox under the master allow bit.
+    // Same fmtid, pid 4. We yoke it to pid 3 so the flyout button drives both together: enabling
+    // exclusive control re-enables priority; disabling it clears priority too, matching what a
+    // user toggling the master in mmsys.cpl would expect.
+    public static readonly PROPERTYKEY PKEY_AudioEndpoint_ExclusiveModeAppsPriority = new(
+        new Guid(0xB3F8FA53, 0x0004, 0x438E, 0x90, 0x03, 0x51, 0xA4, 0x6E, 0x13, 0x9B, 0xFC), 4);
+
     // Endpoint default mix format. VT_BLOB holding a WAVEFORMATEX (or WAVEFORMATEXTENSIBLE when
     // wFormatTag == 0xFFFE). Same value the Sound Control Panel's Advanced tab edits, and what the
     // audio engine resamples / mixes to before handing buffers to the driver.

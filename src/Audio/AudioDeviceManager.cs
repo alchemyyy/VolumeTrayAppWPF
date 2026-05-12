@@ -410,6 +410,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         UpdateListenTargetActiveness();
     }
 
+    private void RefreshDeviceAllowExclusiveControl(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        AudioDevice? match = FindDeviceById(id);
+        if (match == null) return;
+        match.RefreshAllowExclusiveControlFromStore();
+    }
+
     /// <summary>
     /// Recomputes <see cref="AudioDevice.IsListenTargetActive"/> on every capture endpoint. The
     /// target is either a specific render endpoint id (pid 0 of the listen fmtid) or null meaning
@@ -727,6 +735,15 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             {
                 string id = pwstrDeviceId;
                 _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceDefaultFormat(id));
+            }
+            // mmsys.cpl Advanced > Exclusive Mode > "Allow applications to take exclusive control"
+            // toggles land here. Refresh our cached flag so the flyout's exclusive-mode button
+            // tracks external edits as well as our own ToggleAllowExclusiveControl writes.
+            else if (key.fmtid == PropertyKeys.PKEY_AudioEndpoint_AllowExclusiveControl.fmtid &&
+                key.pid == PropertyKeys.PKEY_AudioEndpoint_AllowExclusiveControl.pid)
+            {
+                string id = pwstrDeviceId;
+                _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceAllowExclusiveControl(id));
             }
             return 0;
         }

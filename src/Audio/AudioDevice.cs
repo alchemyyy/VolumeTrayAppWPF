@@ -242,9 +242,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Mirrors mmsys.cpl Advanced > "Allow applications to take exclusive control of this device".
     /// Drives the flyout's exclusive-mode button between full-bright (allowed) and dim (disallowed).
-    /// Backend stub - the read path returns the field default (false) until the endpoint property
-    /// store layout has been verified against an authoritative reference. The setter is wired so
-    /// future detection code (re-probing on OnPropertyValueChanged) lights the UI up unchanged.
+    /// Seeded from the endpoint property store in the ctor and refreshed by
+    /// <see cref="RefreshAllowExclusiveControlFromStore"/> whenever mmsys.cpl or our own toggle
+    /// path writes the underlying VT_UI4 value via PKEY_AudioEndpoint_AllowExclusiveControl.
     /// </summary>
     public bool IsExclusiveModeAllowed
     {
@@ -259,10 +259,12 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// True when an audio session on this endpoint is currently holding the device in exclusive
-    /// mode, i.e. has called IAudioClient::Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE) successfully and
-    /// is streaming. Drives the lock / unlock glyph swap on the device-row button. Backend stub -
-    /// requires either an active IAudioClient probe per device or an IAudioSessionEvents subscription
-    /// for the disconnect-reason ExclusiveModeOverride; until that lands the property stays false.
+    /// mode (an app called IAudioClient::Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE) and is streaming).
+    /// Drives the lock / unlock glyph swap on the device-row button. Detected via the
+    /// ExclusiveModeOverride disconnect-reason that all shared sessions on this endpoint receive
+    /// when exclusive grabs the device; cleared when a new shared session is created (which can
+    /// only happen once exclusive releases). Cold case - exclusive grabs an endpoint that had
+    /// no active shared sessions - stays undetected until the next playback attempt.
     /// </summary>
     public bool IsExclusiveControlHeld
     {
@@ -309,14 +311,19 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Flips the "Allow applications to take exclusive control" bit. Stub - the registry write +
-    /// audio service notify path is not implemented yet. The intent shape is preserved here so
-    /// the click handler can call into one method and the wiring stays unchanged once the backend
-    /// lands.
+    /// Flips the "Allow applications to take exclusive control" bit on this endpoint by writing
+    /// PKEY_AudioEndpoint_AllowExclusiveControl (VT_UI4, 1 = allowed, 0 = disallowed) through
+    /// IMMDevice.OpenPropertyStore(STGM_WRITE). The audio service picks up the change on the
+    /// next exclusive-mode initialization attempt; shared-mode streams keep running unaffected.
+    /// The follow-up Refresh re-reads in case the audio service normalized the value (e.g.
+    /// promoted VT_EMPTY) and fires PropertyChanged.
     /// </summary>
     internal void ToggleAllowExclusiveControl()
     {
-        WPFLog.Log($"AudioDevice.ToggleAllowExclusiveControl({FriendlyName}): backend not implemented (stub)");
+        if (_disposed) return;
+        bool newValue = !_isExclusiveModeAllowed;
+        WriteAllowExclusiveControl(newValue);
+        RefreshAllowExclusiveControlFromStore();
     }
 
     /// <summary>
@@ -547,6 +554,11 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             (_isListeningToThisDevice, _listenTargetDeviceId) = ReadListenStateFromStore(_device);
         }
 
+        // Exclusive-mode "allow" bit lives on both render and capture endpoints (mmsys.cpl shows
+        // the Advanced > Exclusive Mode checkbox for either). Seed direct, then refresh runs on
+        // mmsys.cpl writes via the manager's OnPropertyValueChanged hook.
+        _isExclusiveModeAllowed = ReadAllowExclusiveControlFromStore(_device);
+
         // Endpoint volume / meter / session manager are only addressable on Active devices.
         // For Disabled / NotPresent / Unplugged endpoints we keep a thin wrapper alive so the
         // tray menu and visibility filters can still reason about them; UpgradeFromActiveState
@@ -654,6 +666,80 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         {
             if (store != null) Marshal.FinalReleaseComObject(store);
         }
+    }
+
+    /// <summary>
+    /// Re-read PKEY_AudioEndpoint_AllowExclusiveControl from the endpoint property store and
+    /// push the result through <see cref="IsExclusiveModeAllowed"/>. Invoked by the manager
+    /// when OnPropertyValueChanged fires for this PKEY (e.g. mmsys.cpl checkbox edits).
+    /// </summary>
+    internal void RefreshAllowExclusiveControlFromStore()
+    {
+        if (_disposed) return;
+        IsExclusiveModeAllowed = ReadAllowExclusiveControlFromStore(_device);
+    }
+
+    private void WriteAllowExclusiveControl(bool allowed)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+
+            // VT_UI4 lives in the low 32 bits of p1; high bits are ignored. mmsys.cpl writes
+            // REG_DWORD 1 / 0 - matching that keeps the value layout identical for round-trips.
+            PROPVARIANT pv = default;
+            pv.vt = PROPVARIANT.VT_UI4;
+            pv.p1 = new IntPtr(allowed ? 1 : 0);
+
+            // pid 3 - the master "Allow applications to take exclusive control" bit.
+            PROPERTYKEY allowKey = PropertyKeys.PKEY_AudioEndpoint_AllowExclusiveControl;
+            store.SetValue(ref allowKey, ref pv);
+
+            // pid 4 - the sub-checkbox "Give exclusive mode applications priority". Yoked to
+            // the master so one button drives both, matching mmsys.cpl's enabled-when-allowed
+            // affordance. Same VT_UI4 / DWORD encoding.
+            PROPERTYKEY priorityKey = PropertyKeys.PKEY_AudioEndpoint_ExclusiveModeAppsPriority;
+            store.SetValue(ref priorityKey, ref pv);
+
+            store.Commit();
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.WriteAllowExclusiveControl({FriendlyName}, allowed={allowed}): {ex.Message}");
+        }
+        finally
+        {
+            if (store != null) Marshal.FinalReleaseComObject(store);
+        }
+    }
+
+    private static bool ReadAllowExclusiveControlFromStore(IMMDevice device)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            PROPERTYKEY key = PropertyKeys.PKEY_AudioEndpoint_AllowExclusiveControl;
+            store.GetValue(ref key, out PROPVARIANT pv);
+            try
+            {
+                // VT_EMPTY (never toggled) means the OS default "allowed" applies. VT_UI4 is the
+                // canonical form mmsys.cpl writes; VT_I4 / VT_BOOL accepted as defensive fallbacks
+                // in case a driver or older build encodes it differently.
+                return pv.vt switch
+                {
+                    PROPVARIANT.VT_EMPTY => true,
+                    PROPVARIANT.VT_UI4 => pv.GetUInt32() != 0,
+                    PROPVARIANT.VT_I4 => pv.p1.ToInt64() != 0,
+                    PROPVARIANT.VT_BOOL => ((short)(pv.p1.ToInt64() & 0xFFFF)) != 0,
+                    _ => true,
+                };
+            }
+            finally { Ole32.PropVariantClear(ref pv); }
+        }
+        catch { return true; }
+        finally { if (store != null) Marshal.FinalReleaseComObject(store); }
     }
 
     private static (bool Enabled, string? TargetDeviceId) ReadListenStateFromStore(IMMDevice device)
@@ -952,9 +1038,27 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // A newly-added Active session wakes the capture engine; recompute so the bound UI flips
         // off MICROPHONE_SLEEP without waiting for the next state-change event.
         RecomputeCaptureSleepingState();
+
+        // Exclusive mode and shared-mode sessions can't coexist on the same endpoint - the audio
+        // engine refuses to create shared-mode sessions while exclusive holds. So the mere arrival
+        // of any new session here means whatever held exclusive has released; clear the indicator.
+        // Covers the common "exclusive app quit; shared playback resumed" recovery case.
+        if (_isExclusiveControlHeld) IsExclusiveControlHeld = false;
     }
 
-    private void OnSessionDisconnected(AudioSession session) => RemoveSession(session);
+    private void OnSessionDisconnected(AudioSession session)
+    {
+        // ExclusiveModeOverride means another app called IAudioClient.Initialize in exclusive
+        // mode and the audio engine kicked all shared-mode sessions off this endpoint. That's
+        // the canonical signal for "exclusive control is now held"; flip the lock indicator
+        // before we drop the session wrapper. Other reasons (device removal, format change,
+        // logoff, our own process-exit synthesis) are just lifecycle and don't imply exclusive.
+        if (session.LastDisconnectReason == AudioSessionDisconnectReason.ExclusiveModeOverride)
+        {
+            IsExclusiveControlHeld = true;
+        }
+        RemoveSession(session);
+    }
 
     private void OnSessionStateChanged(AudioSession session)
     {

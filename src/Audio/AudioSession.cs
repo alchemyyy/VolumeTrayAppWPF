@@ -46,6 +46,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     private AppIconResolver.IconHandle? _iconHandle;
     private bool _disposed;
     private bool _disconnected;
+    private AudioSessionDisconnectReason? _lastDisconnectReason;
 
     // Step-counter linear-interpolation state for the stereo peak meter. Sample timer's bg-thread
     // half writes _rawPeakMin / _rawPeakMax from one IAudioMeterInformation.GetChannelsPeakValues
@@ -162,6 +163,14 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 
     /// <summary>True once the session has been disconnected by the device (e.g. endpoint removed).</summary>
     public bool IsDisconnected => _disconnected;
+
+    /// <summary>
+    /// The disconnect reason reported by IAudioSessionEvents::OnSessionDisconnected, or null
+    /// when the disconnect was synthesized internally (e.g. process-exit watcher). Consumers
+    /// read this in the Disconnected handler to distinguish ExclusiveModeOverride - which means
+    /// another app grabbed the endpoint - from a plain device-removal / format-change shutdown.
+    /// </summary>
+    internal AudioSessionDisconnectReason? LastDisconnectReason => _lastDisconnectReason;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -635,6 +644,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             _owner._dispatcher.BeginInvoke(() =>
             {
                 _owner._disconnected = true;
+                _owner._lastDisconnectReason = disconnectReason;
                 _owner.Disconnected?.Invoke(_owner);
             });
             return 0;

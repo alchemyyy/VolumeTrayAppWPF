@@ -40,6 +40,30 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_HeaderAtBottom_Title}"
+                            Description="{loc:Loc Settings_Flyout_HeaderAtBottom_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="FlyoutHeaderAtBottomToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="FlyoutHeaderAtBottom"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_SoundSettingsTarget_Title}"
+                            Description="{loc:Loc Settings_Flyout_SoundSettingsTarget_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="SoundSettingsTargetCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="SoundSettingsTarget" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="LegacySoundPanel" Content="{loc:Loc Settings_Flyout_SoundSettingsTarget_Legacy}"/>
+                    <ComboBoxItem Tag="WindowsSettingsApp" Content="{loc:Loc Settings_Flyout_SoundSettingsTarget_Modern}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
         <TextBlock Text="{loc:Loc Settings_Flyout_DeviceList_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
 
