@@ -614,7 +614,23 @@ public class AppSettings
     public FlyoutDeviceSortOrder FlyoutDeviceSort { get; set; } = FlyoutDeviceSortOrder.StateGrouped;
     public bool ShowRecordingDevicesInFlyout { get; set; } = true;
     public bool IntermixRecordingWithPlaybackInFlyout { get; set; } = false;
-    public bool ShowListenButtonInFlyout { get; set; } = true;
+
+    // Per-device-row control-button visibility. One pair per button - playback rows read the *ForPlayback
+    // flag, recording rows read the *ForRecording flag. The Listen button is capture-only by nature, so
+    // only the recording flag exists; toggling it off hides the listen glyph on recording rows. All
+    // default to true so the shipped UI matches the long-standing "every button visible" layout.
+    public bool ShowLockButtonForPlayback { get; set; } = true;
+    public bool ShowEqualizerAPOButtonForPlayback { get; set; } = true;
+    public bool ShowDefaultDeviceButtonForPlayback { get; set; } = true;
+    public bool ShowLockButtonForRecording { get; set; } = true;
+    public bool ShowEqualizerAPOButtonForRecording { get; set; } = true;
+    public bool ShowListenButtonForRecording { get; set; } = true;
+    public bool ShowDefaultDeviceButtonForRecording { get; set; } = true;
+
+    // Compact PKEY_AudioEngine_DeviceFormat readout under the device name. Off by default - the strip is
+    // niche diagnostic info, not something most users want eating row space. Toggling on / off just
+    // shows / collapses the Canvas; no row metrics shift since the Canvas is already zero-measure.
+    public bool ShowDeviceFormatText { get; set; } = false;
 
     // How the flyout marks actively-capturing app sessions inside a recording device's drawer.
     public CaptureActivityIndicator CaptureActivityIndicator { get; set; } = CaptureActivityIndicator.ActiveGlyph;
@@ -639,9 +655,9 @@ public class AppSettings
     public AppDrawerIconsCenterMode AppDrawerIconsCenterMode { get; set; } = AppDrawerIconsCenterMode.Off;
     public int AppDrawerIconsCenterSoftMax { get; set; } = AppDrawerIconsCenterSoftMaxDefault;
 
-    // Integer percent applied to grid-drawer icon visuals. 100 = baseline; default 115 reads a touch
+    // Integer percent applied to grid-drawer icon visuals. 100 = baseline; default reads a touch
     // larger than the slider-drawer reference. Range spans 50..200 to keep icons readable at both ends.
-    public const int AppDrawerIconScalePercentDefault = 115;
+    public const int AppDrawerIconScalePercentDefault = 110;
     public const int AppDrawerIconScalePercentMin = 50;
     public const int AppDrawerIconScalePercentMax = 200;
     public int AppDrawerIconScalePercent { get; set; } = AppDrawerIconScalePercentDefault;

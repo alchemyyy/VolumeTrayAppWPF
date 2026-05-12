@@ -46,7 +46,14 @@ public static class SettingsBindings
         ["ShowTrayMenuDeviceLinks"] = (s, v) => s.ShowTrayMenuDeviceLinks = v,
         ["ShowRecordingDevicesInFlyout"] = (s, v) => s.ShowRecordingDevicesInFlyout = v,
         ["IntermixRecordingWithPlaybackInFlyout"] = (s, v) => s.IntermixRecordingWithPlaybackInFlyout = v,
-        ["ShowListenButtonInFlyout"] = (s, v) => s.ShowListenButtonInFlyout = v,
+        ["ShowLockButtonForPlayback"] = (s, v) => s.ShowLockButtonForPlayback = v,
+        ["ShowEqualizerAPOButtonForPlayback"] = (s, v) => s.ShowEqualizerAPOButtonForPlayback = v,
+        ["ShowDefaultDeviceButtonForPlayback"] = (s, v) => s.ShowDefaultDeviceButtonForPlayback = v,
+        ["ShowLockButtonForRecording"] = (s, v) => s.ShowLockButtonForRecording = v,
+        ["ShowEqualizerAPOButtonForRecording"] = (s, v) => s.ShowEqualizerAPOButtonForRecording = v,
+        ["ShowListenButtonForRecording"] = (s, v) => s.ShowListenButtonForRecording = v,
+        ["ShowDefaultDeviceButtonForRecording"] = (s, v) => s.ShowDefaultDeviceButtonForRecording = v,
+        ["ShowDeviceFormatText"] = (s, v) => s.ShowDeviceFormatText = v,
     };
 
     /// <summary>Setter + parser pair for an enum-bound ComboBox.</summary>

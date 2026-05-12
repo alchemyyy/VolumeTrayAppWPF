@@ -6,6 +6,7 @@
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
     xmlns:pages="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Pages"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
+    xmlns:visuals="clr-namespace:VolumeTrayAppWPF.Visuals"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
     utils:KeyboardFocusBehavior.EnableKeyboardOnlyFocus="True"
     utils:KeyboardFocusBehavior.FocusStyle="{StaticResource KeyboardFocusVisualStyle}"
@@ -59,17 +60,17 @@
                     <Button x:Name="MinimizeButton"
                             Style="{StaticResource CaptionButtonStyle}"
                             Click="Minimize_Click"
-                            Content="&#xE921;"
+                            Content="{x:Static visuals:GlyphCatalog.CHROME_MINIMIZE}"
                             ToolTip="{loc:Loc SettingsWindow_Caption_Minimize}"/>
                     <Button x:Name="MaximizeButton"
                             Style="{StaticResource CaptionButtonStyle}"
                             Click="Maximize_Click"
-                            Content="&#xE922;"
+                            Content="{x:Static visuals:GlyphCatalog.CHROME_MAXIMIZE}"
                             ToolTip="{loc:Loc SettingsWindow_Caption_Maximize}"/>
                     <Button x:Name="CloseButton"
                             Style="{StaticResource CaptionCloseButtonStyle}"
                             Click="Close_Click"
-                            Content="&#xE8BB;"
+                            Content="{x:Static visuals:GlyphCatalog.EXIT}"
                             ToolTip="{loc:Loc SettingsWindow_Caption_Close}"/>
                 </StackPanel>
             </Grid>

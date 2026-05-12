@@ -41,7 +41,7 @@ public partial class FlyoutPage : UserControl
 
             ShowRecordingDevicesInFlyoutToggle.IsChecked = settings.ShowRecordingDevicesInFlyout;
             IntermixRecordingWithPlaybackInFlyoutToggle.IsChecked = settings.IntermixRecordingWithPlaybackInFlyout;
-            ShowListenButtonInFlyoutToggle.IsChecked = settings.ShowListenButtonInFlyout;
+            ShowDeviceFormatTextToggle.IsChecked = settings.ShowDeviceFormatText;
         }
         finally
         {

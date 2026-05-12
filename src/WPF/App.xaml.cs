@@ -13,10 +13,10 @@ namespace VolumeTrayAppWPF.WPF;
 /// <summary>
 /// Tray-app shell. Owns settings, theme, the audio device manager, the tray shell, the volume
 /// flyout, and the settings window. Heavy lifting lives in:
-///   <see cref="TrayShell"/>          — tray icon + renderer + audio tracking
-///   <see cref="TrayContextMenu"/>    — right-click menu construction
-///   <see cref="ThemeResources"/>     — resource-dictionary push on theme/settings change
-///   <see cref="WatcherMonitor"/>     — watcher-process liveness poll
+///   <see cref="TrayShell"/>          - tray icon + renderer + audio tracking
+///   <see cref="TrayContextMenu"/>    - right-click menu construction
+///   <see cref="ThemeResources"/>     - resource-dictionary push on theme/settings change
+///   <see cref="WatcherMonitor"/>     - watcher-process liveness poll
 /// </summary>
 public partial class App
 {

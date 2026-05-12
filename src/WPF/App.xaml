@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
     xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
+    xmlns:visuals="clr-namespace:VolumeTrayAppWPF.Visuals"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     ShutdownMode="OnExplicitShutdown">
@@ -27,8 +28,11 @@
             <CornerRadius x:Key="CornerRadiusFooterBottom">0,0,8,8</CornerRadius>
             <CornerRadius x:Key="CornerRadiusCapsule">7</CornerRadius>
 
-            <!-- Tray glyph (Segoe MDL2 / Fluent codepoint; runtime value comes from theme) -->
-            <sys:String x:Key="GlyphSettings">&#xE713;</sys:String>
+            <!-- GlyphSettings, SliderThumbGlyph and the slider thumb part dimensions are set at
+                 runtime by ThemeResources.Apply from AppTheme / SliderThumbGlyphOption. No XAML
+                 literal fallbacks - GlyphCatalog is the single source of truth (referenced from
+                 ThemeResources's null-theme fallback path). Design-time preview will not render
+                 these glyphs since the designer doesn't run OnStartup. -->
 
             <!-- Single source of truth for the Fluent Icons font.
                  XAML consumers should use FontFamily="{StaticResource IconFontFamily}"
@@ -39,17 +43,8 @@
                  sizes consistently without per-instance assignment in code-behind. -->
             <sys:Double x:Key="ContextMenuFontSize">15</sys:Double>
 
-            <!-- Slider thumb (capsule defaults). All values are overwritten at runtime by App.xaml.cs
-                 from the user-selected SliderThumbGlyphOption; the literals here are the at-rest design-time
-                 fallback so the WPF designer / first-run before settings load shows a coherent thumb. -->
-            <sys:String x:Key="SliderThumbGlyph">&#xE91F;</sys:String>
-            <FontFamily x:Key="SliderThumbGlyphFont">Segoe Fluent Icons</FontFamily>
-            <sys:Double x:Key="SliderThumbGlyphSize">18</sys:Double>
-            <sys:Double x:Key="SliderThumbGlyphWidth">10</sys:Double>
-            <sys:Double x:Key="SliderThumbGlyphHeight">22</sys:Double>
-            <sys:Double x:Key="SliderThumbGlyphScaleX">1</sys:Double>
-            <Visibility x:Key="SliderThumbGlyphVisibility">Collapsed</Visibility>
-            <Visibility x:Key="SliderThumbCapsuleVisibility">Visible</Visibility>
+            <!-- SliderThumb* resource set is populated by ThemeResources.Apply from the resolved
+                 SliderThumbGlyphOption. The glyph codepoint defaults live in GlyphCatalog. -->
 
             <!-- Focus Visual Style (keyboard focus rectangle).
                  Margin -2 insets the ring outside the control's render bounds
@@ -525,8 +520,8 @@
                                                           VerticalAlignment="Center"
                                                           HorizontalAlignment="Left"/>
                                         <TextBlock Grid.Column="1"
-                                                   Text="&#xE70D;"
-                                                   FontFamily="Segoe Fluent Icons"
+                                                   Text="{x:Static visuals:GlyphCatalog.CHEVRON_DOWN}"
+                                                   FontFamily="{StaticResource IconFontFamily}"
                                                    FontSize="10"
                                                    Foreground="{DynamicResource ThemeForeground}"
                                                    HorizontalAlignment="Center"

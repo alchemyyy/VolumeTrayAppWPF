@@ -34,6 +34,14 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     public string DisplayName => _sessions.Count > 0 ? _sessions[0].DisplayName : "Unknown";
     public ImageSource? Icon => _sessions.Count > 0 ? _sessions[0].Icon : null;
     public bool IsSystemSounds => _sessions.Count > 0 && _sessions[0].IsSystemSounds;
+    public uint ProcessID => _sessions.Count > 0 ? _sessions[0].ProcessID : 0;
+
+    // Tooltip surface for the per-app icon. Computed (rather than MultiBinding in XAML) so the
+    // binding stays a plain Path="TooltipText" - matches the rest of the bindable surface and
+    // avoids quirks WPF has resolving MultiBindings against internal types.
+    public string TooltipText => _sessions.Count > 0
+        ? $"{_sessions[0].DisplayName}\nPID: {_sessions[0].ProcessID}"
+        : "Unknown";
 
     /// <summary>Active if any session in the group is active; expired only when every session has expired.</summary>
     public AudioSessionState State
@@ -135,6 +143,8 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
             OnPropertyChanged(nameof(Volume));
             OnPropertyChanged(nameof(IsMuted));
             OnPropertyChanged(nameof(State));
+            OnPropertyChanged(nameof(ProcessID));
+            OnPropertyChanged(nameof(TooltipText));
         }
     }
 
@@ -160,6 +170,8 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
         OnPropertyChanged(nameof(Volume));
         OnPropertyChanged(nameof(IsMuted));
         OnPropertyChanged(nameof(State));
+        OnPropertyChanged(nameof(ProcessID));
+        OnPropertyChanged(nameof(TooltipText));
         RefreshAggregatePeak();
     }
 
@@ -232,7 +244,10 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
                 break;
             case nameof(AudioSession.DisplayName):
                 if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
+                {
                     OnPropertyChanged(nameof(DisplayName));
+                    OnPropertyChanged(nameof(TooltipText));
+                }
                 break;
             case nameof(AudioSession.State):
                 OnPropertyChanged(nameof(State));

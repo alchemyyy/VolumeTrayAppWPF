@@ -38,6 +38,15 @@ public partial class DevicesPage : UserControl
             ShowDefaultCommsRecordingEvenIfDisabledToggle.IsChecked = settings.ShowDefaultCommsRecordingDeviceEvenIfDisabled;
 
             ShowNotPresentToggle.IsChecked = settings.ShowNotPresentDevices;
+
+            ShowPlaybackLockButtonToggle.IsChecked = settings.ShowLockButtonForPlayback;
+            ShowPlaybackEqualizerAPOButtonToggle.IsChecked = settings.ShowEqualizerAPOButtonForPlayback;
+            ShowPlaybackDefaultDeviceButtonToggle.IsChecked = settings.ShowDefaultDeviceButtonForPlayback;
+
+            ShowRecordingLockButtonToggle.IsChecked = settings.ShowLockButtonForRecording;
+            ShowRecordingEqualizerAPOButtonToggle.IsChecked = settings.ShowEqualizerAPOButtonForRecording;
+            ShowRecordingListenButtonToggle.IsChecked = settings.ShowListenButtonForRecording;
+            ShowRecordingDefaultDeviceButtonToggle.IsChecked = settings.ShowDefaultDeviceButtonForRecording;
         }
         finally
         {

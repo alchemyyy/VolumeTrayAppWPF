@@ -259,11 +259,11 @@
   <data name="Settings_Flyout_IntermixRecording_Description" xml:space="preserve">
     <value>When on, recording devices interleave with playback devices inside each sort bucket. When off, all playback devices show first and recording devices group together at the top of the list.</value>
   </data>
-  <data name="Settings_Flyout_ShowListenButton_Title" xml:space="preserve">
-    <value>Show "Listen to this device" button</value>
+  <data name="Settings_Flyout_ShowDeviceFormatText_Title" xml:space="preserve">
+    <value>Show default-format readout</value>
   </data>
-  <data name="Settings_Flyout_ShowListenButton_Description" xml:space="preserve">
-    <value>Adds a button to each recording device row that toggles the Windows "Listen to this device" feature. Left-click toggles, Ctrl+left-click enables with Default Playback as the target, right-click picks a specific target.</value>
+  <data name="Settings_Flyout_ShowDeviceFormatText_Description" xml:space="preserve">
+    <value>The compact format strip (sample rate, bit depth, channels) drawn under each device name. Right-clicking the strip opens the format picker. Off by default.</value>
   </data>
   <data name="Settings_Flyout_RecordingAppDrawerDisplayType_Title" xml:space="preserve">
     <value>App drawer display type</value>
@@ -898,6 +898,54 @@ Target: {1}</value>
   </data>
   <data name="Settings_Devices_ShowNotPresent_Description" xml:space="preserve">
     <value>List endpoints Windows still has on file but no driver is currently loaded for - old USB DACs, removed GPUs' HDMI outputs, paired Bluetooth headsets. Most surface as "Unknown Device". Off by default.</value>
+  </data>
+  <data name="Settings_Devices_PlaybackButtons_Header" xml:space="preserve">
+    <value>Playback row buttons</value>
+  </data>
+  <data name="Settings_Devices_ShowPlaybackLockButton_Title" xml:space="preserve">
+    <value>Show exclusive-mode (lock) button</value>
+  </data>
+  <data name="Settings_Devices_ShowPlaybackLockButton_Description" xml:space="preserve">
+    <value>The lock / unlock glyph that toggles the endpoint's "Allow applications to take exclusive control" bit.</value>
+  </data>
+  <data name="Settings_Devices_ShowPlaybackEqualizerAPOButton_Title" xml:space="preserve">
+    <value>Show Equalizer APO button</value>
+  </data>
+  <data name="Settings_Devices_ShowPlaybackEqualizerAPOButton_Description" xml:space="preserve">
+    <value>The equalizer glyph that reflects Equalizer APO state and toggles install / enable on click.</value>
+  </data>
+  <data name="Settings_Devices_ShowPlaybackDefaultDeviceButton_Title" xml:space="preserve">
+    <value>Show default-device button</value>
+  </data>
+  <data name="Settings_Devices_ShowPlaybackDefaultDeviceButton_Description" xml:space="preserve">
+    <value>The device icon button on the right edge of the row. Left-click sets default, right-click opens the device menu.</value>
+  </data>
+  <data name="Settings_Devices_RecordingButtons_Header" xml:space="preserve">
+    <value>Recording row buttons</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingLockButton_Title" xml:space="preserve">
+    <value>Show exclusive-mode (lock) button</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingLockButton_Description" xml:space="preserve">
+    <value>The lock / unlock glyph that toggles the endpoint's "Allow applications to take exclusive control" bit.</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingEqualizerAPOButton_Title" xml:space="preserve">
+    <value>Show Equalizer APO button</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingEqualizerAPOButton_Description" xml:space="preserve">
+    <value>The equalizer glyph that reflects Equalizer APO state and toggles install / enable on click.</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingListenButton_Title" xml:space="preserve">
+    <value>Show "Listen to this device" button</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingListenButton_Description" xml:space="preserve">
+    <value>Adds a button to each recording row that toggles the Windows "Listen to this device" feature. Left-click toggles, Ctrl+left-click enables with Default Playback as the target, right-click picks a specific target.</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingDefaultDeviceButton_Title" xml:space="preserve">
+    <value>Show default-device button</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingDefaultDeviceButton_Description" xml:space="preserve">
+    <value>The device icon button on the right edge of the row. Left-click sets default, right-click opens the device menu.</value>
   </data>
   <data name="Settings_Devices_ShowTrayRecordingLink_Title" xml:space="preserve">
     <value>Show "Recording" link in tray menu</value>

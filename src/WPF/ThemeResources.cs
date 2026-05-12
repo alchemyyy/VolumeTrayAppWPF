@@ -14,7 +14,7 @@ namespace VolumeTrayAppWPF.WPF;
 /// Writes the live brush / corner-radius / slider-thumb resource set onto an Application's resource dictionary.
 /// All Theme*/CloseButton*/ToggleSwitch* brush keys plus CornerRadius* and SliderThumb* keys flow through here,
 /// so a theme change is a single Apply call from the shell.
-/// Also owns <see cref="ResolveEffectiveIsLightTheme"/> — the single source of truth for
+/// Also owns <see cref="ResolveEffectiveIsLightTheme"/> - the single source of truth for
 /// the user's ThemeMode override against the live AppTheme.
 /// </summary>
 internal static class ThemeResources

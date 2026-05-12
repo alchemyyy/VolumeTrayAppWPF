@@ -138,9 +138,22 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // bottom-edge breathing room (see VolumeFlyout.xaml).
     public Dock FlyoutHeaderDock => _appSettings?.FlyoutHeaderAtBottom == true ? Dock.Bottom : Dock.Top;
 
-    // Bound by the listen button's visibility trigger in DeviceRowTemplate. Defaults true so the
-    // button stays visible when the settings instance hasn't been wired (test harness / early init).
-    public bool ShowListenButtonInFlyout => _appSettings?.ShowListenButtonInFlyout ?? true;
+    // Per-device-row button visibility flags bound by the Visibility MultiBindings in DeviceRowTemplate
+    // (and the listen-button MultiDataTrigger). Each property reads its matching AppSettings flag,
+    // defaulting true so the buttons stay visible while settings are still wiring up (test harness /
+    // early init). The DevicesPage exposes one toggle per property; OnAppSettingsChanged refires every
+    // PropertyChanged so the flyout repaints the moment a toggle flips.
+    public bool ShowLockButtonForPlayback => _appSettings?.ShowLockButtonForPlayback ?? true;
+    public bool ShowEqualizerAPOButtonForPlayback => _appSettings?.ShowEqualizerAPOButtonForPlayback ?? true;
+    public bool ShowDefaultDeviceButtonForPlayback => _appSettings?.ShowDefaultDeviceButtonForPlayback ?? true;
+    public bool ShowLockButtonForRecording => _appSettings?.ShowLockButtonForRecording ?? true;
+    public bool ShowEqualizerAPOButtonForRecording => _appSettings?.ShowEqualizerAPOButtonForRecording ?? true;
+    public bool ShowListenButtonForRecording => _appSettings?.ShowListenButtonForRecording ?? true;
+    public bool ShowDefaultDeviceButtonForRecording => _appSettings?.ShowDefaultDeviceButtonForRecording ?? true;
+
+    // Bound by the device-format readout Canvas in DeviceRowTemplate. Defaults false to match the
+    // shipped AppSettings default (strip hidden) when settings aren't wired (test harness / early init).
+    public bool ShowDeviceFormatText => _appSettings?.ShowDeviceFormatText ?? false;
 
     // Grid.Row index for the title + control-buttons band inside DeviceRowTemplate.
     // BelowSlider (default) keeps the band on Grid.Row=1 under the slider; AboveSlider swaps it to row 0.
@@ -343,7 +356,14 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             if (_isUndocked && _appSettings?.AllowFlyoutUndock == false) Redock();
             OnPropertyChanged(nameof(AllowFlyoutUndock));
             OnPropertyChanged(nameof(FlyoutHeaderDock));
-            OnPropertyChanged(nameof(ShowListenButtonInFlyout));
+            OnPropertyChanged(nameof(ShowLockButtonForPlayback));
+            OnPropertyChanged(nameof(ShowEqualizerAPOButtonForPlayback));
+            OnPropertyChanged(nameof(ShowDefaultDeviceButtonForPlayback));
+            OnPropertyChanged(nameof(ShowLockButtonForRecording));
+            OnPropertyChanged(nameof(ShowEqualizerAPOButtonForRecording));
+            OnPropertyChanged(nameof(ShowListenButtonForRecording));
+            OnPropertyChanged(nameof(ShowDefaultDeviceButtonForRecording));
+            OnPropertyChanged(nameof(ShowDeviceFormatText));
             OnPropertyChanged(nameof(DeviceTitleRowIndex));
             OnPropertyChanged(nameof(DeviceSliderRowIndex));
             OnPropertyChanged(nameof(CaptureActivityIndicator));

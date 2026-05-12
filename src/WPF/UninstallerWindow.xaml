@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
+    xmlns:visuals="clr-namespace:VolumeTrayAppWPF.Visuals"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
     utils:KeyboardFocusBehavior.EnableKeyboardOnlyFocus="True"
     utils:KeyboardFocusBehavior.FocusStyle="{StaticResource KeyboardFocusVisualStyle}"
@@ -62,7 +63,7 @@
                     <Button x:Name="CloseButton"
                             Style="{StaticResource CaptionCloseButtonStyle}"
                             Click="Close_Click"
-                            Content="&#xE8BB;"
+                            Content="{x:Static visuals:GlyphCatalog.EXIT}"
                             ToolTip="{loc:Loc Uninstaller_Caption_Close}"/>
                 </StackPanel>
             </Grid>

@@ -160,5 +160,82 @@
                           Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
+
+        <!-- Per-device-row button visibility. Two parallel sections so a user can declutter playback and
+             recording rows independently. Each toggle hides one button on rows of the matching device type.
+             Listen is recording-only by nature, so it lives only in the recording section. -->
+        <TextBlock Text="{loc:Loc Settings_Devices_PlaybackButtons_Header}" Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowPlaybackLockButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowPlaybackLockButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowPlaybackLockButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowLockButtonForPlayback" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowPlaybackEqualizerAPOButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowPlaybackEqualizerAPOButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowPlaybackEqualizerAPOButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowEqualizerAPOButtonForPlayback" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowPlaybackDefaultDeviceButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowPlaybackDefaultDeviceButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowPlaybackDefaultDeviceButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowDefaultDeviceButtonForPlayback" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_Devices_RecordingButtons_Header}" Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowRecordingLockButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowRecordingLockButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowRecordingLockButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowLockButtonForRecording" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowRecordingEqualizerAPOButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowRecordingEqualizerAPOButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowRecordingEqualizerAPOButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowEqualizerAPOButtonForRecording" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowRecordingListenButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowRecordingListenButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowRecordingListenButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowListenButtonForRecording" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowRecordingDefaultDeviceButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowRecordingDefaultDeviceButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowRecordingDefaultDeviceButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowDefaultDeviceButtonForRecording" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
     </StackPanel>
 </UserControl>

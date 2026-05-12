@@ -29,6 +29,7 @@
         <wpf:DeviceIconGlyphConverter x:Key="DeviceIconGlyph"/>
         <wpf:DeviceIconOpacityConverter x:Key="DeviceIconOpacity"/>
         <wpf:TitleRowVerticalOffsetConverter x:Key="TitleRowVerticalOffset"/>
+        <utils:DeviceButtonVisibilityConverter x:Key="DeviceButtonVisibility"/>
 
         <!-- Per-cell slot size for the icon grid drawer. Lifted into the resource dictionary as a
              DynamicResource source so XAML Hot Reload edits to this value propagate to every live
@@ -44,15 +45,6 @@
              Tweak here once to retune every app icon in the flyout. -->
         <sys:Double x:Key="AppIconImageSize">22</sys:Double>
         <sys:Double x:Key="AppIconGlyphSize">20</sys:Double>
-
-        <!-- Segoe Fluent Icons codepoints referenced from this XAML, kept in sync with GlyphCatalog
-             (C# side cannot be referenced from XAML directly; resource strings are the bridge).
-             Update both sites together if a codepoint is retired or rebound. -->
-        <sys:String x:Key="GLYPH_APP_FALLBACK">&#xE7F4;</sys:String>
-        <sys:String x:Key="GLYPH_APP_MUTE_OVERLAY">&#xE653;</sys:String>
-        <sys:String x:Key="GLYPH_SOUND_SETTINGS">&#xE995;</sys:String>
-        <sys:String x:Key="GLYPH_FLYOUT_UNDOCK_ACTION">&#xE75B;</sys:String>
-        <sys:String x:Key="GLYPH_FLYOUT_REDOCK_ACTION">&#xE75A;</sys:String>
 
         <!-- Slider primitives. Lifted from BrightnessFlyout but stripped of curve / preview chrome -
              the volume slider only shows a track, fill, and thumb. -->
@@ -354,7 +346,7 @@
                       Margin="0,0,10,0" VerticalAlignment="Center"
                       Background="Transparent"
                       Tag="{Binding}"
-                      ToolTip="{Binding DisplayName}"
+                      ToolTip="{Binding TooltipText}"
                       ToolTipService.InitialShowDelay="1000"
                       PreviewMouseLeftButtonUp="AppIcon_PreviewMouseLeftButtonUp">
                     <Grid.Style>
@@ -383,8 +375,8 @@
                             </Style>
                         </Image.Style>
                     </Image>
-                    <!-- Placeholder app icon (GLYPH_APP_FALLBACK). Mirrors GlyphCatalog.APP_FALLBACK. -->
-                    <TextBlock Text="{StaticResource GLYPH_APP_FALLBACK}"
+                    <!-- Placeholder app icon, shown until AppIconResolver produces a real one. -->
+                    <TextBlock Text="{x:Static visuals:GlyphCatalog.APP_FALLBACK}"
                                FontFamily="{StaticResource IconFontFamily}"
                                FontSize="{DynamicResource AppIconGlyphSize}"
                                Foreground="{DynamicResource ThemeIconForeground}"
@@ -402,7 +394,7 @@
                     </TextBlock>
                     <!-- Mute-X hover overlay. Mirrors GlyphCatalog.APP_MUTE_OVERLAY. -->
                     <TextBlock IsHitTestVisible="False"
-                               Text="{StaticResource GLYPH_APP_MUTE_OVERLAY}"
+                               Text="{x:Static visuals:GlyphCatalog.APP_MUTE_OVERLAY}"
                                FontFamily="{StaticResource IconFontFamily}"
                                FontSize="{DynamicResource AppIconGlyphSize}"
                                Foreground="{DynamicResource ThemeIconForeground}"
@@ -540,8 +532,25 @@
                     </Grid.ColumnDefinitions>
                     <!-- Device name. TextBlock for view mode; double-click swaps to the sibling
                          TextBox for inline rename. Empty / whitespace on commit clears the
-                         PKEY_Device_FriendlyName override and the OS-synthesized name returns. -->
+                         PKEY_Device_FriendlyName override and the OS-synthesized name returns.
+                         RenderTransform nudges the whole inner column down 2 px when the format
+                         readout is hidden, so the name sits at the row's optical center instead
+                         of riding high where the format strip would have sat. The Canvas is
+                         Collapsed in that same state, so the format-text doesn't visibly shift. -->
                     <Grid Grid.Column="0">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowDeviceFormatText, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="False">
+                                        <Setter Property="RenderTransform">
+                                            <Setter.Value>
+                                                <TranslateTransform Y="2"/>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <TextBlock x:Name="DeviceNameText"
                                    Text="{Binding FriendlyName, FallbackValue='No audio device'}"
                                    Tag="{Binding}"
@@ -572,7 +581,8 @@
                              so the right-click format picker is reachable on glyph gaps too. -->
                         <Canvas ClipToBounds="False"
                                 HorizontalAlignment="Left"
-                                VerticalAlignment="Center">
+                                VerticalAlignment="Center"
+                                Visibility="{Binding ShowDeviceFormatText, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock x:Name="DeviceFormatText"
                                        Text="{Binding DefaultFormat}"
                                        Tag="{Binding}"
@@ -594,6 +604,13 @@
                             Margin="0,3,0,-3"
                             Tag="{Binding}"
                             Click="ExclusiveModeButton_Click">
+                        <Button.Visibility>
+                            <MultiBinding Converter="{StaticResource DeviceButtonVisibility}">
+                                <Binding Path="IsCaptureDevice"/>
+                                <Binding Path="ShowLockButtonForPlayback" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                <Binding Path="ShowLockButtonForRecording" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                            </MultiBinding>
+                        </Button.Visibility>
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
                                 <Setter Property="Opacity" Value="1.0"/>
@@ -641,6 +658,13 @@
                             Tag="{Binding}"
                             Click="EqualizerAPOButton_Click"
                             PreviewMouseRightButtonUp="EqualizerAPOButton_PreviewMouseRightButtonUp">
+                        <Button.Visibility>
+                            <MultiBinding Converter="{StaticResource DeviceButtonVisibility}">
+                                <Binding Path="IsCaptureDevice"/>
+                                <Binding Path="ShowEqualizerAPOButtonForPlayback" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                <Binding Path="ShowEqualizerAPOButtonForRecording" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                            </MultiBinding>
+                        </Button.Visibility>
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
                                 <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerAPO_Tooltip_NotAvailable}"/>
@@ -732,7 +756,7 @@
                                     <MultiDataTrigger>
                                         <MultiDataTrigger.Conditions>
                                             <Condition Binding="{Binding IsCaptureDevice}" Value="True"/>
-                                            <Condition Binding="{Binding ShowListenButtonInFlyout, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True"/>
+                                            <Condition Binding="{Binding ShowListenButtonForRecording, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True"/>
                                         </MultiDataTrigger.Conditions>
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </MultiDataTrigger>
@@ -752,6 +776,13 @@
                             Click="DeviceIcon_Click"
                             PreviewMouseRightButtonUp="DeviceIcon_PreviewMouseRightButtonUp"
                             ToolTip="{loc:Loc Flyout_DeviceIcon_Tooltip}">
+                        <Button.Visibility>
+                            <MultiBinding Converter="{StaticResource DeviceButtonVisibility}">
+                                <Binding Path="IsCaptureDevice"/>
+                                <Binding Path="ShowDefaultDeviceButtonForPlayback" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                <Binding Path="ShowDefaultDeviceButtonForRecording" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                            </MultiBinding>
+                        </Button.Visibility>
                         <TextBlock Opacity="{Binding IsActive, Converter={StaticResource DeviceIconOpacity}}"
                                    FontFamily="{StaticResource IconFontFamily}"
                                    Foreground="{DynamicResource ThemeIconForeground}">
@@ -794,7 +825,7 @@
                             Tag="{Binding}"
                             Click="DeviceMute_Click"
                             ToolTip="Mute"
-                            Width="32" Height="32"
+                            Width="33" Height="32"
                             Margin="-8,-12,4,-12">
                         <!-- BasedOn the shared icon-button style, plus mute / disabled dim triggers
                              that match the slider / percent-text dim so the whole row reads as
@@ -984,7 +1015,7 @@
                   HorizontalAlignment="Center" VerticalAlignment="Center"
                   Background="Transparent"
                   Tag="{Binding}"
-                  ToolTip="{Binding DisplayName}"
+                  ToolTip="{Binding TooltipText}"
                   ToolTipService.InitialShowDelay="400"
                   PreviewMouseLeftButtonUp="AppIcon_PreviewMouseLeftButtonUp">
                 <Grid.Style>
@@ -1066,7 +1097,7 @@
                     </Image.Style>
                 </Image>
                 <!-- Placeholder app icon. Mirrors GlyphCatalog.APP_FALLBACK. -->
-                <TextBlock Text="{StaticResource GLYPH_APP_FALLBACK}"
+                <TextBlock Text="{x:Static visuals:GlyphCatalog.APP_FALLBACK}"
                            FontFamily="{StaticResource IconFontFamily}"
                            FontSize="{Binding AppDrawerIconGlyphSize, RelativeSource={RelativeSource AncestorType=Window}}"
                            Foreground="{DynamicResource ThemeIconForeground}"
@@ -1084,7 +1115,7 @@
                 </TextBlock>
                 <!-- Mute-X hover overlay. Mirrors GlyphCatalog.APP_MUTE_OVERLAY. -->
                 <TextBlock IsHitTestVisible="False"
-                           Text="{StaticResource GLYPH_APP_MUTE_OVERLAY}"
+                           Text="{x:Static visuals:GlyphCatalog.APP_MUTE_OVERLAY}"
                            FontFamily="{StaticResource IconFontFamily}"
                            FontSize="{Binding AppDrawerIconGlyphSize, RelativeSource={RelativeSource AncestorType=Window}}"
                            Foreground="{DynamicResource ThemeIconForeground}"
@@ -1170,7 +1201,7 @@
                                      AppsBelow flip trigger can override it. -->
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="0"/>
-                                    <Setter Property="Padding" Value="14,30,12,0"/>
+                                    <Setter Property="Padding" Value="14,10,12,0"/>
                                     <Style.Triggers>
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
@@ -1431,7 +1462,7 @@
                             Click="SoundSettingsButton_Click"
                             ToolTip="{loc:Loc Flyout_SoundSettings_Tooltip}">
                         <!-- Sound-settings entrypoint glyph. Mirrors GlyphCatalog.SOUND_SETTINGS. -->
-                        <TextBlock Text="{StaticResource GLYPH_SOUND_SETTINGS}"
+                        <TextBlock Text="{x:Static visuals:GlyphCatalog.SOUND_SETTINGS}"
                                    FontFamily="{StaticResource IconFontFamily}"
                                    FontSize="19"
                                    Foreground="{DynamicResource ThemeIconForeground}"/>
@@ -1486,10 +1517,10 @@
                                Foreground="{DynamicResource ThemeIconForeground}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="{StaticResource GLYPH_FLYOUT_UNDOCK_ACTION}"/>
+                                <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.FLYOUT_UNDOCK_ACTION}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsUndocked, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                                        <Setter Property="Text" Value="{StaticResource GLYPH_FLYOUT_REDOCK_ACTION}"/>
+                                        <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.FLYOUT_REDOCK_ACTION}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>

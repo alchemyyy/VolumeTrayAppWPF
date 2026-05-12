@@ -188,7 +188,7 @@ public partial class SettingsWindow : Window
 
     /// <summary>
     /// Re-evaluate the effective light/dark state and push the DWM immersive-dark-mode attribute
-    /// onto this window's HWND. Safe to call before SourceInitialized — short-circuits then.
+    /// onto this window's HWND. Safe to call before SourceInitialized - short-circuits then.
     /// Replaces the deleted <c>IThemeHost</c> interface; <see cref="Settings.Pages.ThemePage"/>
     /// reaches the host through <c>Window.GetWindow(this) is SettingsWindow</c> instead.
     /// </summary>

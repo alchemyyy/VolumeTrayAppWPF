@@ -2,6 +2,7 @@
     x:Class="VolumeTrayAppWPF.WPF.NumericSpinner"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:visuals="clr-namespace:VolumeTrayAppWPF.Visuals"
     Height="{StaticResource DwellBoxHeight}"
     FocusVisualStyle="{x:Null}">
     <Grid>
@@ -40,12 +41,12 @@
                     Grid.Row="0"
                     Style="{StaticResource SpinnerButtonStyle}"
                     Click="OnSpinUpClick"
-                    Content="&#xE70E;"/>
+                    Content="{x:Static visuals:GlyphCatalog.CHEVRON_UP}"/>
             <Button x:Name="PART_SpinDown"
                     Grid.Row="1"
                     Style="{StaticResource SpinnerButtonStyle}"
                     Click="OnSpinDownClick"
-                    Content="&#xE70D;"/>
+                    Content="{x:Static visuals:GlyphCatalog.CHEVRON_DOWN}"/>
         </Grid>
     </Grid>
 </UserControl>
