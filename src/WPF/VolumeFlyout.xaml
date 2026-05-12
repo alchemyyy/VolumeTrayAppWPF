@@ -29,6 +29,7 @@
         <wpf:DeviceIconGlyphConverter x:Key="DeviceIconGlyph"/>
         <wpf:DeviceIconOpacityConverter x:Key="DeviceIconOpacity"/>
         <wpf:IsLastToFooterCornerRadiusConverter x:Key="IsLastToFooterCorner"/>
+        <wpf:TitleRowVerticalOffsetConverter x:Key="TitleRowVerticalOffset"/>
 
         <!-- Per-cell slot size for the icon grid drawer. Lifted into the resource dictionary as a
              DynamicResource source so XAML Hot Reload edits to this value propagate to every live
@@ -450,7 +451,24 @@
                        3  Listen-to-this-device (capture endpoints only; collapses to zero on render)
                        4  device icon (set as default / enable-disable hub). -->
                 <Grid Grid.Row="{Binding DeviceTitleRowIndex, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                      Margin="-1,2,0,0">
+                      Margin="-1,-4,0,10">
+                    <!-- AboveSlider: TranslateTransform anchors the title's visual bottom to the
+                         percent textblock's top (the volume-level indicator) via element-name
+                         bindings to DeviceSliderRow and DeviceVolumePercent. BelowSlider: converter
+                         returns 0 so the title stays put. RenderTransform doesn't participate in
+                         measure, so the slider row doesn't shift along with the title. -->
+                    <Grid.RenderTransform>
+                        <TranslateTransform>
+                            <TranslateTransform.Y>
+                                <MultiBinding Converter="{StaticResource TitleRowVerticalOffset}">
+                                    <Binding Path="DeviceTitleRowIndex"
+                                             RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                    <Binding Path="ActualHeight" ElementName="DeviceSliderRow"/>
+                                    <Binding Path="ActualHeight" ElementName="DeviceVolumePercent"/>
+                                </MultiBinding>
+                            </TranslateTransform.Y>
+                        </TranslateTransform>
+                    </Grid.RenderTransform>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -696,7 +714,8 @@
                     </Button>
                 </Grid>
 
-                <Grid Grid.Row="{Binding DeviceSliderRowIndex, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
+                <Grid x:Name="DeviceSliderRow"
+                      Grid.Row="{Binding DeviceSliderRowIndex, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -861,7 +880,8 @@
                         </wpf:VolumeSlider.Style>
                     </wpf:VolumeSlider>
 
-                    <TextBlock Grid.Column="2"
+                    <TextBlock x:Name="DeviceVolumePercent"
+                               Grid.Column="2"
                                Text="{Binding Volume, Converter={StaticResource ScalarToPercent}, StringFormat={}{0:0}}"
                                FontSize="18"
                                Foreground="{DynamicResource ThemeForeground}"
@@ -1222,7 +1242,7 @@
 
                 <Border Grid.Row="0"
                         Background="{DynamicResource ThemeFooterBackground}"
-                        Padding="14,12,12,12">
+                        Padding="14,12,12,0">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="0"/>

@@ -138,6 +138,39 @@ internal sealed class DeviceIconOpacityConverter : IValueConverter
 }
 
 /// <summary>
+/// Y offset (positive = down) applied via TranslateTransform to the device title band when the
+/// FlyoutDeviceTitlePosition setting is AboveSlider. Anchors the title's visual bottom to the top
+/// of the percent textblock (the volume-level indicator) so the title sits flush against the
+/// number rather than against the row boundary. Returns 0 in the BelowSlider configuration so the
+/// title stays in its natural Row=1 position.
+///
+/// MultiBinding inputs (in declared order):
+///   [0]=DeviceTitleRowIndex (0 = AboveSlider, 1 = BelowSlider)
+///   [1]=DeviceSliderRow.ActualHeight (the row hosting the slider + percent text)
+///   [2]=DeviceVolumePercent.ActualHeight (the percent readout textblock)
+/// The percent text is vertically centered inside the slider row, so its top sits at
+/// (sliderRow - percent) / 2 from the slider row's top edge - the exact distance the title
+/// needs to translate down so its bottom edge meets that line.
+/// </summary>
+internal sealed class TitleRowVerticalOffsetConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length < 3) return 0.0;
+        if (values[0] is not int rowIndex) return 0.0;
+        if (rowIndex != 0) return 0.0;
+
+        double sliderRowHeight = values[1] is double sh ? sh : 0.0;
+        double percentHeight = values[2] is double ph ? ph : 0.0;
+        double delta = (sliderRowHeight - percentHeight) / 2.0;
+        return delta > 0 ? delta : 0.0;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// Maps a bool (typically VolumeFlyoutCell.IsLast) to either the shared CornerRadiusFooterBottom
 /// (rounded bottom corners) or zero. Lets the bottom cell of the device stack pick up the same
 /// rounded-corner treatment the old monolithic footer Border used to apply unconditionally.

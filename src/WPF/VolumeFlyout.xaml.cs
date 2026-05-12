@@ -186,16 +186,6 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         (_appSettings?.FlyoutDeviceTitlePosition ?? FlyoutDeviceTitlePosition.BelowSlider)
             == FlyoutDeviceTitlePosition.AboveSlider ? 1 : 0;
 
-    // Title-band margin. Below-slider keeps the original 2px top nudge so the band hangs under the
-    // slider with a touch of breathing room. Above-slider lifts the band with a negative top margin
-    // so it overlaps the slider's airspace and reads tighter to the slider it labels.
-    // Tweak the AboveSlider Thickness here to fine-tune the vertical offset.
-    public Thickness DeviceTitleRowMargin =>
-        (_appSettings?.FlyoutDeviceTitlePosition ?? FlyoutDeviceTitlePosition.BelowSlider)
-            == FlyoutDeviceTitlePosition.AboveSlider
-                ? new Thickness(-1, -6, 0, 0)
-                : new Thickness(-1, 2, 0, 0);
-
     // Drives the SessionRowTemplate triggers that flag actively-capturing apps inside a recording
     // device's drawer. Defaults to DimInactive so early-init paths (no settings yet) match the
     // shipped default rather than rendering as "no indicator".
