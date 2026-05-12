@@ -216,7 +216,7 @@
              ControlTemplate.Triggers because Background flows in through TemplateBinding. -->
         <Style x:Key="HeaderIconButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
             <Setter Property="Width" Value="40"/>
-      <Setter Property="Height" Value="28"/>
+      <Setter Property="Height" Value="32"/>
             <Setter Property="Margin" Value="0,-3,0,1"/>
       <Setter Property="Template">
                 <Setter.Value>
