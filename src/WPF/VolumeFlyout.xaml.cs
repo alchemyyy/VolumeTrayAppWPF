@@ -175,6 +175,27 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // button stays visible when the settings instance hasn't been wired (test harness / early init).
     public bool ShowListenButtonInFlyout => _appSettings?.ShowListenButtonInFlyout ?? true;
 
+    // Grid.Row index for the title + control-buttons band inside DeviceRowTemplate.
+    // BelowSlider (default) keeps the band on Grid.Row=1 under the slider; AboveSlider swaps it to row 0.
+    // DeviceSliderRowIndex is the complement, so the two bands always occupy distinct rows.
+    public int DeviceTitleRowIndex =>
+        (_appSettings?.FlyoutDeviceTitlePosition ?? FlyoutDeviceTitlePosition.BelowSlider)
+            == FlyoutDeviceTitlePosition.AboveSlider ? 0 : 1;
+
+    public int DeviceSliderRowIndex =>
+        (_appSettings?.FlyoutDeviceTitlePosition ?? FlyoutDeviceTitlePosition.BelowSlider)
+            == FlyoutDeviceTitlePosition.AboveSlider ? 1 : 0;
+
+    // Title-band margin. Below-slider keeps the original 2px top nudge so the band hangs under the
+    // slider with a touch of breathing room. Above-slider lifts the band with a negative top margin
+    // so it overlaps the slider's airspace and reads tighter to the slider it labels.
+    // Tweak the AboveSlider Thickness here to fine-tune the vertical offset.
+    public Thickness DeviceTitleRowMargin =>
+        (_appSettings?.FlyoutDeviceTitlePosition ?? FlyoutDeviceTitlePosition.BelowSlider)
+            == FlyoutDeviceTitlePosition.AboveSlider
+                ? new Thickness(-1, -6, 0, 0)
+                : new Thickness(-1, 2, 0, 0);
+
     // Drives the SessionRowTemplate triggers that flag actively-capturing apps inside a recording
     // device's drawer. Defaults to DimInactive so early-init paths (no settings yet) match the
     // shipped default rather than rendering as "no indicator".
@@ -371,6 +392,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             if (_isUndocked && _appSettings?.AllowFlyoutUndock == false) Redock();
             OnPropertyChanged(nameof(AllowFlyoutUndock));
             OnPropertyChanged(nameof(ShowListenButtonInFlyout));
+            OnPropertyChanged(nameof(DeviceTitleRowIndex));
+            OnPropertyChanged(nameof(DeviceSliderRowIndex));
             OnPropertyChanged(nameof(CaptureActivityIndicator));
             OnPropertyChanged(nameof(RecordingAppDrawerDisplayType));
             OnPropertyChanged(nameof(AppDrawerIconsCenterMode));

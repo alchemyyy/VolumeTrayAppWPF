@@ -1,0 +1,120 @@
+<UserControl
+    x:Class="VolumeTrayAppWPF.WPF.Settings.Pages.DeviceAppDrawersPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
+    xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
+    xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
+    mc:Ignorable="d"
+    d:DesignWidth="660"
+    d:DesignHeight="594"
+    d:Background="#1F1F1F"
+    utils1:SettingsKeyboardNavigation.IsContentSection="True">
+    <StackPanel>
+        <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_DeviceAppDrawers_SectionHeader}"/>
+
+        <TextBlock Text="{loc:Loc Settings_Flyout_PlaybackDrawer_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard x:Name="PlaybackDrawerMaxAppsCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="PlaybackDrawerMaxAppsBox"
+                                      Minimum="1" Maximum="200"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_Flyout_RecordingDrawer_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_RecordingAppDrawerDisplayType_Title}"
+                            Description="{loc:Loc Settings_Flyout_RecordingAppDrawerDisplayType_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="RecordingAppDrawerDisplayTypeCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="RecordingAppDrawerDisplayType" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="Icons" Content="{loc:Loc Settings_Flyout_RecordingAppDrawerDisplayType_Icons}"/>
+                    <ComboBoxItem Tag="Sliders" Content="{loc:Loc Settings_Flyout_RecordingAppDrawerDisplayType_Sliders}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="RecordingDrawerMaxAppsCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="RecordingDrawerMaxAppsBox"
+                                      Minimum="1" Maximum="200"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="AppDrawerIconsCenteredCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerIconsCentered_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsCentered_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="AppDrawerIconsCenterModeCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="AppDrawerIconsCenterMode" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="Off" Content="{loc:Loc Settings_Flyout_AppDrawerIconsCenterMode_Off}"/>
+                    <ComboBoxItem Tag="Centered" Content="{loc:Loc Settings_Flyout_AppDrawerIconsCenterMode_Centered}"/>
+                    <ComboBoxItem Tag="CenteredSoftMax" Content="{loc:Loc Settings_Flyout_AppDrawerIconsCenterMode_SoftMax}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="AppDrawerIconsCenterSoftMaxCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerIconsCenterSoftMax_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsCenterSoftMax_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="AppDrawerIconsCenterSoftMaxBox"
+                                      Minimum="1" Maximum="16"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="AppDrawerIconScaleCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerIconScale_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconScale_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="AppDrawerIconScaleBox"
+                                      Minimum="50" Maximum="200"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="AppDrawerStackDirectionCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerStackDirection_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerStackDirection_Description}">
+            <utils:SettingsCard.Control>
+                <ComboBox x:Name="AppDrawerStackDirectionCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          VerticalAlignment="Center"
+                          Tag="AppDrawerStackDirection" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="Auto" Content="{loc:Loc Settings_Flyout_AppDrawerStackDirection_Auto}"/>
+                    <ComboBoxItem Tag="TopBottom" Content="{loc:Loc Settings_Flyout_AppDrawerStackDirection_TopBottom}"/>
+                    <ComboBoxItem Tag="BottomTop" Content="{loc:Loc Settings_Flyout_AppDrawerStackDirection_BottomTop}"/>
+                    <ComboBoxItem Tag="LeftRight" Content="{loc:Loc Settings_Flyout_AppDrawerStackDirection_LeftRight}"/>
+                    <ComboBoxItem Tag="RightLeft" Content="{loc:Loc Settings_Flyout_AppDrawerStackDirection_RightLeft}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="AppDrawerIconsPerRowCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerIconsPerRow_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsPerRow_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner Width="100" VerticalAlignment="Center"
+                                      x:Name="AppDrawerIconsPerRowBox"
+                                      Minimum="1" Maximum="16"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+    </StackPanel>
+</UserControl>

@@ -439,15 +439,18 @@
 
                 <!-- Title + control buttons row. Grouped in one Grid so the whole header
                      band (name text + all per-device action buttons) moves as a unit.
-                     Placed below the slider (Grid.Row=1) so the slider reads as the primary
-                     control and the title/buttons act as the row's footer chrome.
+                     Grid.Row binds to the window's DeviceTitleRowIndex, which flips between row 1
+                     (below slider, default) and row 0 (above slider) per FlyoutDeviceTitlePosition.
+                     The slider grid below binds to DeviceSliderRowIndex so the two always occupy
+                     distinct rows.
                      Column layout left to right:
                        0  device name (takes remaining width)
                        1  exclusive-mode toggle (lock / unlock)
                        2  Equalizer APO state / install
                        3  Listen-to-this-device (capture endpoints only; collapses to zero on render)
                        4  device icon (set as default / enable-disable hub). -->
-                <Grid Grid.Row="1" Margin="-1,2,0,0">
+                <Grid Grid.Row="{Binding DeviceTitleRowIndex, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                      Margin="-1,2,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -693,7 +696,7 @@
                     </Button>
                 </Grid>
 
-                <Grid Grid.Row="0">
+                <Grid Grid.Row="{Binding DeviceSliderRowIndex, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>

@@ -151,6 +151,9 @@
   <data name="Settings_Common_Tab_About" xml:space="preserve">
     <value>About</value>
   </data>
+  <data name="Settings_Common_Tab_DeviceAppDrawers" xml:space="preserve">
+    <value>Device App Drawers</value>
+  </data>
   <data name="Settings_Common_Tab_Flyout" xml:space="preserve">
     <value>Flyout</value>
   </data>
@@ -198,6 +201,18 @@
   </data>
   <data name="Settings_Flyout_DeviceLayout_AppsBelow" xml:space="preserve">
     <value>Apps below device</value>
+  </data>
+  <data name="Settings_Flyout_DeviceTitlePosition_Title" xml:space="preserve">
+    <value>Device title row position</value>
+  </data>
+  <data name="Settings_Flyout_DeviceTitlePosition_Description" xml:space="preserve">
+    <value>Where the device name and per-device action buttons sit relative to the device slider.</value>
+  </data>
+  <data name="Settings_Flyout_DeviceTitlePosition_BelowSlider" xml:space="preserve">
+    <value>Below slider</value>
+  </data>
+  <data name="Settings_Flyout_DeviceTitlePosition_AboveSlider" xml:space="preserve">
+    <value>Above slider</value>
   </data>
   <data name="Settings_Flyout_DeviceSort_Title" xml:space="preserve">
     <value>Device sort</value>
@@ -812,6 +827,9 @@ Target: {1}</value>
   <data name="Tray_Sounds" xml:space="preserve">
     <value>Sounds</value>
   </data>
+  <data name="Settings_DeviceAppDrawers_SectionHeader" xml:space="preserve">
+    <value>Device app drawers</value>
+  </data>
   <data name="Settings_Devices_SectionHeader" xml:space="preserve">
     <value>Devices</value>
   </data>
@@ -883,9 +901,6 @@ Target: {1}</value>
   </data>
   <data name="Settings_Devices_ShowNotPresent_Description" xml:space="preserve">
     <value>List endpoints Windows still has on file but no driver is currently loaded for - old USB DACs, removed GPUs' HDMI outputs, paired Bluetooth headsets. Most surface as "Unknown Device". Off by default.</value>
-  </data>
-  <data name="Settings_Devices_TrayMenu_Header" xml:space="preserve">
-    <value>Tray menu</value>
   </data>
   <data name="Settings_Devices_ShowTrayRecordingLink_Title" xml:space="preserve">
     <value>Show "Recording" link in tray menu</value>

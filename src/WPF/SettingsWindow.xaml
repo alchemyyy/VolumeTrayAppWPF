@@ -111,6 +111,12 @@
                                      Checked="NavItem_Checked"
                                      Tag="Flyout"
                                      GroupName="SettingsNav"/>
+                        <RadioButton x:Name="NavDeviceAppDrawers"
+                                     Style="{StaticResource NavItemStyle}"
+                                     Content="{loc:Loc Settings_Common_Tab_DeviceAppDrawers}"
+                                     Checked="NavItem_Checked"
+                                     Tag="DeviceAppDrawers"
+                                     GroupName="SettingsNav"/>
                         <RadioButton x:Name="NavTrayIcon"
                                      Style="{StaticResource NavItemStyle}"
                                      Content="{loc:Loc Settings_Common_Tab_TrayIcon}"
@@ -163,6 +169,9 @@
 
                         <!-- Flyout -->
                         <pages:FlyoutPage x:Name="FlyoutSection" Visibility="Collapsed"/>
+
+                        <!-- Device App Drawers -->
+                        <pages:DeviceAppDrawersPage x:Name="DeviceAppDrawersSection" Visibility="Collapsed"/>
 
                         <!-- Tray Icon -->
                         <pages:TrayIconPage x:Name="TrayIconSection" Visibility="Collapsed"/>

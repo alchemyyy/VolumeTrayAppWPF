@@ -77,6 +77,18 @@ public enum FlyoutDeviceLayoutStyle
 }
 
 /// <summary>
+/// Where the device's title + control-buttons band sits relative to its slider.
+/// BelowSlider (default): slider on top, name and per-device action buttons underneath as footer chrome.
+/// AboveSlider: name and per-device action buttons render on top, slider underneath.
+/// Independent of FlyoutDeviceLayoutStyle, which governs the device-row vs apps stacking.
+/// </summary>
+public enum FlyoutDeviceTitlePosition
+{
+    BelowSlider,
+    AboveSlider,
+}
+
+/// <summary>
 /// Ordering rule for the device list in the flyout.
 /// StateGrouped: default, default-comms, enabled, disabled, disconnected. Enumeration order breaks ties
 /// inside each bucket. The list is rendered bottom-up so the default device sits closest to the user's
@@ -701,6 +713,7 @@ public class AppSettings
     // controls whether render and capture devices interleave inside their state buckets or whether
     // capture devices group together at the top of the list.
     public FlyoutDeviceLayoutStyle FlyoutDeviceLayout { get; set; } = FlyoutDeviceLayoutStyle.AppsAboveDevice;
+    public FlyoutDeviceTitlePosition FlyoutDeviceTitlePosition { get; set; } = FlyoutDeviceTitlePosition.BelowSlider;
     public FlyoutDeviceSortOrder FlyoutDeviceSort { get; set; } = FlyoutDeviceSortOrder.StateGrouped;
     public bool ShowRecordingDevicesInFlyout { get; set; } = true;
     public bool IntermixRecordingWithPlaybackInFlyout { get; set; } = false;

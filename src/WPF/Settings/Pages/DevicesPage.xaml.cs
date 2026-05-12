@@ -6,10 +6,10 @@ using UserControl = System.Windows.Controls.UserControl;
 namespace VolumeTrayAppWPF.WPF.Settings.Pages;
 
 /// <summary>
-/// Devices settings page. Hosts the defaulting / visibility / tray-menu toggles introduced for the
-/// device-icon feature. Every toggle is Tag-bound so SettingsBindings.HandleBoolToggle does the
-/// dispatch; this page only manages seed-from-settings + child-card visibility for the cascading
-/// "even if disabled" sections.
+/// Devices settings page. Hosts the defaulting and per-state visibility toggles for the device list.
+/// Tray-menu device-link toggles live on <see cref="TrayIconPage"/>. Every toggle is Tag-bound so
+/// SettingsBindings.HandleBoolToggle does the dispatch; this page only manages seed-from-settings
+/// plus child-card visibility for the cascading "even if disabled" sections.
 /// </summary>
 public partial class DevicesPage : UserControl
 {
@@ -37,11 +37,6 @@ public partial class DevicesPage : UserControl
             ShowDefaultCommsRecordingEvenIfDisabledToggle.IsChecked = settings.ShowDefaultCommsRecordingDeviceEvenIfDisabled;
 
             ShowNotPresentToggle.IsChecked = settings.ShowNotPresentDevices;
-
-            ShowTrayRecordingLinkToggle.IsChecked = settings.ShowTrayMenuRecordingLink;
-            ShowTraySoundsLinkToggle.IsChecked = settings.ShowTrayMenuSoundsLink;
-            ShowTrayCommunicationsLinkToggle.IsChecked = settings.ShowTrayMenuCommunicationsLink;
-            ShowTrayDeviceLinksToggle.IsChecked = settings.ShowTrayMenuDeviceLinks;
 
             UpdateChildCardVisibility();
         }

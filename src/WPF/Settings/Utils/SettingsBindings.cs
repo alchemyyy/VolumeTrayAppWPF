@@ -63,6 +63,7 @@ public static class SettingsBindings
         ["ThemeMode"] = Bind<ThemeMode>((s, v) => s.ThemeMode = v),
         ["TrayIconStyle"] = Bind<TrayIconStyle>((s, v) => s.TrayIconStyle = v),
         ["FlyoutDeviceLayout"] = Bind<FlyoutDeviceLayoutStyle>((s, v) => s.FlyoutDeviceLayout = v),
+        ["FlyoutDeviceTitlePosition"] = Bind<FlyoutDeviceTitlePosition>((s, v) => s.FlyoutDeviceTitlePosition = v),
         ["FlyoutDeviceSort"] = Bind<FlyoutDeviceSortOrder>((s, v) => s.FlyoutDeviceSort = v),
         ["CaptureActivityIndicator"] = Bind<CaptureActivityIndicator>((s, v) => s.CaptureActivityIndicator = v),
         ["RecordingAppDrawerDisplayType"] = Bind<AppDrawerDisplayType>((s, v) => s.RecordingAppDrawerDisplayType = v),

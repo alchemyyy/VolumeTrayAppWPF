@@ -79,6 +79,46 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowTrayRecordingLink_Title}"
+                               Description="{loc:Loc Settings_Devices_ShowTrayRecordingLink_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowTrayRecordingLinkToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowTrayMenuRecordingLink" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowTraySoundsLink_Title}"
+                               Description="{loc:Loc Settings_Devices_ShowTraySoundsLink_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowTraySoundsLinkToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowTrayMenuSoundsLink" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowTrayCommunicationsLink_Title}"
+                               Description="{loc:Loc Settings_Devices_ShowTrayCommunicationsLink_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowTrayCommunicationsLinkToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowTrayMenuCommunicationsLink" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowTrayDeviceLinks_Title}"
+                               Description="{loc:Loc Settings_Devices_ShowTrayDeviceLinks_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowTrayDeviceLinksToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowTrayMenuDeviceLinks" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
         <TextBlock Text="{loc:Loc Settings_TrayIcon_ModifiedActions_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
         <TextBlock Style="{StaticResource SettingDescriptionStyle}"

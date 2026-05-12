@@ -46,6 +46,11 @@ public partial class TrayIconPage : UserControl
         {
             TrayScrollEnableToggle.IsChecked = settings.TrayScrollEnabled;
 
+            ShowTrayRecordingLinkToggle.IsChecked = settings.ShowTrayMenuRecordingLink;
+            ShowTraySoundsLinkToggle.IsChecked = settings.ShowTrayMenuSoundsLink;
+            ShowTrayCommunicationsLinkToggle.IsChecked = settings.ShowTrayMenuCommunicationsLink;
+            ShowTrayDeviceLinksToggle.IsChecked = settings.ShowTrayMenuDeviceLinks;
+
             SettingsBindings.SelectComboByTag(ContextMenuPositionCombo, settings.ContextMenuPosition.ToString());
             SettingsBindings.SelectComboByTag(
                 TrayMenuPlaybackDeviceNameStyleCombo, settings.TrayMenuPlaybackDeviceNameStyle.ToString());
