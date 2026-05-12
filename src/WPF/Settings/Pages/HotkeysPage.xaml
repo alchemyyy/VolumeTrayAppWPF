@@ -5,12 +5,14 @@
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     xmlns:pages="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Pages"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     d:DesignWidth="660"
     d:DesignHeight="594"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils:SettingsKeyboardNavigation.IsContentSection="True">
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_Hotkeys_SectionHeader}"/>
@@ -35,6 +37,9 @@
                      TextChanged="HotkeySearchBox_TextChanged"/>
         </StackPanel>
 
+        <!-- HotkeyRowsList ItemsSource is wired in code-behind (no static design-time stub here),
+             so the designer renders zero rows. Add a d:ItemsSource collection if a preview ever
+             needs to show row chrome. -->
         <ItemsControl x:Name="HotkeyRowsList">
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type utils:HotkeyRowViewModel}">
@@ -130,6 +135,8 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
 
+                            <!-- Focus background is painted by SettingsTextBoxStyle's
+                                 IsKeyboardFocused trigger; no per-control focus handlers needed. -->
                             <TextBox Grid.Row="0" Grid.Column="2"
                                      Style="{StaticResource SettingsTextBoxStyle}"
                                      Width="60"
@@ -138,8 +145,6 @@
                                      IsReadOnly="True"
                                      Cursor="IBeam"
                                      Text="{Binding DraftKeyDisplay, Mode=OneWay}"
-                                     GotFocus="HotkeyKeyBox_GotFocus"
-                                     LostFocus="HotkeyKeyBox_LostFocus"
                                      PreviewKeyDown="HotkeyKeyBox_PreviewKeyDown"
                                      Tag="{Binding}"/>
 

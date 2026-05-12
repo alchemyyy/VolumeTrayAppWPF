@@ -63,12 +63,13 @@ public static class UninstallScript
 
     private static string BuildScript(string installDir, WindowsUninstallRegistry.Scope regScope, bool deleteSettings)
     {
-        string installExe = Path.Combine(installDir, InstallationService.InstalledExeFileName);
+        string installEXE = Path.Combine(installDir, InstallationService.InstalledEXEFileName);
         string regKeyFullPath = (regScope == WindowsUninstallRegistry.Scope.LocalMachine ? "HKLM\\" : "HKCU\\")
             + WindowsUninstallRegistry.SubKeyPath;
-        string startupLnk = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-            Program.ApplicationName + ".lnk");
+        // Single source of truth for the startup-shortcut path.
+        // Mirroring StartupManager.ShortcutPath keeps the bat's "is this .lnk inside the install dir?"
+        // check aligned with the in-app shortcut writer.
+        string startupLnk = StartupManager.ShortcutPath;
         string settingsDir = AppSettings.GetDefaultDirectory();
 
         // For LocalAppData, install dir == settings dir.
@@ -82,7 +83,7 @@ public static class UninstallScript
         bool wipeSettingsDirSeparately = deleteSettings && !installIsSettingsDir;
 
         // PowerShell single-quoted literal: any embedded ' must be doubled.
-        string installExeForPs = installExe.Replace("'", "''");
+        string installEXEForPs = installEXE.Replace("'", "''");
         string startupLnkForPs = startupLnk.Replace("'", "''");
         // Trailing separator pins the StartsWith comparison to whole-segment matches:
         // "C:\Foo\Bar" must not match "C:\Foo\BarBaz\app.exe".
@@ -99,7 +100,7 @@ public static class UninstallScript
         sb.AppendLine("rem a portable copy of the app running from elsewhere is untouched).");
         sb.AppendLine("rem Loops with a brief sleep so the watcher/monitored restart race resolves.");
         sb.AppendLine("powershell -NoProfile -ExecutionPolicy Bypass -Command "
-            + "\"$p = '" + installExeForPs + "'; "
+            + "\"$p = '" + installEXEForPs + "'; "
             + "for ($i=0; $i -lt 20; $i++) { "
             + "$procs = Get-Process -Name " + Program.ApplicationName + " -ErrorAction SilentlyContinue "
             + "| Where-Object { try { $_.Path -ieq $p } catch { $false } }; "
@@ -120,7 +121,7 @@ public static class UninstallScript
             sb.AppendLine("rem so surgically remove only the runtime files we deployed and leave user data alone.");
             foreach (string pattern in RuntimeFilePatterns)
                 sb.AppendLine($"del /f /q \"{EscBat(installDir)}\\{pattern}\" >nul 2>&1");
-            sb.AppendLine($"if exist \"{EscBat(installExe)}\" set ERR=1");
+            sb.AppendLine($"if exist \"{EscBat(installEXE)}\" set ERR=1");
             sb.AppendLine("rem If the dir is empty after the surgical pass (e.g. fresh install never ran),");
             sb.AppendLine("rem clean it up; if user data remains, rmdir no-ops.");
             sb.AppendLine($"rmdir \"{EscBat(installDir)}\" >nul 2>&1");
@@ -153,8 +154,12 @@ public static class UninstallScript
             + "if ($t -and $t.StartsWith($dir, [System.StringComparison]::OrdinalIgnoreCase)) "
             + "{ Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue } "
             + "} catch { } }\" >nul 2>&1");
+        // Legacy HKCU\Run entry from the pre-shortcut autostart era; idempotent removal.
+        // Path mirrors StartupManager.LegacyRunKeyRegistryPath so a rename only has to happen in one place.
+        // Kept in the bat (in addition to StartupManager.RemoveLegacyRunKey running on every launch)
+        // because the bat may be the only thing executing when a user uninstalls without ever opening the app.
         sb.AppendLine("rem Legacy HKCU\\...\\Run entry from the pre-shortcut autostart era; idempotent removal.");
-        sb.AppendLine("reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\""
+        sb.AppendLine($"reg delete \"HKCU\\{StartupManager.LegacyRunKeyRegistryPath}\""
             + $" /v \"{Program.ApplicationName}\" /f >nul 2>&1");
         sb.AppendLine();
         sb.AppendLine("rem Self-delete and propagate ERR. (goto) discards the rest of the script,");

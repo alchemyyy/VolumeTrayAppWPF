@@ -152,7 +152,7 @@ internal static class PropertyKeys
     // render endpoint's IMMDevice id (e.g. "{0.0.0.00000000}.{<guid>}"). Absent / VT_EMPTY means
     // 'Default Playback Device' - mmsys.cpl deletes this pid to encode the follow-default mode.
     // Verified empirically against the registry; same fmtid as the listen-enable bool.
-    public static readonly PROPERTYKEY PKEY_AudioEndpoint_ListenTargetDeviceId = new(
+    public static readonly PROPERTYKEY PKEY_AudioEndpoint_ListenTargetDeviceID = new(
         new Guid(0x24DBB0FC, 0x9311, 0x4B3D, 0x9C, 0xF0, 0x18, 0xFF, 0x15, 0x56, 0x39, 0xD4), 0);
 
     // "Allow applications to take exclusive control of this device" - the master checkbox in
@@ -251,6 +251,23 @@ internal static class AudioClientStreamFlags
     public const uint NoPersist = 0x00080000;
     public const uint AutoConvertPcm = 0x80000000;
     public const uint SrcDefaultQuality = 0x08000000;
+}
+
+// STGM access flags for IMMDevice.OpenPropertyStore. Hoisted out of AudioDevice.cs where the
+// raw 0 / 1 literals appeared nine times with inline "/* STGM_READ */" comments. uint to match
+// the IMMDevice.OpenPropertyStore signature.
+internal static class Stgm
+{
+    public const uint Read = 0u;
+    public const uint Write = 1u;
+}
+
+// Event-context GUID used for our own IAudioEndpointVolume / IAudioSession writes so the
+// matching change callbacks can suppress our own echoes. Single declaration shared by
+// AudioDevice and AudioSession.
+internal static class AudioEventContext
+{
+    public static readonly Guid Value = new(AppIdentity.AppGuid);
 }
 
 // IPropertyStore: read-only side used to pull endpoint properties out of an IMMDevice.

@@ -5,6 +5,7 @@ using System.Windows.Input;
 using VolumeTrayAppWPF.Localization;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
+using VolumeTrayAppWPF.WPF.Settings.Utils;
 using VolumeTrayAppWPF.WPF.Utils;
 using Button = System.Windows.Controls.Button;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
@@ -156,16 +157,6 @@ public partial class HotkeysPage : UserControl
         }
     }
 
-    private void HotkeyKeyBox_GotFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox tb) tb.Background = (System.Windows.Media.Brush)FindResource("ThemeTextBoxFocused");
-    }
-
-    private void HotkeyKeyBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox tb) tb.ClearValue(BackgroundProperty);
-    }
-
     /// <summary>
     /// Captures a single key from the focused textbox and writes its VK to the row's
     /// <see cref="HotkeyRowViewModel.DraftVirtualKey"/>.
@@ -260,7 +251,7 @@ public partial class HotkeysPage : UserControl
 
         owner.Entries.Remove(entry);
 
-        if (AppSettings.IsDefaultHotkeyIdentity(owner.Action, owner.Parameter, entry.BindingID))
+        if (HotkeyDefaults.IsDefaultIdentity(owner.Action, owner.Parameter, entry.BindingID))
         {
             foreach (HotkeyBinding b in _settings.Hotkeys)
             {
@@ -302,10 +293,5 @@ public partial class HotkeysPage : UserControl
         };
     }
 
-    private void SaveAndNotify()
-    {
-        if (_settings == null) return;
-        _settings.Save();
-        _settings.RaiseChanged();
-    }
+    private void SaveAndNotify() => SettingsBindings.SaveAndNotify(_settings);
 }

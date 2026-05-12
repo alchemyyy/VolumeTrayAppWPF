@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Diagnostics;
 using VolumeTrayAppWPF.Localization;
 using VolumeTrayAppWPF.Models;
@@ -6,7 +6,6 @@ using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.Utils;
 using VolumeTrayAppWPF.WPF.Settings.Utils;
 using Button = System.Windows.Controls.Button;
-using TextBlock = System.Windows.Controls.TextBlock;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace VolumeTrayAppWPF.WPF.Settings.Pages;
@@ -18,6 +17,8 @@ namespace VolumeTrayAppWPF.WPF.Settings.Pages;
 /// The shell calls <see cref="LoadFromSettings"/> after construction
 /// and <see cref="RefreshOnShow"/> on every nav-to-General
 /// so the install rows reflect current filesystem state.
+/// Bool toggles flow through the shared SettingsBindings tag dispatcher; the only specialised
+/// handler is RunOnStartup, which has the StartupManager side-effect and description refresh.
 /// </summary>
 public partial class GeneralPage : UserControl
 {
@@ -112,6 +113,9 @@ public partial class GeneralPage : UserControl
 
         if (_settings == null) return;
 
+        // RunOnStartup keeps a specialised handler because it has a side effect (writing the shell
+        // shortcut via StartupManager) plus a description refresh; the other three notifications
+        // toggles route through SettingsBindings.HandleBoolToggle by Tag and are pure value writes.
         bool enabled = RunOnStartupToggle.IsChecked == true;
         StartupManager.SetRunOnStartup(enabled);
         _settings.RunOnStartup = enabled;
@@ -119,39 +123,9 @@ public partial class GeneralPage : UserControl
         SaveAndNotify();
     }
 
-    private void LogarithmicVolumeScale_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_suppressChangeEvents) return;
-
-        if (_settings == null) return;
-
-        _settings.UseLogarithmicVolumeScale = LogarithmicVolumeScaleToggle.IsChecked == true;
-        SaveAndNotify();
-    }
-
-    private void PlayDeviceVolumeChangeSound_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_suppressChangeEvents) return;
-
-        if (_settings == null) return;
-
-        _settings.PlayDeviceVolumeChangeSound = PlayDeviceVolumeChangeSoundToggle.IsChecked == true;
-        SaveAndNotify();
-    }
-
-    private void PlayAppVolumeChangeSound_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_suppressChangeEvents) return;
-
-        if (_settings == null) return;
-
-        _settings.PlayAppVolumeChangeSound = PlayAppVolumeChangeSoundToggle.IsChecked == true;
-        SaveAndNotify();
-    }
-
-    // Tag-based bool toggle dispatcher for the peak-meter subsection. The unified-peak-meter
-    // toggle carries Tag="UnifiedPeakMeter" so SettingsBindings can apply the mutation through
-    // the shared BoolToggleSetters table without a per-toggle handler.
+    // Tag-based bool toggle dispatcher for every non-side-effecting checkbox on this page:
+    // PlayDeviceVolumeChangeSound, PlayAppVolumeChangeSound, UseLogarithmicVolumeScale, UnifiedPeakMeter.
+    // The shared BoolToggleSetters table in SettingsBindings carries the property writer for each Tag.
     private void BoolToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (_settings == null) return;
@@ -200,18 +174,18 @@ public partial class GeneralPage : UserControl
             {
                 case InstallScope.LocalAppData:
                     ApplyInstallRow(info,
-                        InstallLocalAppDataStatusText,
+                        InstallLocalAppDataCard,
                         InstallLocalAppDataButton,
                         UninstallLocalAppDataButton,
-                        InstallationService.LocalAppDataInstallExe,
+                        InstallationService.LocalAppDataInstallEXE,
                         elevated: false);
                     break;
                 case InstallScope.ProgramFiles:
                     ApplyInstallRow(info,
-                        InstallProgramFilesStatusText,
+                        InstallProgramFilesCard,
                         InstallProgramFilesButton,
                         UninstallProgramFilesButton,
-                        InstallationService.ProgramFilesInstallExe,
+                        InstallationService.ProgramFilesInstallEXE,
                         elevated: true);
                     break;
                 case InstallScope.WindowsStore:
@@ -223,7 +197,7 @@ public partial class GeneralPage : UserControl
 
     private static void ApplyInstallRow(
         InstallationInfo info,
-        TextBlock statusText,
+        SettingsCard card,
         Button installButton,
         Button uninstallButton,
         string installPath,
@@ -236,7 +210,7 @@ public partial class GeneralPage : UserControl
         switch (info.Status)
         {
             case InstallStatus.NotInstalled:
-                statusText.Text = string.Format(
+                card.Description = string.Format(
                     LocalizationManager.Instance["Settings_General_NotInstalled_Format"],
                     installPath, elevationSuffix);
                 installButton.Content = LocalizationManager.Instance["Settings_General_Install_Button"];
@@ -244,7 +218,7 @@ public partial class GeneralPage : UserControl
                 uninstallButton.Visibility = Visibility.Collapsed;
                 break;
             case InstallStatus.InstalledUpToDate:
-                statusText.Text = info.InstalledVersion is { } v
+                card.Description = info.InstalledVersion is { } v
                     ? string.Format(
                         LocalizationManager.Instance["Settings_General_InstalledWithBuild_Format"],
                         v, installPath)
@@ -256,7 +230,7 @@ public partial class GeneralPage : UserControl
                 uninstallButton.Visibility = Visibility.Visible;
                 break;
             case InstallStatus.InstalledOutOfDate:
-                statusText.Text = info.InstalledVersion is { } ov
+                card.Description = info.InstalledVersion is { } ov
                     ? string.Format(
                         LocalizationManager.Instance["Settings_General_InstalledOutOfDate_Format"],
                         ov, BuildInfo.BuildNumber, elevationSuffix)
@@ -269,7 +243,7 @@ public partial class GeneralPage : UserControl
                 uninstallButton.Visibility = Visibility.Visible;
                 break;
             case InstallStatus.CurrentlyRunning:
-                statusText.Text = string.Format(
+                card.Description = string.Format(
                     LocalizationManager.Instance["Settings_General_CurrentlyRunning_Format"],
                     installPath);
                 installButton.Visibility = Visibility.Collapsed;
@@ -281,7 +255,7 @@ public partial class GeneralPage : UserControl
 
     private void ApplyStoreRow(InstallationInfo info)
     {
-        InstallStoreStatusText.Text = info.Status == InstallStatus.CurrentlyRunning
+        InstallStoreCard.Description = info.Status == InstallStatus.CurrentlyRunning
             ? LocalizationManager.Instance["Settings_General_StoreRunning"]
             : LocalizationManager.Instance["Settings_General_StoreNotInstalled"];
     }
@@ -298,23 +272,33 @@ public partial class GeneralPage : UserControl
             System.Windows.MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
+    // Confirmation prompt routed through the SettingsWindow shell. The shell exposes a public
+    // overlay-driven prompt; this method centralises the "find the shell, await its prompt" step
+    // so the install / uninstall click handlers stay focused on their orchestration.
+    private async Task<bool> ConfirmWithShellAsync(string title, string message, string confirmText, string cancelText)
+    {
+        if (Window.GetWindow(this) is SettingsWindow sw)
+            return await sw.ShowConfirmDialogAsync(title, message, confirmText, cancelText);
+
+        // No shell available (the page is detached / hosted elsewhere). Assume confirm so the user's
+        // explicit Install / Uninstall click still proceeds rather than silently no-oping.
+        return true;
+    }
+
     private async void InstallLocalAppData_Click(object sender, RoutedEventArgs e)
     {
         try
         {
             if (sender is not Button button) return;
 
-            if (Window.GetWindow(this) is IConfirmDialogService confirm)
-            {
-                bool ok = await confirm.ConfirmAsync(
-                    title: LocalizationManager.Instance["Settings_General_InstallConfirm_Title"],
-                    message: string.Format(
-                        LocalizationManager.Instance["Settings_General_InstallConfirm_Message_Format"],
-                        InstallationService.LocalAppDataInstallExe),
-                    confirmText: LocalizationManager.Instance["Settings_General_Install_Button"],
-                    cancelText: LocalizationManager.Instance["Settings_General_Cancel_Button"]);
-                if (!ok) return;
-            }
+            bool ok = await ConfirmWithShellAsync(
+                title: LocalizationManager.Instance["Settings_General_InstallConfirm_Title"],
+                message: string.Format(
+                    LocalizationManager.Instance["Settings_General_InstallConfirm_Message_Format"],
+                    InstallationService.LocalAppDataInstallEXE),
+                confirmText: LocalizationManager.Instance["Settings_General_Install_Button"],
+                cancelText: LocalizationManager.Instance["Settings_General_Cancel_Button"]);
+            if (!ok) return;
 
             button.IsEnabled = false;
             try
@@ -343,17 +327,14 @@ public partial class GeneralPage : UserControl
         {
             if (sender is not Button button) return;
 
-            if (Window.GetWindow(this) is IConfirmDialogService confirm)
-            {
-                bool ok = await confirm.ConfirmAsync(
-                    title: LocalizationManager.Instance["Settings_General_InstallSystemWideConfirm_Title"],
-                    message: string.Format(
-                        LocalizationManager.Instance["Settings_General_InstallSystemWideConfirm_Message_Format"],
-                        InstallationService.ProgramFilesInstallExe),
-                    confirmText: LocalizationManager.Instance["Settings_General_Install_Button"],
-                    cancelText: LocalizationManager.Instance["Settings_General_Cancel_Button"]);
-                if (!ok) return;
-            }
+            bool ok = await ConfirmWithShellAsync(
+                title: LocalizationManager.Instance["Settings_General_InstallSystemWideConfirm_Title"],
+                message: string.Format(
+                    LocalizationManager.Instance["Settings_General_InstallSystemWideConfirm_Message_Format"],
+                    InstallationService.ProgramFilesInstallEXE),
+                confirmText: LocalizationManager.Instance["Settings_General_Install_Button"],
+                cancelText: LocalizationManager.Instance["Settings_General_Cancel_Button"]);
+            if (!ok) return;
 
             button.IsEnabled = false;
             try
@@ -442,10 +423,5 @@ public partial class GeneralPage : UserControl
         }));
     }
 
-    private void SaveAndNotify()
-    {
-        if (_settings == null) return;
-        _settings.Save();
-        _settings.RaiseChanged();
-    }
+    private void SaveAndNotify() => SettingsBindings.SaveAndNotify(_settings);
 }

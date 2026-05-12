@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using Binding = System.Windows.Data.Binding;
 
@@ -31,16 +31,7 @@ public sealed class LocalizationManager : INotifyPropertyChanged
             if (Equals(_currentCulture, value)) return;
 
             _currentCulture = value;
-
-            // Keep the strongly-typed Strings accessor in lockstep so code-side lookups
-            // (Strings.SomeKey) follow the same culture as XAML lookups.
-            Strings.Culture = value;
-
-            // Apply to the current thread and to any future threads spawned by the app.
-            Thread.CurrentThread.CurrentCulture = value;
-            Thread.CurrentThread.CurrentUICulture = value;
-            CultureInfo.DefaultThreadCurrentCulture = value;
-            CultureInfo.DefaultThreadCurrentUICulture = value;
+            ApplyCulture(value);
 
             // Binding.IndexerName ("Item[]") is the WPF convention for "every indexer entry changed":
             // a single notification refreshes every {loc:Loc ...} binding in the visual tree.
@@ -83,11 +74,25 @@ public sealed class LocalizationManager : INotifyPropertyChanged
 
         // Force notification even if target equals the field default
         // so Strings.Culture and the thread cultures get set on first run.
-        Strings.Culture = target;
-        Thread.CurrentThread.CurrentCulture = target;
-        Thread.CurrentThread.CurrentUICulture = target;
-        CultureInfo.DefaultThreadCurrentCulture = target;
-        CultureInfo.DefaultThreadCurrentUICulture = target;
+        ApplyCulture(target);
         _currentCulture = target;
+    }
+
+    /// <summary>
+    /// Pushes <paramref name="culture"/> into every place .NET reads "current culture" from -
+    /// the strongly-typed Strings accessor, the current thread, and the default for future threads.
+    /// Shared by Initialize and the CurrentCulture setter so the two paths can't drift out of sync.
+    /// </summary>
+    private static void ApplyCulture(CultureInfo culture)
+    {
+        // Keep the strongly-typed Strings accessor in lockstep so code-side lookups
+        // (Strings.SomeKey) follow the same culture as XAML lookups.
+        Strings.Culture = culture;
+
+        // Apply to the current thread and to any future threads spawned by the app.
+        Thread.CurrentThread.CurrentCulture = culture;
+        Thread.CurrentThread.CurrentUICulture = culture;
+        CultureInfo.DefaultThreadCurrentCulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
     }
 }

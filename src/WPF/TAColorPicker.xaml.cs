@@ -2,15 +2,13 @@
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
-using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
+using VolumeTrayAppWPF.WPF.Utils;
 using Color = System.Windows.Media.Color;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Point = System.Windows.Point;
-using Size = System.Windows.Size;
 
 namespace VolumeTrayAppWPF.WPF;
 
@@ -36,7 +34,7 @@ namespace VolumeTrayAppWPF.WPF;
 /// handler runs. Default loads the supplied factory color (the theme's fallback for the swatch);
 /// Reset reverts to the baseline (the color the picker opened on). Neither closes the window.
 /// </summary>
-public partial class TAWPFColorPicker : Window
+public partial class TAColorPicker : Window
 {
     // Single throttler slot - one picker only edits one color, so we don't need per-key partitioning.
     // 50ms cooldown caps ColorChanged fanout (AppSettings.Changed -> brush rebuild + swatch refresh)
@@ -78,19 +76,14 @@ public partial class TAWPFColorPicker : Window
     // Reentry guards: setting one textbox's Text from code triggers TextChanged,
     // which would otherwise re-parse and overwrite the textbox the user is typing in
     // (and bounce caret position). One flag per box so the OTHER box still updates from a code-driven SetColor.
-    private bool _suppressArgb;
-    private bool _suppressRgba;
+    private bool _suppressARGB;
+    private bool _suppressRGBA;
 
     // Suppresses ChannelSlider_ValueChanged while a code-driven SyncSlidersFromColor is in progress,
     // so seeding sliders from the current color (constructor or hex-textbox edit) doesn't bounce
     // back into ApplyColor and re-snap the slider to its rounded byte (which would clobber the
     // sub-integer precision of an in-flight drag).
     private bool _suppressSliderToColor;
-
-    // Slider currently being click-track-dragged. WPF's native thumb-drag captures fine on its own;
-    // this field tracks the OTHER path - a click on the visible track (not the thumb) - so PreviewMouseMove
-    // knows which slider to keep updating until the button releases.
-    private Slider? _draggingSlider;
 
     // Last non-gray hue, in degrees [0, 360). HSV is undefined when saturation is 0 (any pure gray),
     // so an RGB->HSV round-trip on a gray would collapse hue back to 0 (red) and flip the free-pick
@@ -142,7 +135,7 @@ public partial class TAWPFColorPicker : Window
     /// When null, defaults to opaque black.</param>
     /// <param name="defaultColor">The factory color the Default button loads. When null,
     /// falls back to <paramref name="startingColor"/> so Default behaves like Reset.</param>
-    public TAWPFColorPicker(string title, bool hasAlpha, Color? startingColor = null, Color? defaultColor = null)
+    public TAColorPicker(string title, bool hasAlpha, Color? startingColor = null, Color? defaultColor = null)
     {
         InitializeComponent();
 
@@ -207,7 +200,11 @@ public partial class TAWPFColorPicker : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        ApplyDwmRoundedCorners();
+
+        // HWND exists now, so the DWM corner-preference call inside ApplyOuterCornerRadius
+        // actually lands. The earlier constructor call was a layout-only pre-pass (RootBorder
+        // and WindowChrome) - DWM was skipped because the HWND wasn't realized yet.
+        ApplyOuterCornerRadius();
     }
 
     private void OnAppSettingsChanged()
@@ -242,33 +239,11 @@ public partial class TAWPFColorPicker : Window
     /// </summary>
     private void ApplyOuterCornerRadius()
     {
+        // Shared helper applies the WindowChrome / RootBorder corner radius AND the DWM corner
+        // preference in one shot, so the picker chrome tracks the global EnableRoundedCorners
+        // toggle without duplicating SettingsWindow's implementation.
         double r = _settings?.EnableRoundedCorners == true ? 8 : 0;
-        CornerRadius radius = new(r);
-
-        System.Windows.Shell.WindowChrome? chrome =
-            System.Windows.Shell.WindowChrome.GetWindowChrome(this);
-        if (chrome != null) chrome.CornerRadius = radius;
-
-        RootBorder.CornerRadius = radius;
-        ApplyDwmRoundedCorners();
-    }
-
-    private void ApplyDwmRoundedCorners()
-    {
-        try
-        {
-            IntPtr hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd == IntPtr.Zero) return;
-
-            int value = _settings?.EnableRoundedCorners == true
-                ? DWMAPI.DWMWCP_ROUND
-                : DWMAPI.DWMWCP_DONOTROUND;
-            DWMAPI.DwmSetWindowAttribute(hwnd, DWMAPI.DWMWA_WINDOW_CORNER_PREFERENCE, ref value, sizeof(int));
-        }
-        catch
-        {
-            // DWM call may fail on older Windows; non-fatal.
-        }
+        ChromeCornerRadiusHelper.Apply(this, RootBorder, r);
     }
 
     private void Default_Click(object sender, RoutedEventArgs e)
@@ -288,28 +263,28 @@ public partial class TAWPFColorPicker : Window
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void ArgbBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void ARGBBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_suppressArgb) return;
-        if (!TryParseHex(ArgbBox.Text, argbOrder: true, out Color parsed)) return;
+        if (_suppressARGB) return;
+        if (!ColorMath.TryParseHex(ARGBBox.Text, ARGBOrder: true, out Color parsed)) return;
 
         if (!_hasAlpha) parsed = Color.FromArgb(0xFF, parsed.R, parsed.G, parsed.B);
-        ApplyColor(parsed, sourceArgbBox: true);
+        ApplyColor(parsed, sourceARGBBox: true);
     }
 
-    private void RgbaBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void RGBABox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_suppressRgba) return;
-        if (!TryParseHex(RgbaBox.Text, argbOrder: false, out Color parsed)) return;
+        if (_suppressRGBA) return;
+        if (!ColorMath.TryParseHex(RGBABox.Text, ARGBOrder: false, out Color parsed)) return;
 
         if (!_hasAlpha) parsed = Color.FromArgb(0xFF, parsed.R, parsed.G, parsed.B);
-        ApplyColor(parsed, sourceRgbaBox: true);
+        ApplyColor(parsed, sourceRGBABox: true);
     }
 
     private void ApplyColor(
         Color color,
-        bool sourceArgbBox = false,
-        bool sourceRgbaBox = false,
+        bool sourceARGBBox = false,
+        bool sourceRGBABox = false,
         Slider? sourceSlider = null,
         bool sourceFreePick = false,
         bool force = false)
@@ -320,8 +295,8 @@ public partial class TAWPFColorPicker : Window
 
         // Skip writing the textbox the user is typing in to keep their caret position
         // and avoid clobbering in-progress text. The other box always re-syncs from the new color.
-        if (!sourceArgbBox) WriteArgbBox();
-        if (!sourceRgbaBox) WriteRgbaBox();
+        if (!sourceARGBBox) WriteARGBBox();
+        if (!sourceRGBABox) WriteRGBABox();
 
         // Refresh the hue cache + free-pick visuals from the new color so downstream consumers (hue
         // slider sync, hue thumb fill) see a coherent hue. Skipped entirely on a free-pick drag
@@ -343,7 +318,7 @@ public partial class TAWPFColorPicker : Window
 
     private void RefreshHueFromColor()
     {
-        (double hue, double sat, double _) = RGBToHSV(_currentColor.R, _currentColor.G, _currentColor.B);
+        (double hue, double sat, double _) = ColorMath.RGBToHSV(_currentColor.R, _currentColor.G, _currentColor.B);
         if (sat > 0) _freePickHue = hue;
     }
 
@@ -377,30 +352,27 @@ public partial class TAWPFColorPicker : Window
 
     private void SyncTextBoxes()
     {
-        WriteArgbBox();
-        WriteRgbaBox();
+        WriteARGBBox();
+        WriteRGBABox();
     }
 
-    private void WriteArgbBox()
+    private void WriteARGBBox()
     {
-        _suppressArgb = true;
-        try { ArgbBox.Text = FormatArgb(_currentColor); }
-        finally { _suppressArgb = false; }
+        _suppressARGB = true;
+        try { ARGBBox.Text = ColorMath.FormatARGB(_currentColor); }
+        finally { _suppressARGB = false; }
     }
 
-    private void WriteRgbaBox()
+    private void WriteRGBABox()
     {
-        _suppressRgba = true;
-        try { RgbaBox.Text = FormatRgba(_currentColor); }
-        finally { _suppressRgba = false; }
+        _suppressRGBA = true;
+        try { RGBABox.Text = ColorMath.FormatRGBA(_currentColor); }
+        finally { _suppressRGBA = false; }
     }
 
     // Paint the free-pick area's node indicator with the current color so it reads as the live
     // preview of the edit, mirroring how curve-editor nodes are filled with their series color.
     private void UpdatePreview() => FreePickIndicator.Fill = new SolidColorBrush(_currentColor);
-
-    private static string FormatArgb(Color color) => $"{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
-    private static string FormatRgba(Color color) => $"{color.R:X2}{color.G:X2}{color.B:X2}{color.A:X2}";
 
     private IEnumerable<Slider> EnumerateChannelSliders()
     {
@@ -413,12 +385,13 @@ public partial class TAWPFColorPicker : Window
 
     private void WireChannelSliderEvents()
     {
+        // Click-track-jump + drag-with-capture lives on SliderClickDragBehavior, set in XAML.
+        // Code-behind only needs ValueChanged (channel demux via slider.Tag) and the wheel
+        // modifier-step handler; the rest of the input plumbing is shared with any other
+        // Slider that opts into the attached behaviour.
         foreach (Slider slider in EnumerateChannelSliders())
         {
             slider.ValueChanged += ChannelSlider_ValueChanged;
-            slider.PreviewMouseLeftButtonDown += ChannelSlider_PreviewMouseLeftButtonDown;
-            slider.PreviewMouseMove += ChannelSlider_PreviewMouseMove;
-            slider.PreviewMouseLeftButtonUp += ChannelSlider_PreviewMouseLeftButtonUp;
             slider.PreviewMouseWheel += ChannelSlider_PreviewMouseWheel;
         }
     }
@@ -469,9 +442,9 @@ public partial class TAWPFColorPicker : Window
             // hue-only visuals refresh; ApplyColor's normal equality early-exit would otherwise
             // freeze the picker mid-drag whenever the user is dialling hue against a gray base.
             _freePickHue = Math.Clamp(slider.Value, 0, 360);
-            (double _, double sat, double val) = RGBToHSV(_currentColor.R, _currentColor.G, _currentColor.B);
-            Color hueRgb = HSVToRGB(_freePickHue, sat, val);
-            next = Color.FromArgb(_currentColor.A, hueRgb.R, hueRgb.G, hueRgb.B);
+            (double _, double sat, double val) = ColorMath.RGBToHSV(_currentColor.R, _currentColor.G, _currentColor.B);
+            Color hueRGB = ColorMath.HSVToRGB(_freePickHue, sat, val);
+            next = Color.FromArgb(_currentColor.A, hueRGB.R, hueRGB.G, hueRGB.B);
             ApplyColor(next, sourceSlider: slider, force: true);
             return;
         }
@@ -492,53 +465,6 @@ public partial class TAWPFColorPicker : Window
         ApplyColor(next, sourceSlider: slider);
     }
 
-    private void ChannelSlider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        // WPF's native Track handles thumb-on-the-cursor dragging fine. The case we have to handle
-        // ourselves is a click on the visible track (away from the thumb): we want the thumb to
-        // jump to that point AND keep tracking the cursor through subsequent drag - the symptom
-        // the user reported was "position updates once" because nothing was capturing the mouse.
-        if (sender is not Slider slider) return;
-
-        Track? track = FindVisualChild<Track>(slider);
-        if (track?.Thumb == null) return;
-
-        Rect thumbBounds = new(
-            track.Thumb.TranslatePoint(new Point(0, 0), slider),
-            new Size(track.Thumb.ActualWidth, track.Thumb.ActualHeight));
-        if (thumbBounds.Contains(e.GetPosition(slider))) return;
-
-        _draggingSlider = slider;
-        slider.CaptureMouse();
-        UpdateSliderValueFromMousePosition(slider, track, e.GetPosition(slider));
-        e.Handled = true;
-    }
-
-    private void ChannelSlider_PreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (sender is not Slider slider || _draggingSlider != slider) return;
-
-        if (e.LeftButton == MouseButtonState.Pressed)
-        {
-            Track? track = FindVisualChild<Track>(slider);
-            if (track != null) UpdateSliderValueFromMousePosition(slider, track, e.GetPosition(slider));
-        }
-        else
-            StopDragging(slider);
-    }
-
-    private void ChannelSlider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not Slider slider || _draggingSlider != slider) return;
-        StopDragging(slider);
-    }
-
-    private void StopDragging(Slider slider)
-    {
-        _draggingSlider = null;
-        slider.ReleaseMouseCapture();
-    }
-
     private void ChannelSlider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not Slider slider) return;
@@ -550,27 +476,6 @@ public partial class TAWPFColorPicker : Window
         double notches = e.Delta / 120.0;
         slider.Value = Math.Clamp(slider.Value + notches * step, slider.Minimum, slider.Maximum);
         e.Handled = true;
-    }
-
-    private static void UpdateSliderValueFromMousePosition(Slider slider, Track track, Point position)
-    {
-        // Vertical slider with default IsDirectionReversed=false maps the top of the usable track to
-        // Maximum and the bottom to Minimum (R/G/B/Hue follow this). The alpha slider sets
-        // IsDirectionReversed=true to put 255 at the bottom (matches the gradient), so the value
-        // mapping flips with it. Half a thumb is unreachable on each end - the thumb's center can't
-        // extend past the track edges - so strip that out so the cursor's Y matches the value at the
-        // thumb's center.
-        double thumbHeight = track.Thumb?.ActualHeight ?? 0;
-        double trackStart = thumbHeight / 2;
-        double trackEnd = slider.ActualHeight - thumbHeight / 2;
-        double trackLength = trackEnd - trackStart;
-        if (trackLength <= 0) return;
-
-        double normalized = Math.Clamp((position.Y - trackStart) / trackLength, 0, 1);
-        double range = slider.Maximum - slider.Minimum;
-        slider.Value = slider.IsDirectionReversed
-            ? slider.Minimum + normalized * range
-            : slider.Maximum - normalized * range;
     }
 
     private void FreePickArea_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -625,7 +530,7 @@ public partial class TAWPFColorPicker : Window
         // the recompute path that would otherwise snap it back to the rounded-byte HSV.
         PositionFreePickIndicator(sat * width, (1 - val) * height);
 
-        Color rgb = HSVToRGB(_freePickHue, sat, val);
+        Color rgb = ColorMath.HSVToRGB(_freePickHue, sat, val);
         Color next = Color.FromArgb(_currentColor.A, rgb.R, rgb.G, rgb.B);
         ApplyColor(next, sourceFreePick: true);
     }
@@ -636,7 +541,7 @@ public partial class TAWPFColorPicker : Window
         double height = FreePickCanvas.ActualHeight;
         if (width <= 0 || height <= 0) return;
 
-        (double hue, double sat, double val) = RGBToHSV(_currentColor.R, _currentColor.G, _currentColor.B);
+        (double hue, double sat, double val) = ColorMath.RGBToHSV(_currentColor.R, _currentColor.G, _currentColor.B);
 
         // HSV's hue collapses to 0 whenever saturation is 0 (any pure gray), and we don't want the
         // background to flip back to red when the user types or drags into the gray axis. Only adopt
@@ -645,7 +550,7 @@ public partial class TAWPFColorPicker : Window
         // user's intended hue away from the slider's actual value during a drag.
         if (refreshHueFromColor && sat > 0) _freePickHue = hue;
 
-        Color hueOnly = HSVToRGB(_freePickHue, 1.0, 1.0);
+        Color hueOnly = ColorMath.HSVToRGB(_freePickHue, 1.0, 1.0);
         FreePickArea.Background = new SolidColorBrush(hueOnly);
 
         PositionFreePickIndicator(sat * width, (1 - val) * height);
@@ -670,7 +575,7 @@ public partial class TAWPFColorPicker : Window
         // reads as a colour-coded handle even when the current rgb is a desaturated tint.
         // Alpha thumb shows the current rgba (alpha included) so the grip previews exactly what the
         // user is dialling in - the bar gives context, the thumb gives the answer.
-        Color hueColor = HSVToRGB(_freePickHue, 1.0, 1.0);
+        Color hueColor = ColorMath.HSVToRGB(_freePickHue, 1.0, 1.0);
         _hueThumbBrush.Color = hueColor;
         _alphaThumbBrush.Color = _currentColor;
 
@@ -680,30 +585,9 @@ public partial class TAWPFColorPicker : Window
         // window's themed background - at low alpha the user is mostly looking at that backdrop,
         // not the rgb. Snapping to extremes (instead of a continuous inverse) avoids the mid-gray
         // case where a linear inverse would converge to the same gray it's supposed to outline.
-        Color visible = ComputeAlphaThumbVisibleColor();
-        double luminance = 0.2126 * visible.R + 0.7152 * visible.G + 0.0722 * visible.B;
+        Color visible = ColorMath.AlphaOverGradientOverBackground(_currentColor, ResolveSliderBackgroundColor());
+        double luminance = ColorMath.PerceptualLuminance(visible);
         _alphaThumbBorderBrush.Color = luminance < 128 ? Colors.White : Colors.Black;
-    }
-
-    private Color ComputeAlphaThumbVisibleColor()
-    {
-        // The thumb sits on top of the alpha gradient (bottom=opaque rgb, top=transparent rgb),
-        // which itself sits over the window's themed background. The thumb's vertical position
-        // tracks its alpha (IsDirectionReversed: value 255 = bottom = opaque), so the gradient
-        // alpha at the thumb's pixels equals the thumb's own alpha. Both blends are linear:
-        //     visible_gradient = rgb*a + bg*(1-a)
-        //     visible_thumb    = rgb*a + visible_gradient*(1-a)
-        //                      = rgb*a*(2-a) + bg*(1-a)^2
-        // Reduces correctly at the extremes: a=1 -> rgb, a=0 -> bg.
-        Color bg = ResolveSliderBackgroundColor();
-        double a = _currentColor.A / 255.0;
-        double rgbWeight = a * (2 - a);
-        double bgWeight = (1 - a) * (1 - a);
-
-        byte r = (byte)Math.Round(_currentColor.R * rgbWeight + bg.R * bgWeight);
-        byte g = (byte)Math.Round(_currentColor.G * rgbWeight + bg.G * bgWeight);
-        byte b = (byte)Math.Round(_currentColor.B * rgbWeight + bg.B * bgWeight);
-        return Color.FromRgb(r, g, b);
     }
 
     private Color ResolveSliderBackgroundColor()
@@ -725,113 +609,4 @@ public partial class TAWPFColorPicker : Window
         Canvas.SetTop(FreePickIndicatorRing, centerY - FreePickIndicatorRing.Height / 2);
     }
 
-    // Standard HSV -> RGB conversion. hue in degrees [0, 360), sat / val in [0, 1].
-    // Returns an opaque color; callers substitute the alpha they want to preserve.
-    private static Color HSVToRGB(double hue, double sat, double val)
-    {
-        if (sat <= 0)
-        {
-            byte gray = (byte)Math.Round(Math.Clamp(val, 0, 1) * 255);
-            return Color.FromArgb(0xFF, gray, gray, gray);
-        }
-
-        double h = ((hue % 360) + 360) % 360 / 60.0;
-        int sector = (int)Math.Floor(h);
-        double f = h - sector;
-        double p = val * (1 - sat);
-        double q = val * (1 - sat * f);
-        double t = val * (1 - sat * (1 - f));
-
-        (double r, double g, double b) = sector switch
-        {
-            0 => (val, t, p),
-            1 => (q, val, p),
-            2 => (p, val, t),
-            3 => (p, q, val),
-            4 => (t, p, val),
-            _ => (val, p, q),
-        };
-
-        return Color.FromArgb(
-            0xFF,
-            (byte)Math.Round(Math.Clamp(r, 0, 1) * 255),
-            (byte)Math.Round(Math.Clamp(g, 0, 1) * 255),
-            (byte)Math.Round(Math.Clamp(b, 0, 1) * 255));
-    }
-
-    // Standard RGB -> HSV conversion. Inputs in [0, 255]; outputs hue in [0, 360), sat / val in [0, 1].
-    // Hue is undefined when sat is 0 - callers must decide whether to keep a previously remembered hue.
-    private static (double Hue, double Sat, double Val) RGBToHSV(byte r, byte g, byte b)
-    {
-        double rd = r / 255.0;
-        double gd = g / 255.0;
-        double bd = b / 255.0;
-        double max = Math.Max(rd, Math.Max(gd, bd));
-        double min = Math.Min(rd, Math.Min(gd, bd));
-        double delta = max - min;
-
-        double val = max;
-        double sat = max == 0 ? 0 : delta / max;
-        double hue = 0;
-
-        if (delta > 0)
-        {
-            if (max == rd) hue = 60.0 * (((gd - bd) / delta) % 6);
-            else if (max == gd) hue = 60.0 * ((bd - rd) / delta + 2);
-            else hue = 60.0 * ((rd - gd) / delta + 4);
-        }
-
-        if (hue < 0) hue += 360;
-        return (hue, sat, val);
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T typedChild) return typedChild;
-
-            T? result = FindVisualChild<T>(child);
-            if (result != null) return result;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Parses a hex string in either ARGB (AARRGGBB) or RGBA (RRGGBBAA) byte order.
-    /// Accepts a leading '#' and is case-insensitive.
-    /// 6-char input is treated as RGB with alpha defaulted to 0xFF (in either order, since alpha is absent).
-    /// Returns false on any malformed input - the caller leaves the current color untouched.
-    /// </summary>
-    private static bool TryParseHex(string input, bool argbOrder, out Color color)
-    {
-        color = default;
-        if (string.IsNullOrWhiteSpace(input)) return false;
-
-        string h = input.Trim().TrimStart('#');
-        if (h.Length != 6 && h.Length != 8) return false;
-
-        try
-        {
-            if (h.Length == 6)
-            {
-                byte r = Convert.ToByte(h[..2], 16);
-                byte g = Convert.ToByte(h[2..4], 16);
-                byte b = Convert.ToByte(h[4..6], 16);
-                color = Color.FromArgb(0xFF, r, g, b);
-                return true;
-            }
-
-            byte b0 = Convert.ToByte(h[..2], 16);
-            byte b1 = Convert.ToByte(h[2..4], 16);
-            byte b2 = Convert.ToByte(h[4..6], 16);
-            byte b3 = Convert.ToByte(h[6..8], 16);
-            color = argbOrder
-                ? Color.FromArgb(b0, b1, b2, b3)
-                : Color.FromArgb(b3, b0, b1, b2);
-            return true;
-        }
-        catch (FormatException) { return false; }
-    }
 }

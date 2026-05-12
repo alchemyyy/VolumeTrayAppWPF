@@ -29,7 +29,7 @@ public enum InstallStatus
 /// </summary>
 public sealed record InstallationInfo(
     InstallScope Scope,
-    string InstallExePath,
+    string InstallEXEPath,
     InstallStatus Status,
     int? InstalledVersion);
 
@@ -47,20 +47,20 @@ public static class InstallationService
 {
     // Derived from Program.ApplicationName so the skeleton picks up whatever name the fork sets,
     // without forcing every install path to be threaded through the Program constant explicitly.
-    public static string InstalledExeFileName => Program.ApplicationName + ".exe";
+    public static string InstalledEXEFileName => Program.ApplicationName + ".exe";
 
     public static string LocalAppDataInstallDir =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Program.ApplicationName);
 
-    public static string LocalAppDataInstallExe =>
-        Path.Combine(LocalAppDataInstallDir, InstalledExeFileName);
+    public static string LocalAppDataInstallEXE =>
+        Path.Combine(LocalAppDataInstallDir, InstalledEXEFileName);
 
     public static string ProgramFilesInstallDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Program.ApplicationName);
 
-    public static string ProgramFilesInstallExe =>
-        Path.Combine(ProgramFilesInstallDir, InstalledExeFileName);
+    public static string ProgramFilesInstallEXE =>
+        Path.Combine(ProgramFilesInstallDir, InstalledEXEFileName);
 
     public static string WindowsAppsRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps");
@@ -106,14 +106,14 @@ public static class InstallationService
     public static List<InstallationInfo> DetectAll()
     {
         const int currentVersion = BuildInfo.BuildNumber;
-        string currentPath = NormalizePath(Environment.ProcessPath);
+        string currentPath = PathNormalization.Normalize(Environment.ProcessPath);
 
         List<InstallationInfo> results =
         [
-            DetectFile(InstallScope.LocalAppData, LocalAppDataInstallExe,
+            DetectFile(InstallScope.LocalAppData, LocalAppDataInstallEXE,
                 WindowsUninstallRegistry.Scope.CurrentUser, currentPath, currentVersion),
 
-            DetectFile(InstallScope.ProgramFiles, ProgramFilesInstallExe,
+            DetectFile(InstallScope.ProgramFiles, ProgramFilesInstallEXE,
                 WindowsUninstallRegistry.Scope.LocalMachine, currentPath, currentVersion),
 
             DetectStore(currentPath)
@@ -122,10 +122,10 @@ public static class InstallationService
         return results;
     }
 
-    private static InstallationInfo DetectFile(InstallScope scope, string installExe,
+    private static InstallationInfo DetectFile(InstallScope scope, string installEXE,
         WindowsUninstallRegistry.Scope regScope, string currentPath, int currentVersion)
     {
-        bool fileExists = File.Exists(installExe);
+        bool fileExists = File.Exists(installEXE);
 
         // Clean orphan registry entries: if the file is gone, drop any leftover Uninstall key so the
         // entry doesn't haunt Add/Remove Programs.
@@ -136,16 +136,16 @@ public static class InstallationService
             entry = null;
         }
 
-        if (!fileExists) return new InstallationInfo(scope, installExe, InstallStatus.NotInstalled, null);
+        if (!fileExists) return new InstallationInfo(scope, installEXE, InstallStatus.NotInstalled, null);
 
-        bool running = string.Equals(currentPath, NormalizePath(installExe), StringComparison.OrdinalIgnoreCase);
+        bool running = string.Equals(currentPath, PathNormalization.Normalize(installEXE), StringComparison.OrdinalIgnoreCase);
         if (running)
-            return new InstallationInfo(scope, installExe, InstallStatus.CurrentlyRunning, entry?.DisplayVersion);
+            return new InstallationInfo(scope, installEXE, InstallStatus.CurrentlyRunning, entry?.DisplayVersion);
 
         int? installed = entry?.DisplayVersion;
         if (installed.HasValue && installed.Value < currentVersion)
-            return new InstallationInfo(scope, installExe, InstallStatus.InstalledOutOfDate, installed);
-        return new InstallationInfo(scope, installExe, InstallStatus.InstalledUpToDate, installed);
+            return new InstallationInfo(scope, installEXE, InstallStatus.InstalledOutOfDate, installed);
+        return new InstallationInfo(scope, installEXE, InstallStatus.InstalledUpToDate, installed);
     }
 
     private static InstallationInfo DetectStore(string currentPath)
@@ -169,8 +169,8 @@ public static class InstallationService
         try
         {
             Directory.CreateDirectory(LocalAppDataInstallDir);
-            string dest = LocalAppDataInstallExe;
-            if (string.Equals(NormalizePath(source), NormalizePath(dest), StringComparison.OrdinalIgnoreCase))
+            string dest = LocalAppDataInstallEXE;
+            if (string.Equals(PathNormalization.Normalize(source), PathNormalization.Normalize(dest), StringComparison.OrdinalIgnoreCase))
             {
                 // Same file - nothing to copy, just refresh the registry entry below
             }
@@ -215,8 +215,8 @@ public static class InstallationService
         {
             if (!File.Exists(sourceExe)) return new InstallResult(false, $"Source exe not found: {sourceExe}");
             Directory.CreateDirectory(ProgramFilesInstallDir);
-            string dest = ProgramFilesInstallExe;
-            if (!string.Equals(NormalizePath(sourceExe), NormalizePath(dest), StringComparison.OrdinalIgnoreCase))
+            string dest = ProgramFilesInstallEXE;
+            if (!string.Equals(PathNormalization.Normalize(sourceExe), PathNormalization.Normalize(dest), StringComparison.OrdinalIgnoreCase))
                 File.Copy(sourceExe, dest, overwrite: true);
             WindowsUninstallRegistry.Write(WindowsUninstallRegistry.Scope.LocalMachine,
                 ProgramFilesInstallDir, buildNumber);
@@ -259,10 +259,10 @@ public static class InstallationService
         // Only shut down if THIS process is the install copy.
         // The bat kills any other processes at the install path itself (path-scoped, not name-scoped), so a portable
         // build uninstalling a different installed copy keeps running untouched.
-        string runningExe = NormalizePath(Environment.ProcessPath);
-        string installExe = NormalizePath(Path.Combine(installDir, InstalledExeFileName));
+        string runningExe = PathNormalization.Normalize(Environment.ProcessPath);
+        string installEXE = PathNormalization.Normalize(Path.Combine(installDir, InstalledEXEFileName));
         bool runningFromInstall = !string.IsNullOrEmpty(runningExe) &&
-            string.Equals(runningExe, installExe, StringComparison.OrdinalIgnoreCase);
+            string.Equals(runningExe, installEXE, StringComparison.OrdinalIgnoreCase);
 
         if (runningFromInstall)
         {
@@ -314,16 +314,4 @@ public static class InstallationService
         }
     }
 
-    private static string NormalizePath(string? path)
-    {
-        if (string.IsNullOrEmpty(path)) return string.Empty;
-        try
-        {
-            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-        catch
-        {
-            return path;
-        }
-    }
 }

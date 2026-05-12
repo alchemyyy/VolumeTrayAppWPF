@@ -22,13 +22,12 @@
     Title="Volume">
 
     <Window.Resources>
-        <!-- App-scope DynamicResource brushes still resolve here; per-flyout converters and slider style live local. -->
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <!-- App-scope DynamicResource brushes still resolve here; per-flyout converters and slider style live local.
+             BoolToVisibility comes from App.xaml (merged via Application.Resources). -->
         <wpf:ScalarToPercentConverter x:Key="ScalarToPercent"/>
         <wpf:VolumeGlyphConverter x:Key="VolumeGlyph"/>
         <wpf:DeviceIconGlyphConverter x:Key="DeviceIconGlyph"/>
         <wpf:DeviceIconOpacityConverter x:Key="DeviceIconOpacity"/>
-        <wpf:IsLastToFooterCornerRadiusConverter x:Key="IsLastToFooterCorner"/>
         <wpf:TitleRowVerticalOffsetConverter x:Key="TitleRowVerticalOffset"/>
 
         <!-- Per-cell slot size for the icon grid drawer. Lifted into the resource dictionary as a
@@ -45,6 +44,15 @@
              Tweak here once to retune every app icon in the flyout. -->
         <sys:Double x:Key="AppIconImageSize">22</sys:Double>
         <sys:Double x:Key="AppIconGlyphSize">20</sys:Double>
+
+        <!-- Segoe Fluent Icons codepoints referenced from this XAML, kept in sync with GlyphCatalog
+             (C# side cannot be referenced from XAML directly; resource strings are the bridge).
+             Update both sites together if a codepoint is retired or rebound. -->
+        <sys:String x:Key="GLYPH_APP_FALLBACK">&#xE7F4;</sys:String>
+        <sys:String x:Key="GLYPH_APP_MUTE_OVERLAY">&#xE653;</sys:String>
+        <sys:String x:Key="GLYPH_SOUND_SETTINGS">&#xE995;</sys:String>
+        <sys:String x:Key="GLYPH_FLYOUT_UNDOCK_ACTION">&#xE75B;</sys:String>
+        <sys:String x:Key="GLYPH_FLYOUT_REDOCK_ACTION">&#xE75A;</sys:String>
 
         <!-- Slider primitives. Lifted from BrightnessFlyout but stripped of curve / preview chrome -
              the volume slider only shows a track, fill, and thumb. -->
@@ -81,9 +89,10 @@
             </Setter>
         </Style>
 
-        <Style x:Key="VolumeSliderDecreaseButtonStyle" TargetType="RepeatButton">
+        <!-- Filled track-fill (left of thumb): ThemeSliderProgress, horizontal 4-DIP bar.
+             BasedOn SliderTrackRepeatButtonStyle for common setters; overrides only Background + template. -->
+        <Style x:Key="VolumeSliderDecreaseButtonStyle" TargetType="RepeatButton" BasedOn="{StaticResource SliderTrackRepeatButtonStyle}">
             <Setter Property="Background" Value="{DynamicResource ThemeSliderProgress}"/>
-            <Setter Property="Focusable" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
@@ -94,9 +103,9 @@
             </Setter>
         </Style>
 
-        <Style x:Key="VolumeSliderIncreaseButtonStyle" TargetType="RepeatButton">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Focusable" Value="False"/>
+        <!-- Empty track-fill (right of thumb): transparent, horizontal 4-DIP bar. Same chassis as
+             the decrease half; only Background differs. -->
+        <Style x:Key="VolumeSliderIncreaseButtonStyle" TargetType="RepeatButton" BasedOn="{StaticResource SliderTrackRepeatButtonStyle}">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
@@ -112,8 +121,9 @@
             <Setter Property="Maximum" Value="100"/>
             <!-- Float-fidelity tuning (matches BrightnessFlyout):
                  IsSnapToTickEnabled / IsMoveToPointEnabled both off so the slider value isn't
-                 rounded to LargeChange increments on click. Custom track-click capture in
-                 code-behind handles point-to-jump and keeps the thumb dragging after the click. -->
+                 rounded to LargeChange increments on click. SliderClickDragBehavior wires
+                 point-to-jump-and-drag so a click on the track captures and the thumb keeps
+                 following the cursor through the drag. -->
             <Setter Property="IsSnapToTickEnabled" Value="False"/>
             <Setter Property="IsMoveToPointEnabled" Value="False"/>
             <Setter Property="SmallChange" Value="0.1"/>
@@ -122,6 +132,7 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="utils:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
+            <Setter Property="utils:SliderClickDragBehavior.Enable" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
@@ -179,14 +190,13 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="DeviceIconButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
+        <!-- Device-row icon button (mute, lock, equalizer APO, listen, device-icon).
+             BasedOn TransparentRoundedButtonBase for common setters; template is overridden to swap
+             ThemeHover / ThemePressed for the stronger-contrast ThemeButtonHover / ThemeButtonPressed
+             so the hover pill reads against the ThemeFooterBackground card the flyout cells sit on. -->
+        <Style x:Key="DeviceIconButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="utils:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -208,14 +218,13 @@
             </Setter>
         </Style>
 
-        <Style x:Key="HeaderIconButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
+        <!-- Header (title-bar) icon button: settings, sound-settings, undock.
+             Different hover from DeviceIconButton: just the standard ThemePressed (no separate press
+             state), painted via Style.Triggers on Background. The template strips the base's
+             ControlTemplate.Triggers because Background flows in through TemplateBinding. -->
+        <Style x:Key="HeaderIconButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
             <Setter Property="Width" Value="40"/>
             <Setter Property="Height" Value="26"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="utils:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -233,6 +242,56 @@
             </Style.Triggers>
         </Style>
 
+        <!-- ContextMenu resource: per-endpoint default-format picker. Opened from the device-name /
+             format-readout right-click handler. ItemsSource is set imperatively at open time
+             (PlacementTarget.Tag holds the DeviceFormatMenuContext payload) so each open builds
+             from the live endpoint state without rebinding any ItemsControl. -->
+        <ContextMenu x:Key="DefaultFormatContextMenu"
+                     Placement="Bottom"
+                     ItemsSource="{Binding Tag.Items, RelativeSource={RelativeSource Self}}">
+            <ContextMenu.ItemContainerStyle>
+                <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                    <Setter Property="Header" Value="{Binding Label}"/>
+                    <Setter Property="Command" Value="{Binding Command}"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                            <Setter Property="HeaderTemplate">
+                                <Setter.Value>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{x:Static visuals:GlyphCatalog.CIRCLE}"
+                                                       FontFamily="{StaticResource IconFontFamily}"
+                                                       FontSize="8"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ContextMenu.ItemContainerStyle>
+        </ContextMenu>
+
+        <!-- ContextMenu resource: per-endpoint listen-target picker (capture endpoints only). Items
+             are flat: the first row is "Default Playback Device" (null target), the rest are active
+             render endpoints; a separator slot is rendered by toggling HeaderTemplate. The simpler
+             render is one row per entry; the current selection ticks via IsChecked. -->
+        <ContextMenu x:Key="ListenTargetContextMenu"
+                     Placement="Bottom"
+                     ItemsSource="{Binding Tag.Items, RelativeSource={RelativeSource Self}}">
+            <ContextMenu.ItemContainerStyle>
+                <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                    <Setter Property="Header" Value="{Binding Label}"/>
+                    <Setter Property="IsCheckable" Value="True"/>
+                    <Setter Property="IsChecked" Value="{Binding IsCurrent, Mode=OneWay}"/>
+                    <Setter Property="Command" Value="{Binding Command}"/>
+                </Style>
+            </ContextMenu.ItemContainerStyle>
+        </ContextMenu>
+
         <!-- Per-app session row. Reused by both AppsAbove and AppsBelow cell templates so the row
              chrome (icon, slider, percent, mute hover) is described once. DataContext is an
              AudioAppGroup. The mute-dim trigger reaches the cell's Device.IsMuted by walking up two
@@ -248,10 +307,10 @@
                             <DataTrigger Binding="{Binding IsMuted}" Value="True">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding DataContext.Device.IsMuted, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                            <DataTrigger Binding="{Binding DataContext.Device.IsMuted, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding DataContext.Device.IsActive, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="False">
+                            <DataTrigger Binding="{Binding DataContext.Device.IsActive, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
                             <!-- DimInactive mode: on a capture device, dim app sessions that aren't
@@ -259,7 +318,7 @@
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
-                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True"/>
                                     <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Inactive}"/>
                                 </MultiDataTrigger.Conditions>
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -267,7 +326,7 @@
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
-                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True"/>
                                     <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Expired}"/>
                                 </MultiDataTrigger.Conditions>
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -285,12 +344,14 @@
                      hover overlays the muted-speaker glyph so click=mute reads visually.
                      Width / Height / FontSize pull from the AppIconImageSize / AppIconGlyphSize
                      resources so the slider-mode icon size tracks the same root truth the grid
-                     mode multiplies by its scale percent. -->
+                     mode multiplies by its scale percent. Tag carries the AudioAppGroup so the
+                     click handler can read it without a visual-tree walk. -->
                 <Grid x:Name="AppIconRoot" Grid.Column="0"
                       Width="{DynamicResource AppIconImageSize}"
                       Height="{DynamicResource AppIconImageSize}"
                       Margin="0,0,10,0" VerticalAlignment="Center"
                       Background="Transparent"
+                      Tag="{Binding}"
                       ToolTip="{Binding DisplayName}"
                       ToolTipService.InitialShowDelay="1000"
                       PreviewMouseLeftButtonUp="AppIcon_PreviewMouseLeftButtonUp">
@@ -299,7 +360,7 @@
                             <Setter Property="Cursor" Value="Hand"/>
                             <Style.Triggers>
                                 <!-- Capture sessions are not click-to-mute, so drop the hand cursor too. -->
-                                <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True">
                                     <Setter Property="Cursor" Value="Arrow"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -320,8 +381,9 @@
                             </Style>
                         </Image.Style>
                     </Image>
-                    <TextBlock Text="&#xE7F4;"
-                               FontFamily="Segoe Fluent Icons"
+                    <!-- Placeholder app icon (GLYPH_APP_FALLBACK). Mirrors GlyphCatalog.APP_FALLBACK. -->
+                    <TextBlock Text="{StaticResource GLYPH_APP_FALLBACK}"
+                               FontFamily="{StaticResource IconFontFamily}"
                                FontSize="{DynamicResource AppIconGlyphSize}"
                                Foreground="{DynamicResource ThemeIconForeground}"
                                HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -336,9 +398,10 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+                    <!-- Mute-X hover overlay. Mirrors GlyphCatalog.APP_MUTE_OVERLAY. -->
                     <TextBlock IsHitTestVisible="False"
-                               Text="&#xE653;"
-                               FontFamily="Segoe Fluent Icons"
+                               Text="{StaticResource GLYPH_APP_MUTE_OVERLAY}"
+                               FontFamily="{StaticResource IconFontFamily}"
                                FontSize="{DynamicResource AppIconGlyphSize}"
                                Foreground="{DynamicResource ThemeIconForeground}"
                                HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -354,54 +417,54 @@
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                     <!-- Capture sessions have no useful per-app mute, so suppress the X overlay entirely. -->
-                                    <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                    <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                  <!-- Mini glyph overlay slot. Empty by default; on a capture-device drawer, shows
+                    <!-- Mini glyph overlay slot. Empty by default; on a capture-device drawer, shows
                          GlyphCatalog.CIRCLE for any app whose AudioAppGroup.State is Active (i.e. the
                          app currently has the microphone stream open). Cell ancestor walk matches the
                          existing Device.IsMuted trigger pattern. The exclusive-control-holder lock
                          overlay takes precedence (last DataTrigger wins): when this app's group is
                          holding the parent device in exclusive mode, swap the mic-activity dot for
                          a LOCK glyph so the gesture reads "this is the app holding the device". -->
-                  <Grid Width="12" Height="12"
-                        HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                        Margin="11,0,0,-2"
-                        IsHitTestVisible="False">
-                    <TextBlock FontFamily="Segoe Fluent Icons"
-                               FontWeight="ExtraBold"
-                               Foreground="{DynamicResource ThemeIconForeground}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               TextAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value=""/>
-                                <Setter Property="FontSize" Value="6"/>
-                                <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.ActiveGlyph}"/>
-                                            <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
-                                            <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Active}"/>
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CIRCLE}"/>
-                                    </MultiDataTrigger>
-                                    <!-- Lock overrides the mic-activity dot when present. Needs a
-                                         larger font size than the dot to read clearly at the same anchor. -->
-                                    <DataTrigger Binding="{Binding IsExclusiveControlHolder}" Value="True">
-                                        <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.LOCK}"/>
-                                        <Setter Property="FontSize" Value="9"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-          </Grid>
+                    <Grid Width="12" Height="12"
+                          HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                          Margin="11,0,0,-2"
+                          IsHitTestVisible="False">
+                        <TextBlock FontFamily="{StaticResource IconFontFamily}"
+                                   FontWeight="ExtraBold"
+                                   Foreground="{DynamicResource ThemeIconForeground}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   TextAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value=""/>
+                                    <Setter Property="FontSize" Value="6"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.ActiveGlyph}"/>
+                                                <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True"/>
+                                                <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Active}"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CIRCLE}"/>
+                                        </MultiDataTrigger>
+                                        <!-- Lock overrides the mic-activity dot when present. Needs a
+                                             larger font size than the dot to read clearly at the same anchor. -->
+                                        <DataTrigger Binding="{Binding IsExclusiveControlHolder}" Value="True">
+                                            <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.LOCK}"/>
+                                            <Setter Property="FontSize" Value="9"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
                 </Grid>
 
                 <wpf:VolumeSlider Grid.Column="1"
@@ -410,11 +473,8 @@
                                   PeakValueMin="{Binding PeakValueMin}"
                                   PeakValueMax="{Binding PeakValueMax}"
                                   ToolTip="{Binding DisplayName}"
-                                  PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
-                                  PreviewMouseMove="Slider_PreviewMouseMove"
                                   PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
-                                  PreviewMouseWheel="SessionSlider_PreviewMouseWheel"
-                                  MouseLeave="Slider_MouseLeave"/>
+                                  PreviewMouseWheel="Slider_PreviewMouseWheel"/>
 
                 <TextBlock Grid.Column="2"
                            Text="{Binding Volume, Converter={StaticResource ScalarToPercent}, StringFormat={}{0:0}}"
@@ -482,6 +542,7 @@
                     <Grid Grid.Column="0">
                         <TextBlock x:Name="DeviceNameText"
                                    Text="{Binding FriendlyName, FallbackValue='No audio device'}"
+                                   Tag="{Binding}"
                                    Foreground="{DynamicResource ThemeForeground}"
                                    Background="Transparent"
                                    FontSize="14"
@@ -510,14 +571,15 @@
                         <Canvas ClipToBounds="False"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center">
-                          <TextBlock x:Name="DeviceFormatText"
-                                     Text="{Binding DefaultFormat}"
-                                     Canvas.Top="9"
-                                     FontSize="8"
-                                     Foreground="{DynamicResource ThemeForeground}"
-                                     Background="Transparent"
-                                     Opacity="0.45"
-                                     PreviewMouseRightButtonUp="DeviceFormatMenu_PreviewMouseRightButtonUp"/>
+                            <TextBlock x:Name="DeviceFormatText"
+                                       Text="{Binding DefaultFormat}"
+                                       Tag="{Binding}"
+                                       Canvas.Top="9"
+                                       FontSize="8"
+                                       Foreground="{DynamicResource ThemeForeground}"
+                                       Background="Transparent"
+                                       Opacity="0.45"
+                                       PreviewMouseRightButtonUp="DeviceFormatMenu_PreviewMouseRightButtonUp"/>
                         </Canvas>
                     </Grid>
                     <!-- Exclusive-mode toggle. Three visual states driven by two bindings:
@@ -528,6 +590,7 @@
                          from the audio engine, not user-toggleable from this button. -->
                     <Button x:Name="ExclusiveModeButton" Grid.Column="1"
                             Margin="0,3,0,-3"
+                            Tag="{Binding}"
                             Click="ExclusiveModeButton_Click">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
@@ -546,7 +609,7 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
-                        <TextBlock FontFamily="Segoe Fluent Icons"
+                        <TextBlock FontFamily="{StaticResource IconFontFamily}"
                                    FontSize="15"
                                    Foreground="{DynamicResource ThemeIconForeground}">
                             <TextBlock.Style>
@@ -571,25 +634,26 @@
                          (full bright) when the APO binary can't be found anywhere on the system. Click
                          is a two-state toggle (Running -> uninstall; everything else -> install + enable);
                          NotAvailable click routes through the not-available dialog in code-behind. -->
-                    <Button x:Name="EqualizerApoButton" Grid.Column="2"
+                    <Button x:Name="EqualizerAPOButton" Grid.Column="2"
                             Margin="0,3,0,-3"
-                            Click="EqualizerApoButton_Click"
-                            PreviewMouseRightButtonUp="EqualizerApoButton_PreviewMouseRightButtonUp">
+                            Tag="{Binding}"
+                            Click="EqualizerAPOButton_Click"
+                            PreviewMouseRightButtonUp="EqualizerAPOButton_PreviewMouseRightButtonUp">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
-                                <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_NotAvailable}"/>
+                                <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerAPO_Tooltip_NotAvailable}"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding EqualizerApoState}"
-                                                 Value="{x:Static audio:EqualizerApoState.Running}">
-                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_Running}"/>
+                                    <DataTrigger Binding="{Binding EqualizerAPOState}"
+                                                 Value="{x:Static audio:EqualizerAPOState.Running}">
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerAPO_Tooltip_Running}"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding EqualizerApoState}"
-                                                 Value="{x:Static audio:EqualizerApoState.EnhancementsOff}">
-                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_EnhancementsOff}"/>
+                                    <DataTrigger Binding="{Binding EqualizerAPOState}"
+                                                 Value="{x:Static audio:EqualizerAPOState.EnhancementsOff}">
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerAPO_Tooltip_EnhancementsOff}"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding EqualizerApoState}"
-                                                 Value="{x:Static audio:EqualizerApoState.NotInstalled}">
-                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerApo_Tooltip_NotInstalled}"/>
+                                    <DataTrigger Binding="{Binding EqualizerAPOState}"
+                                                 Value="{x:Static audio:EqualizerAPOState.NotInstalled}">
+                                        <Setter Property="ToolTip" Value="{loc:Loc Flyout_EqualizerAPO_Tooltip_NotInstalled}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -598,17 +662,17 @@
                             <!-- Main glyph. Opacity binds via the per-state trigger below: only Running
                                  reads full bright; every other state dims so the button visually says
                                  "not in effect right now". -->
-                            <TextBlock x:Name="EqualizerApoGlyph"
+                            <TextBlock x:Name="EqualizerAPOGlyph"
                                        Text="{x:Static visuals:GlyphCatalog.EQUALIZER}"
-                                       FontFamily="Segoe Fluent Icons"
+                                       FontFamily="{StaticResource IconFontFamily}"
                                        FontSize="15"
                                        Foreground="{DynamicResource ThemeIconForeground}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Opacity" Value="0.4"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding EqualizerApoState}"
-                                                         Value="{x:Static audio:EqualizerApoState.Running}">
+                                            <DataTrigger Binding="{Binding EqualizerAPOState}"
+                                                         Value="{x:Static audio:EqualizerAPOState.Running}">
                                                 <Setter Property="Opacity" Value="1.0"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -618,9 +682,9 @@
                             <!-- "APO not detected on this system" mini-glyph overlay. Anchored bottom-right
                                  so it reads as a badge on the equalizer glyph. Stays full bright while the
                                  base glyph dims; only visible in the NotAvailable state. -->
-                            <TextBlock x:Name="EqualizerApoMissingOverlay"
+                            <TextBlock x:Name="EqualizerAPOMissingOverlay"
                                        Text="{x:Static visuals:GlyphCatalog.SIGNAL_NOT_CONNECTED}"
-                                       FontFamily="Segoe Fluent Icons"
+                                       FontFamily="{StaticResource IconFontFamily}"
                                        FontSize="11"
                                        FontWeight="ExtraBold"
                                        Foreground="{DynamicResource ThemeIconForeground}"
@@ -632,8 +696,8 @@
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding EqualizerApoState}"
-                                                         Value="{x:Static audio:EqualizerApoState.NotAvailable}">
+                                            <DataTrigger Binding="{Binding EqualizerAPOState}"
+                                                         Value="{x:Static audio:EqualizerAPOState.NotAvailable}">
                                                 <Setter Property="Visibility" Value="Visible"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -652,6 +716,7 @@
                          button reads dim whenever no audio is actually flowing. -->
                     <Button x:Name="ListenButton" Grid.Column="3"
                             Margin="0,3,0,-3"
+                            Tag="{Binding}"
                             Click="ListenButton_Click"
                             PreviewMouseRightButtonUp="ListenButton_PreviewMouseRightButtonUp"
                             ToolTip="{loc:Loc Flyout_ListenButton_Tooltip}">
@@ -674,18 +739,19 @@
                         </Button.Style>
                         <TextBlock Text="{x:Static visuals:GlyphCatalog.EAR_LISTEN}"
                                    Opacity="{Binding IsListenButtonActive, Converter={StaticResource DeviceIconOpacity}}"
-                                   FontFamily="Segoe Fluent Icons"
+                                   FontFamily="{StaticResource IconFontFamily}"
                                    FontSize="15"
                                    Foreground="{DynamicResource ThemeIconForeground}"/>
                     </Button>
                     <Button Grid.Column="4"
                             Style="{StaticResource DeviceIconButtonStyle}"
                             Margin="6,3,-1,-3"
+                            Tag="{Binding}"
                             Click="DeviceIcon_Click"
                             PreviewMouseRightButtonUp="DeviceIcon_PreviewMouseRightButtonUp"
                             ToolTip="{loc:Loc Flyout_DeviceIcon_Tooltip}">
                         <TextBlock Opacity="{Binding IsActive, Converter={StaticResource DeviceIconOpacity}}"
-                                   FontFamily="Segoe Fluent Icons"
+                                   FontFamily="{StaticResource IconFontFamily}"
                                    Foreground="{DynamicResource ThemeIconForeground}">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
@@ -723,6 +789,7 @@
                     </Grid.ColumnDefinitions>
 
                     <Button x:Name="DeviceMuteButton" Grid.Column="0"
+                            Tag="{Binding}"
                             Click="DeviceMute_Click"
                             ToolTip="Mute"
                             Width="32" Height="32"
@@ -748,111 +815,111 @@
                                  the 32x32 slot, so a Right alignment hugs the slot's right edge no matter how
                                  close the glyph's natural width is to 32. -->
                         <Grid Width="32" Height="32">
-                            <TextBlock FontFamily="Segoe Fluent Icons"
+                            <TextBlock FontFamily="{StaticResource IconFontFamily}"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource ThemeIconForeground}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <!-- Single shared FontSize / weight / offset applied to every mic glyph,
-                                         and a shared HorizontalAlignment for every playback (speaker tier)
-                                         glyph. Tune any value here and every matching trigger picks it up. -->
-                                    <Style.Resources>
-                      <sys:Double x:Key="MicGlyphFontSize">20.5</sys:Double>
-                                        <FontWeight x:Key="MicGlyphFontWeight">ExtraBold</FontWeight>
-                                        <TranslateTransform x:Key="MicGlyphOffset" X="-1" Y="0"/>
-                                        <HorizontalAlignment x:Key="PlaybackGlyphAlignment">Right</HorizontalAlignment>
-                                        <TranslateTransform x:Key="PlaybackGlyphOffset" X="0" Y="0"/>
-                                    </Style.Resources>
-                                    <!-- FontSize and HorizontalAlignment live in the style (not as local
-                                         values on the TextBlock) so the per-glyph triggers below can override
-                                         them. Local values beat style triggers in WPF DP precedence. -->
-                                    <Setter Property="FontSize" Value="26"/>
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
-                                    <Setter Property="Text">
-                                        <Setter.Value>
-                                            <MultiBinding Converter="{StaticResource VolumeGlyph}">
-                                                <Binding Path="Volume"/>
-                                                <Binding Path="IsMuted"/>
-                                                <Binding Path="IsCaptureDevice"/>
-                                                <Binding Path="IsListeningToThisDevice"/>
-                                                <Binding Path="IsCaptureSleeping"/>
-                                            </MultiBinding>
-                                        </Setter.Value>
-                                    </Setter>
-                                    <Style.Triggers>
-                                        <!-- Mic glyphs fill more of their em-box than the speaker tier glyphs,
-                                             so they read fatter at the shared base size. Drop FontSize so the
-                                             ink weight matches the volume tiers visually, and apply the shared
-                                             MicGlyphOffset to compensate for Segoe Fluent's non-symmetric baseline. -->
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE}">
-                                            <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
-                                            <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
-                                        </Trigger>
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_OFF}">
-                                            <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
-                                            <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
-                                        </Trigger>
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_LISTENING}">
-                                            <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
-                                            <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
-                                        </Trigger>
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_SLEEP}">
-                                            <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
-                                            <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
-                                        </Trigger>
-                                        <!-- Speaker tier glyphs share the PlaybackGlyphAlignment HorizontalAlignment
-                                             so the glyph-sized TextBlock anchors to one edge of the 32x32 slot
-                                             regardless of how close the natural glyph width is to the slot, and
-                                             share PlaybackGlyphOffset to nudge the ink off the anchored edge.
-                                             The mute hover preview lands on PLAYBACK_VOLUME_MUTE too, so it picks
-                                             this up automatically. -->
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MUTE}">
-                                            <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
-                                        </Trigger>
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_SILENT}">
-                                            <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
-                                        </Trigger>
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_LOW}">
-                                            <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
-                                        </Trigger>
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MID}">
-                                            <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
-                                        </Trigger>
-                                        <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_HIGH}">
-                                            <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
-                                        </Trigger>
-                                        <!-- Hover preview = "click mutes". Render rows preview the speaker mute glyph;
-                                             capture rows preview MICROPHONE_OFF so the gesture reads correctly on a mic. -->
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding IsMouseOver, ElementName=DeviceMuteButton}" Value="True"/>
-                                                <Condition Binding="{Binding IsCaptureDevice}" Value="False"/>
-                                            </MultiDataTrigger.Conditions>
-                                            <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MUTE}"/>
-                                        </MultiDataTrigger>
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding IsMouseOver, ElementName=DeviceMuteButton}" Value="True"/>
-                                                <Condition Binding="{Binding IsCaptureDevice}" Value="True"/>
-                                            </MultiDataTrigger.Conditions>
-                                            <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_OFF}"/>
-                                            <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
-                                            <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
-                                            <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
-                                        </MultiDataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <!-- Single shared FontSize / weight / offset applied to every mic glyph,
+                                             and a shared HorizontalAlignment for every playback (speaker tier)
+                                             glyph. Tune any value here and every matching trigger picks it up. -->
+                                        <Style.Resources>
+                                            <sys:Double x:Key="MicGlyphFontSize">20.5</sys:Double>
+                                            <FontWeight x:Key="MicGlyphFontWeight">ExtraBold</FontWeight>
+                                            <TranslateTransform x:Key="MicGlyphOffset" X="-1" Y="0"/>
+                                            <HorizontalAlignment x:Key="PlaybackGlyphAlignment">Right</HorizontalAlignment>
+                                            <TranslateTransform x:Key="PlaybackGlyphOffset" X="0" Y="0"/>
+                                        </Style.Resources>
+                                        <!-- FontSize and HorizontalAlignment live in the style (not as local
+                                             values on the TextBlock) so the per-glyph triggers below can override
+                                             them. Local values beat style triggers in WPF DP precedence. -->
+                                        <Setter Property="FontSize" Value="26"/>
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="Text">
+                                            <Setter.Value>
+                                                <MultiBinding Converter="{StaticResource VolumeGlyph}">
+                                                    <Binding Path="Volume"/>
+                                                    <Binding Path="IsMuted"/>
+                                                    <Binding Path="IsCaptureDevice"/>
+                                                    <Binding Path="IsListeningToThisDevice"/>
+                                                    <Binding Path="IsCaptureSleeping"/>
+                                                </MultiBinding>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <!-- Mic glyphs fill more of their em-box than the speaker tier glyphs,
+                                                 so they read fatter at the shared base size. Drop FontSize so the
+                                                 ink weight matches the volume tiers visually, and apply the shared
+                                                 MicGlyphOffset to compensate for Segoe Fluent's non-symmetric baseline. -->
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE}">
+                                                <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
+                                                <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
+                                            </Trigger>
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_OFF}">
+                                                <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
+                                                <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
+                                            </Trigger>
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_LISTENING}">
+                                                <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
+                                                <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
+                                            </Trigger>
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_SLEEP}">
+                                                <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
+                                                <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
+                                            </Trigger>
+                                            <!-- Speaker tier glyphs share the PlaybackGlyphAlignment HorizontalAlignment
+                                                 so the glyph-sized TextBlock anchors to one edge of the 32x32 slot
+                                                 regardless of how close the natural glyph width is to the slot, and
+                                                 share PlaybackGlyphOffset to nudge the ink off the anchored edge.
+                                                 The mute hover preview lands on PLAYBACK_VOLUME_MUTE too, so it picks
+                                                 this up automatically. -->
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MUTE}">
+                                                <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
+                                            </Trigger>
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_SILENT}">
+                                                <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
+                                            </Trigger>
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_LOW}">
+                                                <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
+                                            </Trigger>
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MID}">
+                                                <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
+                                            </Trigger>
+                                            <Trigger Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_HIGH}">
+                                                <Setter Property="HorizontalAlignment" Value="{StaticResource PlaybackGlyphAlignment}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource PlaybackGlyphOffset}"/>
+                                            </Trigger>
+                                            <!-- Hover preview = "click mutes". Render rows preview the speaker mute glyph;
+                                                 capture rows preview MICROPHONE_OFF so the gesture reads correctly on a mic. -->
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsMouseOver, ElementName=DeviceMuteButton}" Value="True"/>
+                                                    <Condition Binding="{Binding IsCaptureDevice}" Value="False"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.PLAYBACK_VOLUME_MUTE}"/>
+                                            </MultiDataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsMouseOver, ElementName=DeviceMuteButton}" Value="True"/>
+                                                    <Condition Binding="{Binding IsCaptureDevice}" Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.MICROPHONE_OFF}"/>
+                                                <Setter Property="FontSize" Value="{StaticResource MicGlyphFontSize}"/>
+                                                <Setter Property="FontWeight" Value="{StaticResource MicGlyphFontWeight}"/>
+                                                <Setter Property="RenderTransform" Value="{StaticResource MicGlyphOffset}"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </Grid>
                     </Button>
 
@@ -861,11 +928,8 @@
                                       PeakValueMin="{Binding PeakValueMin}"
                                       PeakValueMax="{Binding PeakValueMax}"
                                       ToolTip="{Binding FriendlyName}"
-                                      PreviewMouseLeftButtonDown="Slider_PreviewMouseLeftButtonDown"
-                                      PreviewMouseMove="Slider_PreviewMouseMove"
                                       PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
-                                      PreviewMouseWheel="DeviceSlider_PreviewMouseWheel"
-                                      MouseLeave="Slider_MouseLeave">
+                                      PreviewMouseWheel="Slider_PreviewMouseWheel">
                         <wpf:VolumeSlider.Style>
                             <Style TargetType="{x:Type wpf:VolumeSlider}" BasedOn="{StaticResource VolumeSliderStyle}">
                                 <Style.Triggers>
@@ -917,6 +981,7 @@
                   Width="36" Height="36"
                   HorizontalAlignment="Center" VerticalAlignment="Center"
                   Background="Transparent"
+                  Tag="{Binding}"
                   ToolTip="{Binding DisplayName}"
                   ToolTipService.InitialShowDelay="400"
                   PreviewMouseLeftButtonUp="AppIcon_PreviewMouseLeftButtonUp">
@@ -926,16 +991,16 @@
                         <Setter Property="Cursor" Value="Hand"/>
                         <Style.Triggers>
                             <!-- Capture sessions are not click-to-mute, so drop the hand cursor too. -->
-                            <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                            <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True">
                                 <Setter Property="Cursor" Value="Arrow"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsMuted}" Value="True">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding DataContext.Device.IsMuted, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                            <DataTrigger Binding="{Binding DataContext.Device.IsMuted, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding DataContext.Device.IsActive, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="False">
+                            <DataTrigger Binding="{Binding DataContext.Device.IsActive, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
                             </DataTrigger>
                             <!-- DimInactive mode on a capture device: dim icons whose session is not
@@ -943,7 +1008,7 @@
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
-                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True"/>
                                     <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Inactive}"/>
                                 </MultiDataTrigger.Conditions>
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -951,7 +1016,7 @@
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.DimInactive}"/>
-                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                    <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True"/>
                                     <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Expired}"/>
                                 </MultiDataTrigger.Conditions>
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -998,8 +1063,9 @@
                         </Style>
                     </Image.Style>
                 </Image>
-                <TextBlock Text="&#xE7F4;"
-                           FontFamily="Segoe Fluent Icons"
+                <!-- Placeholder app icon. Mirrors GlyphCatalog.APP_FALLBACK. -->
+                <TextBlock Text="{StaticResource GLYPH_APP_FALLBACK}"
+                           FontFamily="{StaticResource IconFontFamily}"
                            FontSize="{Binding AppDrawerIconGlyphSize, RelativeSource={RelativeSource AncestorType=Window}}"
                            Foreground="{DynamicResource ThemeIconForeground}"
                            HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -1014,9 +1080,10 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
+                <!-- Mute-X hover overlay. Mirrors GlyphCatalog.APP_MUTE_OVERLAY. -->
                 <TextBlock IsHitTestVisible="False"
-                           Text="&#xE653;"
-                           FontFamily="Segoe Fluent Icons"
+                           Text="{StaticResource GLYPH_APP_MUTE_OVERLAY}"
+                           FontFamily="{StaticResource IconFontFamily}"
                            FontSize="{Binding AppDrawerIconGlyphSize, RelativeSource={RelativeSource AncestorType=Window}}"
                            Foreground="{DynamicResource ThemeIconForeground}"
                            HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -1032,7 +1099,7 @@
                                     <Setter Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
                                 <!-- Capture sessions have no useful per-app mute, so suppress the X overlay entirely. -->
-                                <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True">
+                                <DataTrigger Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -1049,7 +1116,7 @@
                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
                       Margin="0,0,2,2"
                       IsHitTestVisible="False">
-                    <TextBlock FontFamily="Segoe Fluent Icons"
+                    <TextBlock FontFamily="{StaticResource IconFontFamily}"
                                FontWeight="ExtraBold"
                                Foreground="{DynamicResource ThemeIconForeground}"
                                HorizontalAlignment="Center"
@@ -1063,7 +1130,7 @@
                                     <MultiDataTrigger>
                                         <MultiDataTrigger.Conditions>
                                             <Condition Binding="{Binding CaptureActivityIndicator, RelativeSource={RelativeSource AncestorType=Window}}" Value="{x:Static models:CaptureActivityIndicator.ActiveGlyph}"/>
-                                            <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ContentPresenter, AncestorLevel=2}}" Value="True"/>
+                                            <Condition Binding="{Binding DataContext.Device.IsCaptureDevice, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True"/>
                                             <Condition Binding="{Binding State}" Value="{x:Static interop:AudioSessionState.Active}"/>
                                         </MultiDataTrigger.Conditions>
                                         <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CIRCLE}"/>
@@ -1080,108 +1147,116 @@
             </Grid>
         </DataTemplate>
 
-        <!-- Grid drawer variant of AppsRowTemplate. Uses CenteringWrapPanel with a fixed 8-column
-             grid (Width=320, ItemWidth=40) so the slot layout is stable across rows and across
-             icon-scale changes. The panel's CenterLastRow flag, bound to the Window's
-             AppDrawerIconsCentered setting, optionally shifts the trailing partial row to the
-             horizontal center of the grid; preceding full rows stay left-anchored either way.
-             Rounded-corner trigger matches the slider-drawer template so the AppsBelow IsLast cell
-             gets the flyout's outer rounded footer corners. -->
-        <ControlTemplate x:Key="AppsGridRowTemplate" TargetType="ContentControl">
-            <Border Background="{DynamicResource ThemeFooterBackground}"
-                    Padding="13,0,11,0"
-                    Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="0"/>
-                        <Style.Triggers>
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding IsLast}" Value="True"/>
-                                    <Condition Binding="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
-                                </MultiDataTrigger.Conditions>
-                                <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
-                            </MultiDataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <!-- Icon-grid drawer overflow: ScrollViewer caps the rendered height at the
-                     per-device-type GridDrawerMaxHeight (rows * GridSlotSize). In vertical-flow
-                     stack directions the panel's natural height is bounded by perColumn so the
-                     scrollbar usually stays hidden; in horizontal-flow modes the cap kicks in
-                     once rows exceed the user's max-rows setting. -->
-                <ScrollViewer MaxHeight="{Binding GridDrawerMaxHeight}"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding VisibleGroups}"
-                                  ItemTemplate="{StaticResource GridIconTemplate}"
-                                  HorizontalAlignment="Center">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <!-- CenteringWrapPanel column count comes from the Window's icons-per-row
-                                     setting; slot size is a hot-reloadable resource (GridSlotSize) so the
-                                     cell pitch can be tuned at runtime. CenterMode (with CenterSoftMax)
-                                     picks how the trailing partial row anchors along the cross axis:
-                                     Off (left), Centered (mid), CenteredSoftMax (left-anchored at the
-                                     soft-max-centered position, swapping to fully centered past the cap).
-                                     Full rows stay left-anchored regardless of mode. -->
-                                <wpf:CenteringWrapPanel ItemWidth="{DynamicResource GridSlotSize}"
-                                                        ItemHeight="{DynamicResource GridSlotSize}"
-                                                        Columns="{Binding AppDrawerIconsPerRow, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CenterMode="{Binding AppDrawerIconsCenterMode, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CenterSoftMax="{Binding AppDrawerIconsCenterSoftMax, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        StackDirection="{Binding AppDrawerStackDirection, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Border>
-        </ControlTemplate>
+        <!-- Apps band content. ContentControl variant that shows either the slider list or the
+             icon grid depending on the cell's UsesGridDrawer. DataContext is the VolumeFlyoutCell.
+             A Style with a single DataTrigger swaps the inner template between the two layouts
+             without recreating the ContentControl - so toggling RecordingAppDrawerDisplayType at
+             runtime is a pure visual swap, no cell rebuild needed.
+             IsAppsBottomBand (from the cell) signals that this apps band sits at the flyout's
+             bottom edge in the AppsBelow layout; combined with IsLast it triggers the rounded
+             footer-bottom corner radius. -->
+        <Style x:Key="AppsBandStyle" TargetType="ContentControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContentControl">
+                        <Border Background="{DynamicResource ThemeFooterBackground}"
+                                Padding="14,10,12,0"
+                                Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
+                            <Border.Style>
+                                <!-- Round the bottom corners only when this apps band sits flush
+                                     against the flyout's outer rounded bottom (AppsBelow + IsLast). -->
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="0"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsLast}" Value="True"/>
+                                                <Condition Binding="{Binding IsAppsBottomBand}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <!-- Slider drawer overflow: ScrollViewer caps the rendered height at the
+                                 per-device-type SliderDrawerMaxHeight (rows * row pitch). Below the cap the
+                                 items render at natural height and the scrollbar stays hidden; past the cap
+                                 the implicit app-wide ScrollBar style (the device-list scrollbar) kicks in. -->
+                            <ScrollViewer MaxHeight="{Binding SliderDrawerMaxHeight}"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding VisibleGroups}"
+                                              ItemTemplate="{StaticResource SessionRowTemplate}"/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <!-- Capture cells configured for the icon grid drawer: swap the whole template to
+                     the grid variant. CenterMode, columns, stack direction all come from the
+                     Window's settings projections via RelativeSource. Padding-bottom 0 matches the
+                     slider variant; the cell's container Border absorbs the breathing room. -->
+                <DataTrigger Binding="{Binding UsesGridDrawer}" Value="True">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ContentControl">
+                                <Border Background="{DynamicResource ThemeFooterBackground}"
+                                        Padding="13,0,11,0"
+                                        Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="0"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsLast}" Value="True"/>
+                                                        <Condition Binding="{Binding IsAppsBottomBand}" Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <!-- Icon-grid drawer overflow: ScrollViewer caps the rendered height at the
+                                         per-device-type GridDrawerMaxHeight (rows * GridSlotSize). In vertical-flow
+                                         stack directions the panel's natural height is bounded by perColumn so the
+                                         scrollbar usually stays hidden; in horizontal-flow modes the cap kicks in
+                                         once rows exceed the user's max-rows setting. -->
+                                    <ScrollViewer MaxHeight="{Binding GridDrawerMaxHeight}"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl ItemsSource="{Binding VisibleGroups}"
+                                                      ItemTemplate="{StaticResource GridIconTemplate}"
+                                                      HorizontalAlignment="Center">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <wpf:CenteringWrapPanel ItemWidth="{DynamicResource GridSlotSize}"
+                                                                            ItemHeight="{DynamicResource GridSlotSize}"
+                                                                            Columns="{Binding AppDrawerIconsPerRow, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                            CenterMode="{Binding AppDrawerIconsCenterMode, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                            CenterSoftMax="{Binding AppDrawerIconsCenterSoftMax, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                            StackDirection="{Binding AppDrawerStackDirection, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
-        <!-- Apps row content. Per-device session list lifted into the same footer-color band as
-             DeviceRowTemplate so a device and its apps read as a stacked pair. Used by both
-             CellAppsAboveTemplate and CellAppsBelowTemplate; DataContext is the VolumeFlyoutCell.
-             Padding-bottom is 0 because the last session row's own Margin.Bottom already supplies
-             the breathing space inside the colored band. -->
-        <ControlTemplate x:Key="AppsRowTemplate" TargetType="ContentControl">
-            <Border Background="{DynamicResource ThemeFooterBackground}"
-                    Padding="14,10,12,0"
-                    Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
-                <Border.Style>
-                    <!-- Round the bottom corners only when the apps cell sits flush against the
-                         flyout's outer rounded bottom: AppsBelow layout (host signals via Tag=True)
-                         on the last cell. Defaults to square corners otherwise so apps cells stacked
-                         above device rows don't notch their bottoms. -->
-                    <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="0"/>
-                        <Style.Triggers>
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding IsLast}" Value="True"/>
-                                    <Condition Binding="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
-                                </MultiDataTrigger.Conditions>
-                                <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
-                            </MultiDataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <!-- Slider drawer overflow: ScrollViewer caps the rendered height at the
-                     per-device-type SliderDrawerMaxHeight (rows * row pitch). Below the cap the
-                     items render at natural height and the scrollbar stays hidden; past the cap
-                     the implicit app-wide ScrollBar style (the device-list scrollbar) kicks in. -->
-                <ScrollViewer MaxHeight="{Binding SliderDrawerMaxHeight}"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding VisibleGroups}"
-                                  ItemTemplate="{StaticResource SessionRowTemplate}"/>
-                </ScrollViewer>
-            </Border>
-        </ControlTemplate>
-
-        <!-- Cell template: apps above, device row below in the footer band. Mirrors EarTrumpet
-             and the screenshot. The bottom-most cell rounds its device-row bottom corners through
-             IsLastToFooterCorner so the flyout's outer rounded corners read correctly. -->
-        <DataTemplate x:Key="CellAppsAboveTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
+        <!-- Unified cell template. Replaces the four near-identical CellApps*Template variants and
+             the DataTemplateSelector that picked among them. Two axes drive layout via cell-level
+             properties:
+               DeviceRowIndex / AppsRowIndex - flip which Grid.Row hosts the device vs apps band.
+               UsesGridDrawer                - the apps band's Style (AppsBandStyle) swaps templates internally.
+             Toggling FlyoutDeviceLayout or RecordingAppDrawerDisplayType at runtime now rebinds
+             these properties on every live cell and the visuals restyle without a rebuild. -->
+        <DataTemplate x:Key="CellTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -1193,16 +1268,53 @@
                      flyout's full outer width; ClipToBounds on the parent clips the overflow. -->
                 <Border Grid.Row="0" Grid.RowSpan="2"
                         Background="{DynamicResource ThemeFooterBackground}"
-                        CornerRadius="8"
+                        CornerRadius="{DynamicResource CornerRadiusFlyout}"
                         Margin="-1,0,-1,0"
                         IsHitTestVisible="False"/>
 
-                <ContentControl Grid.Row="0" Template="{StaticResource AppsRowTemplate}"/>
+                <!-- Apps band slot. Internal style pivots between slider list and icon grid; row
+                     position pivots between top (AppsAbove) and bottom (AppsBelow) via the cell. -->
+                <ContentControl Grid.Row="{Binding AppsRowIndex}"
+                                Style="{StaticResource AppsBandStyle}"/>
 
-                <Border Grid.Row="1"
-                        Background="{DynamicResource ThemeFooterBackground}"
-                        CornerRadius="{Binding IsLast, Converter={StaticResource IsLastToFooterCorner}}"
-                        Padding="17,4,12,12">
+                <!-- Device-row slot. Hosts the named DeviceRowTemplate inside a footer-band Border
+                     that picks up rounded-bottom corners when this is the last cell AND there's no
+                     apps band below it (AppsAbove layout, or AppsBelow with no visible groups). -->
+                <Border Grid.Row="{Binding DeviceRowIndex}"
+                        Background="{DynamicResource ThemeFooterBackground}">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="0"/>
+                            <Setter Property="Padding" Value="17,4,12,12"/>
+                            <Style.Triggers>
+                                <!-- AppsBelow + last cell + apps band collapsed: this device row is
+                                     visually the bottom band, so it rounds its bottom corners. The
+                                     padding shifts to match the AppsAbove cell's bottom band so the
+                                     content sits at the same offset regardless of layout. -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsAppsBottomBand}" Value="True"/>
+                                        <Condition Binding="{Binding HasVisibleGroups}" Value="False"/>
+                                        <Condition Binding="{Binding IsLast}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                                </MultiDataTrigger>
+                                <!-- AppsAbove + last cell: device row sits at the flyout's bottom edge. -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsAppsBottomBand}" Value="False"/>
+                                        <Condition Binding="{Binding IsLast}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                                </MultiDataTrigger>
+                                <!-- AppsBelow non-last cell: extra bottom padding so the device row
+                                     hugs the apps band above instead of leaving a gap. -->
+                                <DataTrigger Binding="{Binding IsAppsBottomBand}" Value="True">
+                                    <Setter Property="Padding" Value="14,12,12,0"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
                     <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
                 </Border>
 
@@ -1212,161 +1324,12 @@
                 <Border Grid.Row="0" Grid.RowSpan="2"
                         BorderBrush="{DynamicResource ThemeSliderTrack}"
                         BorderThickness="1"
-                        CornerRadius="8"
+                        CornerRadius="{DynamicResource CornerRadiusFlyout}"
                         Margin="-1,0,-1,0"
                         Opacity="0.4"
                         IsHitTestVisible="False"/>
             </Grid>
         </DataTemplate>
-
-        <!-- Cell template: device row on top in the footer band, apps below. Bottom-up device list
-             ordering still applies; only the per-cell stacking flips. The device row only takes
-             the rounded-corner treatment when it's both the last cell AND the apps section is
-             collapsed, so an empty bottom cell still gets clean rounded corners while a cell with
-             apps below doesn't notch its bottom edge under the apps. -->
-        <DataTemplate x:Key="CellAppsBelowTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Faux rounded-card fill. Drawn first so the cell's content paints on top of
-                     it. Overflows the cell by 1px each side so the wrapper width matches the
-                     flyout's full outer width; ClipToBounds on the parent clips the overflow. -->
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        Background="{DynamicResource ThemeFooterBackground}"
-                        CornerRadius="8"
-                        Margin="-1,0,-1,0"
-                        IsHitTestVisible="False"/>
-
-                <Border Grid.Row="0"
-                        Background="{DynamicResource ThemeFooterBackground}"
-                        Padding="14,12,12,0">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="CornerRadius" Value="0"/>
-                            <Style.Triggers>
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsLast}" Value="True"/>
-                                        <Condition Binding="{Binding HasVisibleGroups}" Value="False"/>
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
-                                </MultiDataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
-                </Border>
-
-                <!-- Tag=True signals to AppsRowTemplate that this apps cell is the one that sits at
-                     the flyout's bottom edge in the AppsBelow layout, so it can round its bottom
-                     corners when IsLast. -->
-                <ContentControl Grid.Row="1" Tag="True" Template="{StaticResource AppsRowTemplate}"/>
-
-                <!-- Faux rounded-card outline. Same shape and overflow as the fill above; sits
-                     last so the stroke paints on top of everything. No children, so Opacity
-                     dims the BorderBrush only. -->
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        BorderBrush="{DynamicResource ThemeSliderTrack}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Margin="-1,0,-1,0"
-                        Opacity="0.4"
-                        IsHitTestVisible="False"/>
-            </Grid>
-        </DataTemplate>
-
-        <!-- Grid-drawer variant of CellAppsAboveTemplate. Identical chrome to the slider variant -
-             same faux rounded card, same device-row band - only the apps section swaps from
-             AppsRowTemplate to AppsGridRowTemplate. Picked by the selector for capture cells when
-             RecordingAppDrawerDisplayType = Icons. -->
-        <DataTemplate x:Key="CellAppsAboveGridTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        Background="{DynamicResource ThemeFooterBackground}"
-                        CornerRadius="8"
-                        Margin="-1,0,-1,0"
-                        IsHitTestVisible="False"/>
-
-                <ContentControl Grid.Row="0" Template="{StaticResource AppsGridRowTemplate}"/>
-
-                <Border Grid.Row="1"
-                        Background="{DynamicResource ThemeFooterBackground}"
-                        CornerRadius="{Binding IsLast, Converter={StaticResource IsLastToFooterCorner}}"
-                        Padding="17,4,12,12">
-                    <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
-                </Border>
-
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        BorderBrush="{DynamicResource ThemeSliderTrack}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Margin="-1,0,-1,0"
-                        Opacity="0.4"
-                        IsHitTestVisible="False"/>
-            </Grid>
-        </DataTemplate>
-
-        <!-- Grid-drawer variant of CellAppsBelowTemplate. Same swap rationale as the AppsAbove
-             variant: only the apps section moves to AppsGridRowTemplate; the device row and faux
-             rounded card chrome are unchanged. -->
-        <DataTemplate x:Key="CellAppsBelowGridTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        Background="{DynamicResource ThemeFooterBackground}"
-                        CornerRadius="8"
-                        Margin="-1,0,-1,0"
-                        IsHitTestVisible="False"/>
-
-                <Border Grid.Row="0"
-                        Background="{DynamicResource ThemeFooterBackground}"
-                        Padding="14,12,12,12">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="CornerRadius" Value="0"/>
-                            <Style.Triggers>
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsLast}" Value="True"/>
-                                        <Condition Binding="{Binding HasVisibleGroups}" Value="False"/>
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
-                                </MultiDataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
-                </Border>
-
-                <ContentControl Grid.Row="1" Tag="True" Template="{StaticResource AppsGridRowTemplate}"/>
-
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        BorderBrush="{DynamicResource ThemeSliderTrack}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Margin="-1,0,-1,0"
-                        Opacity="0.4"
-                        IsHitTestVisible="False"/>
-            </Grid>
-        </DataTemplate>
-
-        <wpf:VolumeFlyoutCellTemplateSelector x:Key="CellTemplateSelector"
-                                              AppsAboveTemplate="{StaticResource CellAppsAboveTemplate}"
-                                              AppsBelowTemplate="{StaticResource CellAppsBelowTemplate}"
-                                              AppsAboveGridTemplate="{StaticResource CellAppsAboveGridTemplate}"
-                                              AppsBelowGridTemplate="{StaticResource CellAppsBelowGridTemplate}"/>
     </Window.Resources>
 
     <!-- Outer rounded card with drop-shadow. Bubbled (non-preview) mouse handlers drive the
@@ -1413,7 +1376,7 @@
                             Click="SettingsButton_Click"
                             ToolTip="{loc:Loc Flyout_Settings_Tooltip}">
                         <TextBlock Text="{DynamicResource GlyphSettings}"
-                                   FontFamily="Segoe Fluent Icons"
+                                   FontFamily="{StaticResource IconFontFamily}"
                                    FontSize="19"
                                    Foreground="{DynamicResource ThemeIconForeground}"/>
                     </Button>
@@ -1421,8 +1384,9 @@
                             Style="{StaticResource HeaderIconButtonStyle}"
                             Click="SoundSettingsButton_Click"
                             ToolTip="{loc:Loc Flyout_SoundSettings_Tooltip}">
-                        <TextBlock Text="&#xE995;"
-                                   FontFamily="Segoe Fluent Icons"
+                        <!-- Sound-settings entrypoint glyph. Mirrors GlyphCatalog.SOUND_SETTINGS. -->
+                        <TextBlock Text="{StaticResource GLYPH_SOUND_SETTINGS}"
+                                   FontFamily="{StaticResource IconFontFamily}"
                                    FontSize="19"
                                    Foreground="{DynamicResource ThemeIconForeground}"/>
                     </Button>
@@ -1469,15 +1433,17 @@
                             </ToolTip.Style>
                         </ToolTip>
                     </Button.ToolTip>
-                    <TextBlock FontFamily="Segoe Fluent Icons"
+                    <!-- Undock action glyph; flips to redock when the flyout is already undocked.
+                         Mirrors GlyphCatalog.FLYOUT_UNDOCK_ACTION / FLYOUT_REDOCK_ACTION. -->
+                    <TextBlock FontFamily="{StaticResource IconFontFamily}"
                                FontSize="20"
                                Foreground="{DynamicResource ThemeIconForeground}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="&#xE75B;"/>
+                                <Setter Property="Text" Value="{StaticResource GLYPH_FLYOUT_UNDOCK_ACTION}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsUndocked, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                                        <Setter Property="Text" Value="&#xE75A;"/>
+                                        <Setter Property="Text" Value="{StaticResource GLYPH_FLYOUT_REDOCK_ACTION}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -1500,7 +1466,7 @@
                               Focusable="False">
                     <ItemsControl x:Name="CellsList"
                                   ItemsSource="{Binding Cells, RelativeSource={RelativeSource AncestorType=Window}}"
-                                  ItemTemplateSelector="{StaticResource CellTemplateSelector}"/>
+                                  ItemTemplate="{StaticResource CellTemplate}"/>
                 </ScrollViewer>
 
                 <TextBlock Text="No audio devices"

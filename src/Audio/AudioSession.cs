@@ -5,6 +5,7 @@ using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
+using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -17,23 +18,28 @@ namespace VolumeTrayAppWPF.Audio;
 /// </summary>
 internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 {
-    // The same fixed event-context GUID as AudioDevice; identifies us as the originator
-    // when our own writes echo back through the IAudioSessionEvents callbacks.
-    internal static Guid EventContext { get; } = new(AppIdentity.AppGuid);
+    // Event-context GUID lives in Audio/Interop/AudioInterop.cs as AudioEventContext.Value -
+    // identifies us as the originator when our own writes echo back through the
+    // IAudioSessionEvents callbacks. Same fixed value shared with AudioDevice.
 
-    // Hardcoded AppId for the system-sounds session so it groups with itself across endpoints.
+    // Hardcoded AppID for the system-sounds session so it groups with itself across endpoints.
     // Mirrors EarTrumpet's "System.SystemSoundsSession" sentinel.
-    private const string SystemSoundsAppId = "System.SystemSoundsSession";
+    private const string SystemSoundsAppID = "System.SystemSoundsSession";
 
+    // Apartment-state contract for the COM RCWs below:
+    //  - _control / _control2 / _simpleVolume / _meter were activated from the parent
+    //    AudioDevice's IMMDevice on the WPF UI-thread STA. The audioses.dll proxies register the
+    //    free-threaded marshaler, so the sample-timer threadpool worker can read _meter and the
+    //    volume-throttler worker can write _simpleVolume - both rely on the FTM. UI-thread is
+    //    still the canonical home for any non-meter / non-volume call.
     private readonly IAudioSessionControl _control;
     private readonly IAudioSessionControl2 _control2;
     private readonly ISimpleAudioVolume _simpleVolume;
     private readonly IAudioMeterInformation _meter;
     private readonly EventBridge _events;
     private readonly Dispatcher _dispatcher;
-    private readonly AsyncThrottler<string> _volumeThrottler;
     private readonly ProcessExitMonitor? _processExitMonitor;
-    private readonly string _volumeThrottlerKey;
+    private readonly VolumeThrottle _volumeWrite;
     private readonly bool _watchingProcess;
 
     private float _volume;
@@ -48,22 +54,12 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     private bool _disconnected;
     private AudioSessionDisconnectReason? _lastDisconnectReason;
 
-    // Step-counter linear-interpolation state for the stereo peak meter. Sample timer's bg-thread
-    // half writes _rawPeakMin / _rawPeakMax from one IAudioMeterInformation.GetChannelsPeakValues
-    // call - min/max over the first two channels. OnNewSample copies them into _target* and
-    // snapshots the current display values as _prev*. The render timer lerps both toward their
-    // targets together across _interpolationSteps frames; min and max share the step counter so
-    // they advance in lockstep.
-    private float _rawPeakMin, _rawPeakMax;
-    private float _displayPeakMin, _displayPeakMax;
-    private float _prevPeakMin, _prevPeakMax;
-    private float _targetPeakMin, _targetPeakMax;
-    private int _interpolationStep;
-    private int _interpolationSteps = 1;
+    // Step-counter peak-meter lerp. Shared with AudioDevice via the MeterLerp struct.
+    private MeterLerp _meterLerp;
 
-    public uint ProcessId { get; }
+    public uint ProcessID { get; }
     public bool IsSystemSounds { get; }
-    public string SessionInstanceId { get; }
+    public string SessionInstanceID { get; }
 
     /// <summary>
     /// Stable identity used by <see cref="AudioAppGroup"/> to collate sessions belonging to the same app
@@ -71,7 +67,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     /// lower-cased process image path. When the process can't be opened, falls back to a pid-prefixed id so
     /// each unresolvable session still gets its own slider rather than silently grouping with others.
     /// </summary>
-    public string AppId { get; }
+    public string AppID { get; }
 
     /// <summary>
     /// Resolved app icon. Updates at runtime when the session reports a new icon path
@@ -101,26 +97,12 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             // Update the cached value + raise PropertyChanged synchronously so the slider stays
             // responsive on fast drags. The COM write is queued through the shared throttler with
             // latest-pending-wins semantics so a flurry of pixel-level changes collapses into one
-            // SetMasterVolume call per cooldown - and per-session, since the throttler keys on
-            // _volumeThrottlerKey so Discord's three child sessions don't block each other.
+            // SetMasterVolume call per cooldown - and per-session, since VolumeThrottle keys on
+            // the session id so Discord's three child sessions don't block each other.
             _volume = clamped;
             OnPropertyChanged();
 
-            float captured = clamped;
-            _ = _volumeThrottler.RunAsync(_volumeThrottlerKey, _ =>
-            {
-                try
-                {
-                    Guid ctx = EventContext;
-                    _simpleVolume.SetMasterVolume(captured, ref ctx);
-                }
-                catch
-                {
-                    // Session may have expired between the user's drag and the deferred write.
-                    // OnSessionDisconnected / OnStateChanged will reconcile the UI shortly after.
-                }
-                return Task.CompletedTask;
-            });
+            _volumeWrite.Write(clamped, (v, ctx) => _simpleVolume.SetMasterVolume(v, ref ctx));
         }
     }
 
@@ -133,7 +115,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 
             try
             {
-                Guid ctx = EventContext;
+                Guid ctx = AudioEventContext.Value;
                 _simpleVolume.SetMute(value, ref ctx);
             }
             catch { return; }
@@ -147,13 +129,13 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     /// Smoothed min(L, R) peak. Drives the base meter bar (the level guaranteed in both
     /// channels). Updated every render tick from <see cref="OnRenderTick"/>; never set externally.
     /// </summary>
-    public float PeakValueMin => _displayPeakMin;
+    public float PeakValueMin => _meterLerp.DisplayMin;
 
     /// <summary>
     /// Smoothed max(L, R) peak. Drives the stereo overlay bar that paints on top of the base bar
     /// and extends to the loudest channel. For mono streams this equals <see cref="PeakValueMin"/>.
     /// </summary>
-    public float PeakValueMax => _displayPeakMax;
+    public float PeakValueMax => _meterLerp.DisplayMax;
 
     public AudioSessionState State
     {
@@ -191,20 +173,19 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         _simpleVolume = (ISimpleAudioVolume)control;
         _meter = (IAudioMeterInformation)control;
         _dispatcher = dispatcher;
-        _volumeThrottler = volumeThrottler;
         _processExitMonitor = processExitMonitor;
 
         // PID + system-sounds determination happens once; both are immutable for the session's lifetime.
         _control2.GetProcessId(out uint pid);
-        ProcessId = pid;
+        ProcessID = pid;
         IsSystemSounds = _control2.IsSystemSoundsSession() == 0; // S_OK = 0 means it IS the system-sounds session
 
-        _control2.GetSessionInstanceIdentifier(out string sessionInstanceId);
-        SessionInstanceId = sessionInstanceId ?? string.Empty;
-        _volumeThrottlerKey = "session:" + SessionInstanceId;
+        _control2.GetSessionInstanceIdentifier(out string sessionInstanceID);
+        SessionInstanceID = sessionInstanceID ?? string.Empty;
+        _volumeWrite = new VolumeThrottle(volumeThrottler, "session:" + SessionInstanceID);
 
-        // AppId routes the session to its group so it has to be ready synchronously - new sessions
-        // arriving while a name lookup is async would otherwise race the AppId-keyed bucket lookup
+        // AppID routes the session to its group so it has to be ready synchronously - new sessions
+        // arriving while a name lookup is async would otherwise race the AppID-keyed bucket lookup
         // in AudioDevice.AddSession. GetProcessImagePath uses kernel32 directly (OpenProcess +
         // QueryFullProcessImageName); fast (<1ms) so it stays inline.
         // The slow parts - AppIconResolver and FileVersionInfo lookups - are deferred to a
@@ -215,7 +196,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         if (IsSystemSounds)
         {
             _displayName = "System Sounds";
-            AppId = SystemSoundsAppId;
+            AppID = SystemSoundsAppID;
         }
         else
         {
@@ -223,7 +204,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             if (string.IsNullOrEmpty(_displayName)) _displayName = "Unknown";
 
             string? imagePath = ProcessHelper.GetProcessImagePath(pid);
-            AppId = string.IsNullOrEmpty(imagePath) ? $"pid:{pid}" : imagePath.ToLowerInvariant();
+            AppID = string.IsNullOrEmpty(imagePath) ? $"pid:{pid}" : imagePath.ToLowerInvariant();
         }
 
         // Initial volume / mute / state pulled synchronously so the first paint shows real values.
@@ -380,8 +361,8 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// If the session was constructed with a fallback identity (process unreachable at the time -
-    /// DisplayName "Unknown", AppId "pid:NNN"), retry resolution now that the session is going Active.
-    /// AppId stays put because it's the group routing key; only DisplayName and Icon are refreshed.
+    /// DisplayName "Unknown", AppID "pid:NNN"), retry resolution now that the session is going Active.
+    /// AppID stays put because it's the group routing key; only DisplayName and Icon are refreshed.
     /// In the rare case where the process is still unreachable, leaves the values untouched.
     /// </summary>
     private void TryReresolveProcessMetadata()
@@ -397,7 +378,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             string sessionName = ReadSessionDisplayName(_control);
             string resolved = !string.IsNullOrEmpty(sessionName)
                 ? sessionName
-                : ProcessHelper.GetDisplayNameForProcess(ProcessId);
+                : ProcessHelper.GetDisplayNameForProcess(ProcessID);
             if (!string.IsNullOrEmpty(resolved) && !string.Equals(resolved, "Unknown", StringComparison.Ordinal))
             {
                 DisplayName = resolved;
@@ -406,7 +387,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 
         if (stuckIcon)
         {
-            AppIconResolver.IconHandle? acquired = AppIconResolver.Acquire(_control, ProcessId, isSystemSounds: false);
+            AppIconResolver.IconHandle? acquired = AppIconResolver.Acquire(_control, ProcessID, isSystemSounds: false);
             if (acquired != null) ApplyIconHandle(acquired);
         }
     }
@@ -448,11 +429,10 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Bg-thread half of the sample tick. Reads the per-channel peaks via COM into
-    /// <see cref="_rawPeakMin"/> / <see cref="_rawPeakMax"/> off the UI thread. Float writes are
-    /// atomic in .NET and the subsequent UI <see cref="OnNewSample"/> is queued via
-    /// Dispatcher.BeginInvoke, which provides the release/acquire fence needed for the UI thread
-    /// to observe the new raw values.
+    /// Bg-thread half of the sample tick. Reads the per-channel peaks via COM and stashes them on
+    /// the <see cref="MeterLerp"/> via <see cref="MeterLerp.WriteRawPeaks"/> off the UI thread.
+    /// Float writes are atomic in .NET and the subsequent UI <see cref="OnNewSample"/> is queued
+    /// via Dispatcher.BeginInvoke, which provides the release/acquire fence the UI thread needs.
     /// The (unified, biasMultiplier) pair flows into <see cref="MeterReader.ReadStereoPeaks"/>
     /// so the per-session lerp targets land already collapsed when unified mode is on.
     /// </summary>
@@ -463,8 +443,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         try
         {
             MeterReader.ReadStereoPeaks(_meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
-            _rawPeakMin = minPeak;
-            _rawPeakMax = maxPeak;
+            _meterLerp.WriteRawPeaks(minPeak, maxPeak);
         }
         catch
         {
@@ -474,58 +453,27 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// UI-thread half of the sample tick. Snapshots the current display values as the new lerp
-    /// origins, copies the most recent <see cref="_rawPeakMin"/> / <see cref="_rawPeakMax"/>
-    /// (filled by <see cref="UpdatePeakValueBackground"/>) into <see cref="_targetPeakMin"/> /
-    /// <see cref="_targetPeakMax"/>, and arms the shared step counter.
+    /// UI-thread half of the sample tick. Hands off to <see cref="MeterLerp.OnNewSample"/> which
+    /// snapshots the current display values as the new lerp origins and arms the shared step
+    /// counter at the supplied span.
     /// </summary>
     internal void OnNewSample(int interpolationSteps)
     {
         if (_disposed || _disconnected) return;
-
-        _prevPeakMin = _displayPeakMin;
-        _prevPeakMax = _displayPeakMax;
-        _targetPeakMin = _rawPeakMin;
-        _targetPeakMax = _rawPeakMax;
-        _interpolationStep = 0;
-        _interpolationSteps = interpolationSteps < 1 ? 1 : interpolationSteps;
+        _meterLerp.OnNewSample(interpolationSteps);
     }
 
     /// <summary>
-    /// Render-timer callback. Advances the shared step counter and writes the lerped min/max
-    /// peaks into <see cref="_displayPeakMin"/> / <see cref="_displayPeakMax"/>. Fires
-    /// PropertyChanged on every actual change so the AudioAppGroup aggregator and the bound
-    /// slider both redraw smoothly. UI-thread.
+    /// Render-timer callback. Advances the lerp and fires PropertyChanged on every actual change
+    /// so the AudioAppGroup aggregator and the bound slider both redraw smoothly. UI-thread.
     /// </summary>
     internal void OnRenderTick()
     {
         if (_disposed || _disconnected) return;
 
-        _interpolationStep++;
-
-        float newMin, newMax;
-        if (_interpolationStep >= _interpolationSteps)
-        {
-            newMin = _targetPeakMin;
-            newMax = _targetPeakMax;
-        }
-        else
-        {
-            float t = (float)_interpolationStep / _interpolationSteps;
-            newMin = _prevPeakMin + (_targetPeakMin - _prevPeakMin) * t;
-            newMax = _prevPeakMax + (_targetPeakMax - _prevPeakMax) * t;
-        }
-
-        if (newMin != _displayPeakMin)
-        {
-            _displayPeakMin = newMin;
-            OnPropertyChanged(nameof(PeakValueMin));
-        }
-        if (newMax != _displayPeakMax)
-        {
-            _displayPeakMax = newMax;
-            OnPropertyChanged(nameof(PeakValueMax));
-        }
+        _meterLerp.OnRenderTick(out bool minChanged, out bool maxChanged);
+        if (minChanged) OnPropertyChanged(nameof(PeakValueMin));
+        if (maxChanged) OnPropertyChanged(nameof(PeakValueMax));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)
@@ -540,34 +488,27 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         // the marshaled callback's _disposed guard collapses it to a no-op.
         if (_watchingProcess && _processExitMonitor != null)
         {
-            try { _processExitMonitor.Unwatch(ProcessId); } catch { }
+            try { _processExitMonitor.Unwatch(ProcessID); } catch { }
         }
 
         // Drop any queued SetMasterVolume so the throttler driver doesn't try to call into the
         // RCW we're about to release. A payload already in flight will catch the COM exception.
-        try { _volumeThrottler.Drop(_volumeThrottlerKey); } catch { }
+        _volumeWrite.Drop();
 
         try { _control.UnregisterAudioSessionNotification(_events); }
         catch { /* session may already be gone */ }
 
         // Release the cached icon ref. With no more refs from any session, the entry parks in the
         // LRU "limbo" queue and stays revivable until evicted by overflow.
-        _iconHandle?.Dispose();
+        Safe.Dispose(_iconHandle);
         _iconHandle = null;
 
         // The COM RCWs still hold native references; release them deterministically so the
         // session control's IUnknown ref count drops as soon as we abandon it.
-        TryRelease(_simpleVolume);
-        TryRelease(_meter);
-        TryRelease(_control2);
-        TryRelease(_control);
-    }
-
-    private static void TryRelease(object? rcw)
-    {
-        if (rcw == null) return;
-        try { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(rcw); }
-        catch { /* ignore */ }
+        Safe.Release(_simpleVolume);
+        Safe.Release(_meter);
+        Safe.Release(_control2);
+        Safe.Release(_control);
     }
 
     // Internal callback bridge. Lives on whatever MTA thread COM picks; every observable
@@ -597,7 +538,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             {
                 if (_owner._disposed || _owner._disconnected) return;
                 AppIconResolver.IconHandle? newHandle = AppIconResolver.Acquire(
-                    _owner._control, _owner.ProcessId, _owner.IsSystemSounds);
+                    _owner._control, _owner.ProcessID, _owner.IsSystemSounds);
                 if (newHandle != null) _owner.ApplyIconHandle(newHandle);
                 else _owner.ClearIconHandle();
             });
@@ -607,7 +548,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         public int OnSimpleVolumeChanged(float newVolume, bool newMute, ref Guid eventContext)
         {
             // Suppress echoes from our own writes.
-            if (eventContext == EventContext) return 0;
+            if (eventContext == AudioEventContext.Value) return 0;
 
             _owner._dispatcher.BeginInvoke(() =>
             {

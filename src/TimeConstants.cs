@@ -59,4 +59,13 @@ public static class TimeConstants
     public const int LogMaxAgeMs = 604_800_000;
     public const int LogFlushIntervalMs = 2_000;
     public const int LogShutdownTimerWaitMs = 1_000;
+
+    // Endpoint-render drain poll slice.
+    // Used by Audio/EndpointSoundPlayback for the post-write padding-poll loop inside Play().
+    public const int EndpointSoundPlaybackPollSliceMs = 30;
+
+    // Hard ceiling on the endpoint-render drain loop.
+    // Default Windows feedback wavs are well under a second; this covers worst-case engine latency
+    // on a slow / contested system without ever stranding a worker.
+    public const int EndpointSoundPlaybackMaxDrainMs = 5_000;
 }

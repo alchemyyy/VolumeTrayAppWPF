@@ -6,11 +6,9 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -35,10 +33,6 @@ namespace VolumeTrayAppWPF.WPF;
 /// </summary>
 internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 {
-    // Step the device / session sliders by 2 percent per wheel notch
-    // -- matches Windows' Volume mixer behavior (smooth fine-grained control without pop noise).
-    private const double WheelVolumeStepPercent = 2.0;
-
     // Click-vs-drag threshold for the undock button. Anything under this travels back to a click,
     // so a tiny shake doesn't accidentally undock-and-save-position when the user really meant to toggle.
     private const double DragThreshold = 4;
@@ -47,10 +41,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // feels equally generous on a 1080p laptop, a 4K desktop, and an ultrawide.
     private const double SnapTolerancePercent = 0.02;
 
-    // Per-app feedback file. Picked because Windows Background.wav is the same wav SystemSounds.Beep
-    // resolves to on default Windows installs, so the device-slider beep and the per-app slider beep
-    // sound consistent. Falls back to silence if the file is missing.
-    private const string AppFeedbackWavName = "Windows Background.wav";
+    // Single source of truth for the flyout's outer-edge inset. Used by PositionNearTray,
+    // CaptureDockedPosition, and ApplyWorkAreaMaxHeight - hoisted to one site so a tweak lands in
+    // every call. Padding (not a corner radius) - the work-area inset.
+    private const double EdgePadding = 8;
 
     // Property names on AudioDevice that affect the cell list ordering. A change to any of these on
     // any device triggers a full rebuild so the StateGrouped sort picks up the new bucketing.
@@ -66,12 +60,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // Visible device cells in display order (top-to-bottom). Bound to the outer ItemsControl.
     private readonly ObservableCollection<VolumeFlyoutCell> _cells = [];
 
-    // Our own AppId, computed once with the same lower-cased-image-path scheme AudioSession uses.
-    // Per-app slider feedback (PlayAppVolumeFeedback) routes through SoundPlayer / winmm, which
-    // registers an audio session under our PID; without this filter, each cell would show its own
-    // slider transiently while sound is playing. Null means we couldn't resolve our image path -
-    // fall back to no filtering rather than guessing.
-    private readonly string? _ownAppId;
+    // Our own AppID, computed once with the same lower-cased-image-path scheme AudioSession uses.
+    // Per-app slider feedback (PlayForApp) routes through SoundPlayer / winmm, which registers an
+    // audio session under our PID; without this filter, each cell would show its own slider
+    // transiently while sound is playing. Null means we couldn't resolve our image path - fall back
+    // to no filtering rather than guessing.
+    private readonly string? _ownAppID;
 
     // Devices we have a PropertyChanged subscription on. Kept separately so add / remove
     // notifications from AudioDeviceManager.Devices can sync subscriptions without scanning twice.
@@ -92,43 +86,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private HwndSource? _hwndSource;
     private readonly AppSettings? _appSettings;
 
-    // The layout style at the time the cells were last rebuilt. A flip in
-    // FlyoutDeviceLayout requires force-rebuilding the cells (the DataTemplateSelector caches its
-    // selection per-ContentPresenter, so we have to recreate the visuals to swap templates).
-    private FlyoutDeviceLayoutStyle _renderedLayout;
-
-    // Recording-device drawer display type at the time of the last cell rebuild. Mirrors
-    // _renderedLayout: the template selector caches its pick per-ContentPresenter, so swapping
-    // between Sliders and Icons on a capture cell requires a full rebuild.
-    private AppDrawerDisplayType _renderedRecordingAppDrawer;
-
-    // Currently-captured slider during a track click drag. Null when no drag is in flight or the
-    // active gesture is a thumb drag (which WPF handles natively).
-    private Slider? _draggingSlider;
-
-    // Per-app slider feedback. _wavTemplate holds the wav bytes loaded once at startup; each play
-    // clones it, scales PCM samples in-place by the target app's slider value, and hands the bytes
-    // to SoundPlayer. SoundPlayer routes through winmm.dll's PlaySound directly, which - unlike WPF's
-    // MediaPlayer - doesn't depend on Windows Media Player and so works on Windows N installs.
-    private byte[]? _wavTemplate;
-    private int _wavDataOffset;
-    private int _wavDataLength;
-    private int _wavBitsPerSample;
-    // Held across plays so the byte[] backing the in-flight async PlaySound isn't GC'd mid-playback,
-    // and so a follow-up play disposes the prior player (which preempts its still-playing sound).
-    private System.Media.SoundPlayer? _currentAppSound;
-
-    // Trailing-edge debouncer for the volume-change ding. Each scroll/wheel/drag-end calls RunAsync;
-    // the payload polls HasReplacement during its dwell and bails the moment a fresher event lands,
-    // so the ding only fires once the dwell elapses with no new event arriving. Cooldown is 0 because
-    // the dwell itself IS the rate-limit. Two keys keep device and per-app feedback independent.
-    private readonly AsyncThrottler<string> _feedbackThrottler = new(0, StringComparer.Ordinal);
-    private const string DeviceDingThrottleKey = "device";
-    private const string AppDingThrottleKey = "app";
-
-    // Slice size for the dwell's HasReplacement poll. Smaller = ding fires closer to "exactly 150ms
-    // after the last event"; larger = fewer wakeups. 10ms is well below human perception.
-    private const int DingDwellPollSliceMs = 10;
+    // Per-app / per-device volume feedback. Owns the wav template, PCM resampling, and SoundPlayer
+    // lifetime; the flyout fires PlayForDevice / PlayForApp on user interactions and never touches
+    // the underlying primitives directly.
+    private readonly AppVolumeFeedbackPlayer _feedback;
 
     // Snapshot of the docked screen-space coordinate, refreshed on every Show / size change.
     // Stored so SizeChanged re-anchoring re-uses a stable value if WorkArea shifts mid-flight.
@@ -330,10 +291,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _appSettings = AppServices.Settings;
         Cells = new ReadOnlyObservableCollection<VolumeFlyoutCell>(_cells);
 
-        // Resolve our own AppId once. Matches AudioSession's image-path-lower-invariant scheme
+        // Resolve our own AppID once. Matches AudioSession's image-path-lower-invariant scheme
         // so an exact string compare in the cell filter suffices.
         string? ownPath = ProcessHelper.GetProcessImagePath((uint)Environment.ProcessId);
-        _ownAppId = string.IsNullOrEmpty(ownPath) ? null : ownPath.ToLowerInvariant();
+        _ownAppID = string.IsNullOrEmpty(ownPath) ? null : ownPath.ToLowerInvariant();
 
         _onSliderListChanged = (_, _) => QueueLayoutWhileHidden();
         ((INotifyCollectionChanged)_cells).CollectionChanged += _onSliderListChanged;
@@ -350,6 +311,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         SetResourceReference(BaseAppIconGlyphSizeProperty, "AppIconGlyphSize");
 
         _dragHelper = new WindowDragHelper(this);
+        _feedback = new AppVolumeFeedbackPlayer(Dispatcher, _appSettings);
 
         IsUndocked = _appSettings is
         {
@@ -359,27 +321,20 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             RestoreFlyoutUndockedOnStartup: true
         };
 
-        _renderedLayout = _appSettings?.FlyoutDeviceLayout ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
-        _renderedRecordingAppDrawer = _appSettings?.RecordingAppDrawerDisplayType ?? AppDrawerDisplayType.Icons;
-
         ((INotifyCollectionChanged)_deviceManager.Devices).CollectionChanged += OnDevicesCollectionChanged;
         SyncDeviceSubscriptions();
-        RebuildCellList(forceFullRebuild: false);
+        RebuildCellList();
 
         if (_appSettings != null) _appSettings.Changed += OnAppSettingsChanged;
 
         SourceInitialized += OnFlyoutSourceInitialized;
         Closed += OnFlyoutClosed;
-
-        EnsureAppFeedbackData();
     }
 
     /// <summary>
-    /// Settings change handler.
-    /// Pulls the flyout back to docked when AllowFlyoutUndock flips off mid-session, then rebuilds
-    /// the cell list so any sort / layout / visibility setting change is reflected without waiting
-    /// for the next device event. A layout flip force-rebuilds the cells so the DataTemplateSelector
-    /// picks up the new mode.
+    /// Settings change handler. Pulls the flyout back to docked when AllowFlyoutUndock flips off
+    /// mid-session, refires INPC on every computed projection, and rebuilds the cell list so any
+    /// sort / visibility setting flips into the visuals immediately.
     /// </summary>
     private void OnAppSettingsChanged()
     {
@@ -401,16 +356,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(AppDrawerIconsPerRow));
             OnPropertyChanged(nameof(AppDrawerStackDirection));
 
-            FlyoutDeviceLayoutStyle currentLayout = _appSettings?.FlyoutDeviceLayout
-                ?? FlyoutDeviceLayoutStyle.AppsAboveDevice;
-            AppDrawerDisplayType currentRecordingDrawer = _appSettings?.RecordingAppDrawerDisplayType
-                ?? AppDrawerDisplayType.Icons;
-            bool layoutChanged = currentLayout != _renderedLayout
-                || currentRecordingDrawer != _renderedRecordingAppDrawer;
-            _renderedLayout = currentLayout;
-            _renderedRecordingAppDrawer = currentRecordingDrawer;
-
-            RebuildCellList(forceFullRebuild: layoutChanged);
+            RebuildCellList();
 
             // Header dock flip changes the SettingsButton's window-space Y offset but not the
             // window height, so OnRenderSizeChanged will not re-clamp on its own. Force a layout
@@ -463,18 +409,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _cellsByDevice.Clear();
         _cells.Clear();
 
-        // Dispose the throttler before the SoundPlayer so any in-flight dwell exits via its
-        // shutdown token before the payload tries to dispatch a play onto a torn-down dispatcher.
-        try { _feedbackThrottler.Dispose(); }
+        try { _feedback.Dispose(); }
         catch { /* shutdown best-effort */ }
-
-        if (_currentAppSound != null)
-        {
-            try { _currentAppSound.Stop(); _currentAppSound.Dispose(); }
-            catch { /* shutdown best-effort */ }
-            _currentAppSound = null;
-        }
-        _wavTemplate = null;
     }
 
     /// <summary>
@@ -506,7 +442,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private void OnDevicesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncDeviceSubscriptions();
-        RebuildCellList(forceFullRebuild: false);
+        RebuildCellList();
         if (IsVisible) PositionNearTray();
     }
 
@@ -519,39 +455,30 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == null || !OrderingPropertyNames.Contains(e.PropertyName)) return;
-        RebuildCellList(forceFullRebuild: false);
+        RebuildCellList();
     }
 
     /// <summary>
     /// Recomputes the visible cell list from the manager's device list and the current settings.
     /// Diff-based - existing cells are kept (preserving their internal state); only cells for
-    /// removed-from-visible devices are disposed. <paramref name="forceFullRebuild"/> wipes the
-    /// list and rebuilds from scratch so the DataTemplateSelector re-evaluates each cell - used
-    /// when FlyoutDeviceLayout flips mid-session.
+    /// removed-from-visible devices are disposed. Layout / drawer-type flips no longer force a
+    /// full rebuild: the unified DataTemplate's DataTriggers restyle live cells in place.
     /// </summary>
-    private void RebuildCellList(bool forceFullRebuild)
+    private void RebuildCellList()
     {
         if (_appSettings == null)
         {
             // Without settings, fall back to listing every render device in enumeration order.
-            ApplyOrderedDevices(_deviceManager.Devices.Where(d => d.DataFlow == Audio.Interop.EDataFlow.eRender).ToList(),
-                forceFullRebuild);
+            ApplyOrderedDevices(_deviceManager.Devices.Where(d => d.DataFlow == Audio.Interop.EDataFlow.eRender).ToList());
             return;
         }
 
         List<AudioDevice> ordered = FlyoutDeviceOrdering.Build(_deviceManager.Devices, _appSettings);
-        ApplyOrderedDevices(ordered, forceFullRebuild);
+        ApplyOrderedDevices(ordered);
     }
 
-    private void ApplyOrderedDevices(List<AudioDevice> ordered, bool forceFullRebuild)
+    private void ApplyOrderedDevices(List<AudioDevice> ordered)
     {
-        if (forceFullRebuild)
-        {
-            // Layout flipped - DataTemplateSelector caches per-ContentPresenter, so we have to
-            // tear the visuals down to swap templates.
-            _cells.Clear();
-        }
-
 #if DEBUG_OVERFLOW_DUMMIES
         // Drop the previous rebuild's dummy cells (anything not tracked by _cellsByDevice) so
         // re-rebuilds don't accumulate dummies on top of dummies.
@@ -579,7 +506,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             AudioDevice device = ordered[targetIndex];
             if (!_cellsByDevice.TryGetValue(device, out VolumeFlyoutCell? cell))
             {
-                cell = new VolumeFlyoutCell(device, _ownAppId);
+                cell = new VolumeFlyoutCell(device, _ownAppID);
                 ((INotifyCollectionChanged)cell.VisibleGroups).CollectionChanged += _onSliderListChanged;
                 _cellsByDevice[device] = cell;
             }
@@ -606,7 +533,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         {
             AudioDevice template = _cells[0].Device;
             for (int dummyIndex = 0; dummyIndex < 40; dummyIndex++)
-                _cells.Add(new VolumeFlyoutCell(template, _ownAppId));
+                _cells.Add(new VolumeFlyoutCell(template, _ownAppID));
             for (int i = 0; i < _cells.Count; i++)
             {
                 _cells[i].IsFirst = i == 0;
@@ -629,9 +556,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     public void PositionNearTray()
     {
         Rect workArea = SystemParameters.WorkArea;
-        const double padding = 8;
-        _dockedLeft = workArea.Right - Width - padding;
-        _dockedTop = workArea.Bottom - ActualHeight - padding;
+        _dockedLeft = workArea.Right - Width - EdgePadding;
+        _dockedTop = workArea.Bottom - ActualHeight - EdgePadding;
 
         double targetLeft;
         double targetTop;
@@ -647,7 +573,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         }
 
         Left = targetLeft;
-        Top = ClampTopForCriticalElement(targetTop, SettingsButton, workArea, padding);
+        Top = ClampTopForCriticalElement(targetTop, SettingsButton, workArea, EdgePadding);
     }
 
     /// <summary>
@@ -679,9 +605,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private double CaptureDockedPosition()
     {
         Rect workArea = SystemParameters.WorkArea;
-        const double padding = 8;
-        _dockedLeft = workArea.Right - Width - padding;
-        _dockedTop = workArea.Bottom - ActualHeight - padding;
+        _dockedLeft = workArea.Right - Width - EdgePadding;
+        _dockedTop = workArea.Bottom - ActualHeight - EdgePadding;
         return Math.Min(workArea.Width, workArea.Height) * SnapTolerancePercent;
     }
 
@@ -764,8 +689,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     private void ApplyWorkAreaMaxHeight()
     {
-        const double Padding = 8;
-        MaxHeight = SystemParameters.WorkArea.Height - 2 * Padding;
+        MaxHeight = SystemParameters.WorkArea.Height - 2 * EdgePadding;
     }
 
     /// <summary>
@@ -776,7 +700,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     private void ScrollCellsToBottom()
     {
-        Dispatcher.BeginInvoke(new Action(() => CellsScrollViewer.ScrollToBottom()), DispatcherPriority.Loaded);
+        Dispatcher.BeginInvoke(CellsScrollViewer.ScrollToBottom, DispatcherPriority.Loaded);
     }
 
     /// <summary>Hides the flyout and stops peak metering.</summary>
@@ -867,363 +791,80 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Mouse-down on a slider. Thumb hits go to WPF's native track for smooth dragging; track-body
-    /// hits start a captured drag here so the cursor jumps to the click point and the thumb keeps
-    /// following until release.
+    /// Mouse-up on a slider fires per-app / per-device volume feedback. The captured-drag side of
+    /// the gesture lives in SliderClickDragBehavior; we only need to play the wav once the user
+    /// finishes interacting (thumb drag, track click, or wheel-spin landing on mouseup).
+    /// Branches on DataContext type: the slider's context is the device wrapper for device sliders
+    /// and the AudioAppGroup for session sliders.
     /// </summary>
-    private void Slider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not Slider slider) return;
-
-        Track? track = FindVisualChild<Track>(slider);
-        if (track?.Thumb == null) return;
-
-        Rect thumbBounds = new(
-            track.Thumb.TranslatePoint(new System.Windows.Point(0, 0), slider),
-            new System.Windows.Size(track.Thumb.ActualWidth, track.Thumb.ActualHeight));
-
-        if (thumbBounds.Contains(e.GetPosition(slider))) return;
-
-        _draggingSlider = slider;
-        slider.CaptureMouse();
-        UpdateSliderValueFromMousePosition(slider, track, e.GetPosition(slider));
-        e.Handled = true;
-    }
-
-    private void Slider_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
-    {
-        if (sender is not Slider slider || _draggingSlider != slider) return;
-
-        if (e.LeftButton != MouseButtonState.Pressed)
-        {
-            StopDragging(slider);
-            return;
-        }
-
-        Track? track = FindVisualChild<Track>(slider);
-        if (track != null) UpdateSliderValueFromMousePosition(slider, track, e.GetPosition(slider));
-    }
-
     private void Slider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is not Slider slider) return;
-
-        if (_draggingSlider == slider) StopDragging(slider);
-
-        // Branch on DataContext type rather than element identity: the slider's data context is the
-        // device wrapper for device sliders (set on the device-row template) and the AudioAppGroup
-        // for session sliders.
-        if (slider.DataContext is AudioDevice device) PlayDeviceVolumeFeedback(device);
-        else if (slider.DataContext is AudioAppGroup group) PlayAppVolumeFeedback(group.Volume);
-    }
-
-    private void Slider_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
-    {
-        // Intentional no-op: a captured drag must keep tracking even when the cursor leaves the slider's
-        // bounds (matches BrightnessFlyout). Release happens on PreviewMouseLeftButtonUp.
-    }
-
-    private static void UpdateSliderValueFromMousePosition(Slider slider, Track track, System.Windows.Point position)
-    {
-        double thumbWidth = track.Thumb?.ActualWidth ?? 0;
-        double trackStart = thumbWidth / 2.0;
-        double trackEnd = slider.ActualWidth - thumbWidth / 2.0;
-        double trackLength = trackEnd - trackStart;
-        if (trackLength <= 0) return;
-
-        double adjustedX = position.X - trackStart;
-        double percentage = Math.Max(0, Math.Min(1, adjustedX / trackLength));
-        slider.Value = slider.Minimum + (slider.Maximum - slider.Minimum) * percentage;
-    }
-
-    private void StopDragging(Slider slider)
-    {
-        _draggingSlider = null;
-        slider.ReleaseMouseCapture();
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T typedChild) return typedChild;
-
-            T? result = FindVisualChild<T>(child);
-            if (result != null) return result;
-        }
-        return null;
+        if (slider.DataContext is AudioDevice device) _feedback.PlayForDevice(device);
+        else if (slider.DataContext is AudioAppGroup group) _feedback.PlayForApp(group.Volume);
     }
 
     /// <summary>
-    /// Mouse wheel over a session slider scrolls that app's volume. Wired on the slider (not the
-    /// whole row) so wheel over the row's icon / name / percent text bubbles up to the flyout's
-    /// outer ScrollViewer instead of being absorbed for volume control. The slider inherits the
-    /// AudioAppGroup as its DataContext from the SessionRowTemplate.
+    /// Unified mouse-wheel handler for both device and per-app sliders. Branches on the slider's
+    /// DataContext type to find the right scalar volume target. Step matches AppConstants.WheelVolumeStepPercent
+    /// so the in-flyout gesture and the tray-icon wheel handler step identically.
     /// </summary>
-    private void SessionSlider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
-    {
-        if (sender is not FrameworkElement fe || fe.DataContext is not AudioAppGroup group) return;
-
-        double currentPercent = group.Volume * 100.0;
-        double next = currentPercent + (e.Delta > 0 ? WheelVolumeStepPercent : -WheelVolumeStepPercent);
-        if (next < 0) next = 0;
-        else if (next > 100) next = 100;
-
-        bool changed = Math.Abs(next - currentPercent) > 0.001;
-        group.Volume = (float)(next / 100.0);
-        if (changed) PlayAppVolumeFeedback(group.Volume);
-        e.Handled = true;
-    }
-
-    /// <summary>
-    /// Mouse wheel over a device slider scrolls that device's volume. Wired on the slider (not the
-    /// whole row) so wheel over the row's mute button / device-icon button / percent text bubbles
-    /// up to the flyout's outer ScrollViewer instead of being absorbed for volume control. The
-    /// owning device is resolved via the slider's DataContext chain (the device-row content
-    /// control sets DataContext to the cell's Device).
-    /// </summary>
-    private void DeviceSlider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    private void Slider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
 
-        double currentPercent = device.Volume * 100.0;
-        double next = currentPercent + (e.Delta > 0 ? WheelVolumeStepPercent : -WheelVolumeStepPercent);
+        double currentPercent;
+        AudioDevice? device = fe.DataContext as AudioDevice;
+        AudioAppGroup? group = fe.DataContext as AudioAppGroup;
+        if (device != null) currentPercent = device.Volume * 100.0;
+        else if (group != null) currentPercent = group.Volume * 100.0;
+        else return;
+
+        double step = e.Delta > 0 ? AppConstants.WheelVolumeStepPercent : -AppConstants.WheelVolumeStepPercent;
+        double next = currentPercent + step;
         if (next < 0) next = 0;
         else if (next > 100) next = 100;
 
         bool changed = Math.Abs(next - currentPercent) > 0.001;
-        device.Volume = (float)(next / 100.0);
-        if (changed) PlayDeviceVolumeFeedback(device);
+        float scalar = (float)(next / 100.0);
+
+        if (device != null)
+        {
+            device.Volume = scalar;
+            if (changed) _feedback.PlayForDevice(device);
+        }
+        else if (group != null)
+        {
+            group.Volume = scalar;
+            if (changed) _feedback.PlayForApp(group.Volume);
+        }
         e.Handled = true;
     }
 
     /// <summary>
-    /// Walks the visual tree from a click target up to a FrameworkElement whose DataContext is an
-    /// AudioDevice. Used by the device-row click / wheel handlers since the row template's DataContext
-    /// is set to the cell's Device but the click target itself may be a child Grid that inherits the
-    /// same DataContext.
-    /// </summary>
-    private static AudioDevice? ResolveDeviceFromContext(FrameworkElement element)
-    {
-        FrameworkElement? cursor = element;
-        while (cursor != null)
-        {
-            if (cursor.DataContext is AudioDevice device) return device;
-            cursor = VisualTreeHelper.GetParent(cursor) as FrameworkElement;
-        }
-        return null;
-    }
-
-    // Routes the volume-change ding through the specific render endpoint the user just adjusted,
-    // so the sound comes out of that device rather than the system default. Capture endpoints are
-    // skipped outright - microphones don't render audio. The throttler key is per-device so a rapid
-    // adjustment to two different devices fires both dings instead of the latest replacing the prior.
-    private void PlayDeviceVolumeFeedback(AudioDevice device)
-    {
-        if (_appSettings?.PlayDeviceVolumeChangeSound != true) return;
-        if (device.IsCaptureDevice) return;
-
-        EnsureAppFeedbackData();
-        byte[]? wav = _wavTemplate;
-        if (wav == null) return;
-
-        string throttleKey = DeviceDingThrottleKey + ":" + device.Id;
-        _ = _feedbackThrottler.RunAsync(throttleKey, async ctx =>
-        {
-            if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
-            try { device.PlayChangeFeedback(wav); }
-            catch { /* feedback is best-effort */ }
-        });
-    }
-
-    private void PlayAppVolumeFeedback(float scalarVolume)
-    {
-        if (_appSettings?.PlayAppVolumeChangeSound != true) return;
-
-        EnsureAppFeedbackData();
-        if (_wavTemplate == null) return;
-
-        // Capture scalarVolume in the closure: latest-pending-wins on the throttler means the payload
-        // that ultimately runs is the most recent one queued, so the played volume reflects the user's
-        // latest position rather than whatever it was when the gesture started.
-        Dispatcher uiDispatcher = Dispatcher;
-        _ = _feedbackThrottler.RunAsync(AppDingThrottleKey, async ctx =>
-        {
-            if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
-            try { await uiDispatcher.InvokeAsync(() => PlayAppFeedbackNow(scalarVolume)); }
-            catch { /* dispatcher torn down */ }
-        });
-    }
-
-    private void PlayAppFeedbackNow(float scalarVolume)
-    {
-        if (_wavTemplate == null) return;
-
-        try
-        {
-            byte[] scaled = (byte[])_wavTemplate.Clone();
-            ScalePcmSamples(scaled, _wavDataOffset, _wavDataLength, _wavBitsPerSample,
-                Math.Clamp(scalarVolume, 0f, 1f));
-
-            MemoryStream stream = new(scaled, writable: false);
-            System.Media.SoundPlayer player = new(stream);
-            player.Play();
-
-            _currentAppSound?.Dispose();
-            _currentAppSound = player;
-        }
-        catch { /* feedback is best-effort */ }
-    }
-
-    // Waits up to <paramref name="totalMs"/> in poll-sized slices, returning false the moment a fresher
-    // payload is queued for the same key OR cancellation is signalled. Returns true only when the full
-    // dwell elapses without a replacement -- the caller treats that as "ok to fire the ding".
-    private static async Task<bool> DwellWithReplacementBailAsync(IThrottlerContext ctx, int totalMs)
-    {
-        int waited = 0;
-        while (waited < totalMs)
-        {
-            if (ctx.HasReplacement) return false;
-            int slice = Math.Min(DingDwellPollSliceMs, totalMs - waited);
-            try { await Task.Delay(slice, ctx.CancellationToken).ConfigureAwait(false); }
-            catch (OperationCanceledException) { return false; }
-            waited += slice;
-        }
-        return !ctx.HasReplacement;
-    }
-
-    private void EnsureAppFeedbackData()
-    {
-        if (_wavTemplate != null) return;
-
-        string wavPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-            "Media", AppFeedbackWavName);
-        if (!File.Exists(wavPath)) return;
-
-        try
-        {
-            byte[] bytes = File.ReadAllBytes(wavPath);
-            if (!ParseWavHeader(bytes, out int dataOffset, out int dataLength, out int bitsPerSample)) return;
-            _wavTemplate = bytes;
-            _wavDataOffset = dataOffset;
-            _wavDataLength = dataLength;
-            _wavBitsPerSample = bitsPerSample;
-        }
-        catch { /* file disappeared / unreadable - stay silent */ }
-    }
-
-    private static bool ParseWavHeader(byte[] data, out int dataOffset, out int dataLength, out int bitsPerSample)
-    {
-        dataOffset = 0; dataLength = 0; bitsPerSample = 0;
-
-        if (data.Length < 12) return false;
-        if (data[0] != 'R' || data[1] != 'I' || data[2] != 'F' || data[3] != 'F') return false;
-        if (data[8] != 'W' || data[9] != 'A' || data[10] != 'V' || data[11] != 'E') return false;
-
-        int pos = 12;
-        while (pos + 8 <= data.Length)
-        {
-            int chunkSize = BitConverter.ToInt32(data, pos + 4);
-            int chunkData = pos + 8;
-            if (chunkSize < 0 || chunkData + chunkSize > data.Length) return false;
-
-            if (data[pos] == 'f' && data[pos + 1] == 'm' && data[pos + 2] == 't' && data[pos + 3] == ' ')
-            {
-                if (chunkSize < 16) return false;
-                bitsPerSample = BitConverter.ToInt16(data, chunkData + 14);
-            }
-            else if (data[pos] == 'd' && data[pos + 1] == 'a' && data[pos + 2] == 't' && data[pos + 3] == 'a')
-            {
-                dataOffset = chunkData;
-                dataLength = chunkSize;
-                return bitsPerSample > 0;
-            }
-
-            pos = chunkData + chunkSize;
-            if ((chunkSize & 1) != 0) pos++;
-        }
-        return false;
-    }
-
-    private static void ScalePcmSamples(byte[] data, int offset, int length, int bitsPerSample, float volume)
-    {
-        if (volume >= 0.999f) return;
-
-        int end = offset + length;
-        switch (bitsPerSample)
-        {
-            case 16:
-                for (int i = offset; i + 1 < end; i += 2)
-                {
-                    short sample = (short)(data[i] | (data[i + 1] << 8));
-                    int scaled = (int)(sample * volume);
-                    data[i] = (byte)(scaled & 0xFF);
-                    data[i + 1] = (byte)((scaled >> 8) & 0xFF);
-                }
-                break;
-            case 24:
-                for (int i = offset; i + 2 < end; i += 3)
-                {
-                    int sample = data[i] | (data[i + 1] << 8) | (data[i + 2] << 16);
-                    if ((sample & 0x800000) != 0) sample |= unchecked((int)0xFF000000);
-                    int scaled = (int)(sample * volume);
-                    if (scaled > 0x7FFFFF) scaled = 0x7FFFFF;
-                    else if (scaled < -0x800000) scaled = -0x800000;
-                    data[i] = (byte)(scaled & 0xFF);
-                    data[i + 1] = (byte)((scaled >> 8) & 0xFF);
-                    data[i + 2] = (byte)((scaled >> 16) & 0xFF);
-                }
-                break;
-            case 32:
-                for (int i = offset; i + 3 < end; i += 4)
-                {
-                    int sample = BitConverter.ToInt32(data, i);
-                    int scaled = (int)(sample * volume);
-                    data[i] = (byte)(scaled & 0xFF);
-                    data[i + 1] = (byte)((scaled >> 8) & 0xFF);
-                    data[i + 2] = (byte)((scaled >> 16) & 0xFF);
-                    data[i + 3] = (byte)((scaled >> 24) & 0xFF);
-                }
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Toggles mute on the device whose row hosts this button. The button's DataContext is the
-    /// AudioDevice (the row template sets DataContext to cell.Device).
+    /// Toggles mute on the device whose row hosts this button. The button's Tag holds the bound
+    /// AudioDevice; binding eliminates the visual-tree walk the old handler needed.
     /// </summary>
     private void DeviceMute_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
         device.IsMuted = !device.IsMuted;
     }
 
     /// <summary>
     /// Device-icon button click. Plain -> toggle enable/disable; Ctrl -> set as default and open
-    /// classic device properties; Shift -> set as default communications. The owning device comes
-    /// from the click target's DataContext.
+    /// classic device properties; Shift -> set as default communications.
     /// </summary>
     private void DeviceIcon_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
 
         ModifierKeys mods = Keyboard.Modifiers;
         bool ctrl = (mods & ModifierKeys.Control) != 0;
         bool shift = (mods & ModifierKeys.Shift) != 0;
 
         if (shift) device.SetAsDefaultCommunications();
-        else if (ctrl)
-        {
-            device.SetEnabled(!device.IsActive);
-        }
+        else if (ctrl) device.SetEnabled(!device.IsActive);
         else device.SetAsDefault();
     }
 
@@ -1243,9 +884,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     private void DeviceIcon_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
         DeviceShellLinks.OpenDeviceProperties(device);
         e.Handled = true;
     }
@@ -1253,14 +892,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// <summary>
     /// Exclusive-mode button click. Flips the "Allow applications to take exclusive control of this
     /// device" bit on the endpoint. The held-vs-not-held state is observed (not controlled) by this
-    /// button - clicking it never wrests control from an app already streaming exclusively; it only
-    /// reshapes whether the next exclusive-mode initialization is permitted.
+    /// button - clicking it never wrests control from an app already streaming exclusively.
     /// </summary>
     private void ExclusiveModeButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
         device.ToggleAllowExclusiveControl();
     }
 
@@ -1271,36 +907,32 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// to the not-available dialog; ctrl+click still tries the editor (no-op stub) so the gesture
     /// stays consistent across states.
     /// </summary>
-    private void EqualizerApoButton_Click(object sender, RoutedEventArgs e)
+    private void EqualizerAPOButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
 
         if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
-            EqualizerApoMonitor.OpenConfigurationEditor(device);
+            EqualizerAPOMonitor.OpenConfigurationEditor(device);
             return;
         }
 
-        if (device.EqualizerApoState == EqualizerApoState.NotAvailable)
+        if (device.EqualizerAPOState == EqualizerAPOState.NotAvailable)
         {
-            ShowEqualizerApoNotAvailableDialog();
+            ShowEqualizerAPONotAvailableDialog();
             return;
         }
-        device.ToggleEqualizerApo();
+        device.ToggleEqualizerAPO();
     }
 
     /// <summary>
     /// Right-click on the equalizer button. Opens the Configuration Editor scoped to this device,
     /// matching the ctrl+left-click gesture so power users have two equivalent paths to the editor.
     /// </summary>
-    private void EqualizerApoButton_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    private void EqualizerAPOButton_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
-        EqualizerApoMonitor.OpenConfigurationEditor(device);
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
+        EqualizerAPOMonitor.OpenConfigurationEditor(device);
         e.Handled = true;
     }
 
@@ -1310,11 +942,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// custom install path. Implemented with a MessageBox for now - matches the existing dialog
     /// style elsewhere in the app and keeps the touch-up small.
     /// </summary>
-    private void ShowEqualizerApoNotAvailableDialog()
+    private void ShowEqualizerAPONotAvailableDialog()
     {
-        string title = LocalizationManager.Instance["EqualizerApo_NotAvailable_Title"];
-        string body = LocalizationManager.Instance["EqualizerApo_NotAvailable_Body"];
-        string downloadBtn = LocalizationManager.Instance["EqualizerApo_NotAvailable_DownloadButton"];
+        string title = LocalizationManager.Instance["EqualizerAPO_NotAvailable_Title"];
+        string body = LocalizationManager.Instance["EqualizerAPO_NotAvailable_Body"];
+        string downloadBtn = LocalizationManager.Instance["EqualizerAPO_NotAvailable_DownloadButton"];
 
         // Simple two-choice prompt: Yes = open the installer page in the default browser; No = cancel.
         // A richer custom-dialog with a third "Open settings" button would mean introducing a new
@@ -1333,11 +965,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
                 using System.Diagnostics.Process? _ = System.Diagnostics.Process.Start(
                     new System.Diagnostics.ProcessStartInfo
                     {
-                        FileName = EqualizerApoMonitor.LatestInstallerUrl,
+                        FileName = EqualizerAPOMonitor.LatestInstallerURL,
                         UseShellExecute = true,
                     });
             }
-            catch (Exception ex) { WPFLog.Log($"VolumeFlyout.ShowEqualizerApoNotAvailableDialog: {ex.Message}"); }
+            catch (Exception ex) { WPFLog.Log($"VolumeFlyout.ShowEqualizerAPONotAvailableDialog: {ex.Message}"); }
         }
     }
 
@@ -1349,9 +981,8 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     private void ListenButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null || !device.IsCaptureDevice) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
+        if (!device.IsCaptureDevice) return;
 
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
         if (ctrl)
@@ -1369,11 +1000,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     private void ListenButton_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null || !device.IsCaptureDevice) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
+        if (!device.IsCaptureDevice) return;
 
-        ShowListenTargetMenu(fe, device);
+        OpenListenTargetMenu(fe, device);
         e.Handled = true;
     }
 
@@ -1386,123 +1016,71 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     private void DeviceFormatMenu_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        AudioDevice? device = ResolveDeviceFromContext(fe);
-        if (device == null) return;
-        ShowDefaultFormatMenu(fe, device);
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
+        OpenDefaultFormatMenu(fe, device);
         e.Handled = true;
     }
 
+    // Cap visible height to 8 items; the global ContextMenu template (App.xaml) wraps items in a
+    // ScrollViewer with VerticalScrollBarVisibility=Auto, so anything above the cap scrolls instead
+    // of clipping. Item-height math: FontSize 14 line-height (~18) + MenuItem Padding 6,6 (12) +
+    // Top/Bottom gap rows 2+2 = ~34px; +8px slack covers the ContextMenu's Padding and the
+    // ScrollViewer's bar gutter.
+    private const double FormatMenuItemHeight = 34;
+    private const int FormatMenuMaxVisibleItems = 8;
+
     /// <summary>
-    /// Builds and opens the default-format picker for a single endpoint. Items are
-    /// "{bits} bit, {rate} Hz", grouped by sample rate ascending then bit depth ascending. The
-    /// currently-selected (bits, rate) is checkmarked. Picking an item dispatches
-    /// IPolicyConfig::SetDeviceFormat through the shared single-flight gate; the format label
-    /// updates when the resulting OnPropertyValueChanged callback lands. Probe runs synchronously
-    /// on the dispatcher because IsFormatSupported is a sub-millisecond pre-init query and the
-    /// total candidate count is small (~24).
+    /// Opens the default-format picker for an endpoint. ContextMenu lives in XAML as a
+    /// FrameworkElement resource; the per-open item list is shoved onto the menu via its Tag so the
+    /// XAML ItemsSource binding picks it up.
     /// </summary>
-    private static void ShowDefaultFormatMenu(FrameworkElement anchor, AudioDevice device)
+    private void OpenDefaultFormatMenu(FrameworkElement anchor, AudioDevice device)
     {
         List<(int Bits, int SampleRate)> formats = device.EnumerateSupportedFormats();
         if (formats.Count == 0) return;
 
-        // Channel count is locked to the endpoint's current format - prefixed onto every label
-        // so the menu reads the same way the inline format readout does.
         (int Channels, int Bits, int SampleRate)? current = device.GetCurrentFormat();
         int channels = current?.Channels ?? 0;
 
-        System.Windows.Controls.ContextMenu menu = new()
-        {
-            PlacementTarget = anchor,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
-        };
-
+        List<FormatMenuItem> items = new(formats.Count);
         foreach ((int bits, int rate) in formats)
         {
             int capturedBits = bits;
             int capturedRate = rate;
             string label = $"{channels} channel, {bits} bit, {rate} Hz";
             bool isCurrent = current.HasValue && current.Value.Bits == bits && current.Value.SampleRate == rate;
-
-            // Selected row gets a filled-circle glyph in front of its label so its text shifts
-            // right by the glyph's width - only this item is indented, which makes the active
-            // format pop out of the column. Others use a plain string Header so they stay flush
-            // left. IsCheckable is intentionally NOT set: the global MenuItem template strips the
-            // default check column to avoid a stray white block, so we render our own indicator.
-            object header = isCurrent
-                ? BuildSelectedFormatHeader(label)
-                : label;
-
-            System.Windows.Controls.MenuItem item = new() { Header = header };
-            item.Click += (_, _) => device.SetDeviceFormat(capturedBits, capturedRate);
-            menu.Items.Add(item);
+            items.Add(new FormatMenuItem(
+                label,
+                isCurrent,
+                new MenuRelayCommand(() => device.SetDeviceFormat(capturedBits, capturedRate))));
         }
 
-        // Cap visible height to 8 items; the global ContextMenu template (App.xaml) wraps items in
-        // a ScrollViewer with VerticalScrollBarVisibility=Auto, so anything above the cap scrolls
-        // instead of clipping. Same MaxHeight-only approach the tray icon menu uses, just sized to
-        // a fixed item count instead of the work area. Item-height math: FontSize 14 line-height
-        // (~18) + MenuItem Padding 6,6 (12) + Top/Bottom gap rows 2+2 = ~34px; +8px slack covers
-        // the ContextMenu's Padding and the ScrollViewer's bar gutter.
-        const double FormatMenuItemHeight = 34;
-        const int FormatMenuMaxVisibleItems = 8;
-        if (formats.Count > FormatMenuMaxVisibleItems)
-        {
-            menu.MaxHeight = FormatMenuMaxVisibleItems * FormatMenuItemHeight + 8;
-        }
-
+        ContextMenu menu = (ContextMenu)FindResource("DefaultFormatContextMenu");
+        menu.PlacementTarget = anchor;
+        menu.Tag = new MenuItemsPayload<FormatMenuItem>(items);
+        menu.MaxHeight = formats.Count > FormatMenuMaxVisibleItems
+            ? FormatMenuMaxVisibleItems * FormatMenuItemHeight + 8
+            : double.PositiveInfinity;
         menu.IsOpen = true;
     }
 
-    // Header visual for the selected format row: filled circle glyph + spacer + label text.
-    // The glyph FontSize is small (8) so it visually reads as a bullet rather than competing
-    // with the label, and Center-aligned vertically against the 14pt label baseline.
-    private static StackPanel BuildSelectedFormatHeader(string label)
-    {
-        StackPanel panel = new() { Orientation = System.Windows.Controls.Orientation.Horizontal };
-        panel.Children.Add(new TextBlock
-        {
-            Text = Visuals.GlyphCatalog.CIRCLE,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe Fluent Icons"),
-            FontSize = 8,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 6, 0),
-        });
-        panel.Children.Add(new TextBlock
-        {
-            Text = label,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        return panel;
-    }
-
     /// <summary>
-    /// Builds and opens the listen-target picker. First entry is "Default Playback Device" (null
-    /// target id = follow whichever endpoint is default). Subsequent entries are the active render
-    /// endpoints, sorted alphabetically. The current selection is checkmarked. Picking any entry
-    /// writes both pid 0 (target id) and pid 1 (enable=true) in a single property-store commit -
-    /// choosing a target is an implicit "turn on" gesture.
+    /// Opens the listen-target picker for a capture endpoint. First entry is "Default Playback
+    /// Device" (null target = follow whichever endpoint is default). Subsequent entries are the
+    /// active render endpoints, sorted alphabetically. Picking any entry writes both pid 0
+    /// (target id) and pid 1 (enable=true) in a single property-store commit.
     /// </summary>
-    private void ShowListenTargetMenu(FrameworkElement anchor, AudioDevice captureDevice)
+    private void OpenListenTargetMenu(FrameworkElement anchor, AudioDevice captureDevice)
     {
-        System.Windows.Controls.ContextMenu menu = new()
-        {
-            PlacementTarget = anchor,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
-        };
+        string? currentTarget = captureDevice.ListenTargetDeviceID;
 
-        string? currentTarget = captureDevice.ListenTargetDeviceId;
-
-        System.Windows.Controls.MenuItem followDefault = new()
+        List<ListenTargetMenuItem> items = new()
         {
-            Header = Localization.Strings.Flyout_ListenMenu_DefaultPlaybackDevice,
-            IsCheckable = true,
-            IsChecked = currentTarget == null,
+            new ListenTargetMenuItem(
+                Strings.Flyout_ListenMenu_DefaultPlaybackDevice,
+                currentTarget == null,
+                new MenuRelayCommand(() => captureDevice.SetListenTarget(null, enable: true))),
         };
-        followDefault.Click += (_, _) => captureDevice.SetListenTarget(null, enable: true);
-        menu.Items.Add(followDefault);
-        menu.Items.Add(new System.Windows.Controls.Separator());
 
         List<AudioDevice> renderTargets = new();
         foreach (AudioDevice d in _deviceManager.Devices)
@@ -1514,16 +1092,15 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         foreach (AudioDevice target in renderTargets)
         {
             string targetId = target.Id;
-            System.Windows.Controls.MenuItem item = new()
-            {
-                Header = target.FriendlyName,
-                IsCheckable = true,
-                IsChecked = string.Equals(currentTarget, targetId, StringComparison.Ordinal),
-            };
-            item.Click += (_, _) => captureDevice.SetListenTarget(targetId, enable: true);
-            menu.Items.Add(item);
+            items.Add(new ListenTargetMenuItem(
+                target.FriendlyName,
+                string.Equals(currentTarget, targetId, StringComparison.Ordinal),
+                new MenuRelayCommand(() => captureDevice.SetListenTarget(targetId, enable: true))));
         }
 
+        ContextMenu menu = (ContextMenu)FindResource("ListenTargetContextMenu");
+        menu.PlacementTarget = anchor;
+        menu.Tag = new MenuItemsPayload<ListenTargetMenuItem>(items);
         menu.IsOpen = true;
     }
 
@@ -1536,13 +1113,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     private void DeviceNameText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount != 2) return;
-        if (sender is not TextBlock tb) return;
+        if (sender is not TextBlock tb || tb.Tag is not AudioDevice device) return;
 
         System.Windows.Controls.TextBox? edit = FindSiblingNameEditor(tb);
         if (edit == null) return;
-
-        AudioDevice? device = ResolveDeviceFromContext(tb);
-        if (device == null) return;
 
         edit.Text = device.FriendlyName;
         edit.Tag = device;
@@ -1606,23 +1180,20 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     private void AppIcon_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement fe) return;
-        if (fe.DataContext is not AudioAppGroup group) return;
-        // Capture sessions have no useful per-app mute; ignore clicks on those icons.
-        if (FindAncestorCell(fe) is { IsCapture: true }) return;
+        if (sender is not FrameworkElement fe || fe.Tag is not AudioAppGroup group) return;
+
+        // Capture sessions have no useful per-app mute. Walk one ContentPresenter up to read
+        // the parent cell's IsCapture - same hop the XAML "Cursor=Arrow on capture cell"
+        // DataTrigger uses via RelativeSource. Inlined here rather than a named helper.
+        DependencyObject? cursor = fe;
+        while (cursor != null && (cursor is not FrameworkElement parent || parent.DataContext is not VolumeFlyoutCell))
+        {
+            cursor = VisualTreeHelper.GetParent(cursor);
+        }
+        if (cursor is FrameworkElement cellHost && cellHost.DataContext is VolumeFlyoutCell { IsCapture: true }) return;
+
         group.IsMuted = !group.IsMuted;
         e.Handled = true;
-    }
-
-    private static VolumeFlyoutCell? FindAncestorCell(DependencyObject start)
-    {
-        DependencyObject? current = start;
-        while (current != null)
-        {
-            if (current is FrameworkElement element && element.DataContext is VolumeFlyoutCell cell) return cell;
-            current = VisualTreeHelper.GetParent(current);
-        }
-        return null;
     }
 
     private void UndockButton_Click(object sender, RoutedEventArgs e)
@@ -1716,4 +1287,35 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+// ===========================================================================================
+// Context-menu payload types. ContextMenu resources in VolumeFlyout.xaml bind ItemsSource to
+// PlacementTarget.Tag.Items so we don't need to set ItemsSource imperatively on every open.
+// ===========================================================================================
+
+/// <summary>Wraps a list so XAML can resolve <c>Items</c> via property-path binding.</summary>
+internal sealed class MenuItemsPayload<T>
+{
+    public List<T> Items { get; }
+    public MenuItemsPayload(List<T> items) => Items = items;
+}
+
+/// <summary>One row in the default-format picker.</summary>
+internal sealed record FormatMenuItem(string Label, bool IsCurrent, ICommand Command);
+
+/// <summary>One row in the listen-target picker.</summary>
+internal sealed record ListenTargetMenuItem(string Label, bool IsCurrent, ICommand Command);
+
+/// <summary>
+/// Minimal ICommand for menu-item click bindings. CanExecute is always true; the menu hides itself
+/// on click and we just want the Action to fire on the routed Click.
+/// </summary>
+internal sealed class MenuRelayCommand : ICommand
+{
+    private readonly Action _execute;
+    public MenuRelayCommand(Action execute) => _execute = execute;
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+    public bool CanExecute(object? parameter) => true;
+    public void Execute(object? parameter) => _execute();
 }

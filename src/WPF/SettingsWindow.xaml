@@ -192,10 +192,12 @@
             </Grid>
 
             <!-- === Confirmation overlay (shown for destructive actions like Clear Displays) === -->
+            <!-- Scrim uses the theme-derived backdrop brush so a future light/dark variant flows
+                 through ThemeResources.Apply without touching this file. -->
             <Grid x:Name="ConfirmOverlay"
                   Grid.Row="1"
                   Visibility="Collapsed"
-                  Background="#80000000">
+                  Background="{DynamicResource FlyoutOverlayBackdropBrush}">
                 <Border Background="{DynamicResource ThemeCardBackground}"
                         BorderBrush="{DynamicResource ThemeBorder}"
                         BorderThickness="1"

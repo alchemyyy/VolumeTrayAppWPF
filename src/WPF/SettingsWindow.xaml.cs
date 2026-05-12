@@ -1,12 +1,13 @@
-﻿using System.IO;
+using System.IO;
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
 using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;
-using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.Visuals;
-using VolumeTrayAppWPF.WPF.Settings.Utils;
+using VolumeTrayAppWPF.WPF.Utils;
 using RadioButton = System.Windows.Controls.RadioButton;
 
 namespace VolumeTrayAppWPF.WPF;
@@ -24,8 +25,14 @@ public enum SettingsTab
 }
 
 
-public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
+public partial class SettingsWindow : Window
 {
+    // Per-page convention. Pages that need to refresh state on navigate (HotkeysPage rows,
+    // GeneralPage install-status) expose a parameterless instance method named "RefreshOnShow"
+    // and SettingsWindow invokes it via reflection in NavItem_Checked. No base class / interface;
+    // the convention keeps the page list and the shell decoupled.
+    private const string RefreshOnShowMethodName = "RefreshOnShow";
+
     private readonly AppSettings _settings;
 
     private HwndSource? _hwndSource;
@@ -127,23 +134,15 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
     }
 
     /// <summary>
-    /// Drives the outer window chrome + root border corner radius from AppSettings.
-    /// Kept imperative (rather than DynamicResource) because WindowChrome is a bare DependencyObject
-    /// and resource resolution against it is unreliable.
-    /// Also re-applies the DWM corner preference, which overrides WindowChrome on Win11
-    /// and is the only knob that actually rounds the outermost window edge.
+    /// Drives the outer window chrome + root border corner radius (and DWM corner preference)
+    /// from AppSettings. Delegates to <see cref="ChromeCornerRadiusHelper.Apply"/> so the picker
+    /// window shares the same chrome plumbing without duplicating the WindowChrome / Border / DWM
+    /// fan-out.
     /// </summary>
     private void ApplyOuterCornerRadius()
     {
         double r = _settings.EnableRoundedCorners ? 8 : 0;
-        CornerRadius radius = new(r);
-
-        System.Windows.Shell.WindowChrome? chrome =
-            System.Windows.Shell.WindowChrome.GetWindowChrome(this);
-        if (chrome != null) chrome.CornerRadius = radius;
-
-        RootBorder.CornerRadius = radius;
-        ApplyDwmRoundedCorners();
+        ChromeCornerRadiusHelper.Apply(this, RootBorder, r);
     }
 
     private void OnWindowClosed(object? sender, EventArgs e)
@@ -159,8 +158,11 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
-        ApplyDwmDarkMode();
-        ApplyDwmRoundedCorners();
+        ApplyDWMDarkMode(ThemeResources.ResolveEffectiveIsLightTheme(_settings, AppServices.Theme));
+
+        // HWND exists now, so the DWM corner-preference call inside the helper actually lands.
+        // The constructor's earlier ApplyOuterCornerRadius was a layout-only pre-pass.
+        ApplyOuterCornerRadius();
         UpdateMaximizeGlyph();
 
         // Force MA_ACTIVATE on inactive-window clicks so the first click that activates the SettingsWindow
@@ -184,48 +186,28 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
         return IntPtr.Zero;
     }
 
-    public void ApplyDwmDarkMode()
+    /// <summary>
+    /// Re-evaluate the effective light/dark state and push the DWM immersive-dark-mode attribute
+    /// onto this window's HWND. Safe to call before SourceInitialized — short-circuits then.
+    /// Replaces the deleted <c>IThemeHost</c> interface; <see cref="Settings.Pages.ThemePage"/>
+    /// reaches the host through <c>Window.GetWindow(this) is SettingsWindow</c> instead.
+    /// </summary>
+    public void ApplyDWMDarkMode(bool isLight)
     {
         try
         {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero) return;
 
-            // Dark title bar on Win11; matching the app's effective theme
-            bool isLight = ResolveEffectiveIsLight();
+            // Dark title bar on Win11; matching the app's effective theme.
             int value = isLight ? 0 : 1;
             DWMAPI.DwmSetWindowAttribute(hwnd, DWMAPI.DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
         }
-        catch
+        catch (Exception ex)
         {
             // DWM call may fail on older Windows; non-fatal.
+            WPFLog.Log($"SettingsWindow.ApplyDWMDarkMode: {ex.Message}");
         }
-    }
-
-    private void ApplyDwmRoundedCorners()
-    {
-        try
-        {
-            IntPtr hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd == IntPtr.Zero) return;
-
-            int value = _settings.EnableRoundedCorners ? DWMAPI.DWMWCP_ROUND : DWMAPI.DWMWCP_DONOTROUND;
-            DWMAPI.DwmSetWindowAttribute(hwnd, DWMAPI.DWMWA_WINDOW_CORNER_PREFERENCE, ref value, sizeof(int));
-        }
-        catch
-        {
-            // DWM call may fail on older Windows; non-fatal.
-        }
-    }
-
-    private bool ResolveEffectiveIsLight()
-    {
-        return _settings.ThemeMode switch
-        {
-            Models.ThemeMode.Light => true,
-            Models.ThemeMode.Dark => false,
-            _ => AppServices.Theme?.IsLightTheme ?? false,
-        };
     }
 
     private void UpdateMaximizeGlyph()
@@ -301,16 +283,40 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
         ThemeSection.Visibility = Visibility.Collapsed;
         AboutSection.Visibility = Visibility.Collapsed;
 
-        switch (tag)
+        System.Windows.Controls.UserControl? activated = tag switch
         {
-            case "General": GeneralSection.Visibility = Visibility.Visible; break;
-            case "Flyout": FlyoutSection.Visibility = Visibility.Visible; break;
-            case "DeviceAppDrawers": DeviceAppDrawersSection.Visibility = Visibility.Visible; break;
-            case "TrayIcon": TrayIconSection.Visibility = Visibility.Visible; break;
-            case "Devices": DevicesSection.Visibility = Visibility.Visible; break;
-            case "Hotkeys": HotkeysSection.Visibility = Visibility.Visible; break;
-            case "Theme": ThemeSection.Visibility = Visibility.Visible; break;
-            case "About": AboutSection.Visibility = Visibility.Visible; break;
+            "General" => GeneralSection,
+            "Flyout" => FlyoutSection,
+            "DeviceAppDrawers" => DeviceAppDrawersSection,
+            "TrayIcon" => TrayIconSection,
+            "Devices" => DevicesSection,
+            "Hotkeys" => HotkeysSection,
+            "Theme" => ThemeSection,
+            "About" => AboutSection,
+            _ => null,
+        };
+        if (activated == null) return;
+
+        activated.Visibility = Visibility.Visible;
+        InvokeRefreshOnShow(activated);
+    }
+
+    // Page-convention hook: invoke `RefreshOnShow()` via reflection if the page declares one.
+    // Pages that need live re-population on every nav (HotkeysPage rows, GeneralPage install status)
+    // declare the method; pages without it are skipped silently.
+    private static void InvokeRefreshOnShow(System.Windows.Controls.UserControl page)
+    {
+        try
+        {
+            MethodInfo? method = page.GetType().GetMethod(
+                RefreshOnShowMethodName,
+                BindingFlags.Public | BindingFlags.Instance,
+                Type.EmptyTypes);
+            method?.Invoke(page, parameters: null);
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"SettingsWindow.InvokeRefreshOnShow({page.GetType().Name}): {ex.Message}");
         }
     }
 
@@ -321,8 +327,14 @@ public partial class SettingsWindow : Window, IConfirmDialogService, IThemeHost
     /// </summary>
     private TaskCompletionSource<bool>? _confirmDialogTcs;
 
-    /// <inheritdoc />
-    public Task<bool> ConfirmAsync(string title, string message, string confirmText, string cancelText)
+    /// <summary>
+    /// Show the confirm overlay with the supplied strings and resolve the returned task with the
+    /// user's choice (true = confirm, false = cancel). Calls are expected to come in from the UI
+    /// thread; only one prompt at a time is supported (matches the existing single-overlay UX).
+    /// Replaces the deleted <c>IConfirmDialogService</c> interface; callers reach the host through
+    /// <c>Window.GetWindow(this) is SettingsWindow</c> and call this method directly.
+    /// </summary>
+    public Task<bool> ShowConfirmDialogAsync(string title, string message, string confirmText, string cancelText)
     {
         // Auto-cancel any earlier prompt that's still awaiting a click. The overlay UI is single-instance,
         // so a second open call would otherwise leave the first awaiter stuck forever.

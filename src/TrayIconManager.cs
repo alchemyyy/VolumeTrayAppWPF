@@ -1,7 +1,9 @@
-﻿using System.Windows.Controls;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;
+using VolumeTrayAppWPF.Services;
+using VolumeTrayAppWPF.Utils;
 using Point = System.Windows.Point;
 
 namespace VolumeTrayAppWPF;
@@ -18,23 +20,25 @@ namespace VolumeTrayAppWPF;
 /// </summary>
 public sealed class TrayIconManager : IDisposable
 {
+    // Throttle key. AsyncThrottler is per-key but there is only one tray icon, so a fixed single key
+    // is the right shape - any Update call coalesces with the prior queued one.
+    private const string ThrottleKey = "tray";
+
     private readonly ShellNotifyIcon _shellIcon;
     private readonly Dispatcher _dispatcher;
-    private bool _disposed;
-
-    // Throttling state.
-    private bool _isOnCooldown;
-    private bool _updatePending;
-
-    // Producer the host registers via Update; called immediately, and once more after the cooldown expires
-    // if at least one Update came in while the icon was on cooldown.
+    private readonly AsyncThrottler<string> _updateThrottler;
     private Func<(Icon? icon, string tooltip)>? _getValues;
+    private bool _disposed;
 
     /// <summary>
     /// Cooldown between icon updates in milliseconds.
     /// Defaults to <see cref="TimeConstants.TrayIconUpdateRateDefaultMs"/>.
     /// </summary>
-    public int UpdateCooldownMs { get; set; } = TimeConstants.TrayIconUpdateRateDefaultMs;
+    public int UpdateCooldownMs
+    {
+        get => _updateThrottler.CooldownMs;
+        set => _updateThrottler.CooldownMs = value;
+    }
 
     /// <summary>Raised when the tray icon receives left mouse down.</summary>
     public event Action? LeftMouseDown;
@@ -87,6 +91,7 @@ public sealed class TrayIconManager : IDisposable
         // are unsynchronized - both want a single owner.
         _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _shellIcon = new ShellNotifyIcon();
+        _updateThrottler = new AsyncThrottler<string>(TimeConstants.TrayIconUpdateRateDefaultMs);
 
         _shellIcon.LeftMouseDown += () => LeftMouseDown?.Invoke();
         _shellIcon.LeftClick += () => LeftClick?.Invoke();
@@ -110,30 +115,26 @@ public sealed class TrayIconManager : IDisposable
     public void SetTooltip(string tooltip) => _shellIcon.SetTooltip(tooltip);
 
     /// <summary>
-    /// Throttled icon refresh. The producer delegate is called immediately the first time, and again after
-    /// the cooldown expires if at least one Update arrived during the cooldown window.
+    /// Throttled icon refresh. The producer delegate is called immediately when no payload is in flight,
+    /// and again after the cooldown expires if at least one Update arrived during the cooldown window.
     /// Safe to call from any thread; off-thread calls are marshaled onto the dispatcher so Shell_NotifyIconW
-    /// and the throttle flags stay single-owner.
+    /// stays single-owner.
     /// </summary>
     public void Update(Func<(Icon? icon, string tooltip)> getValues)
     {
-        if (!_dispatcher.CheckAccess())
-        {
-            if (_dispatcher.HasShutdownStarted) return;
-            _ = _dispatcher.BeginInvoke(() => Update(getValues));
-            return;
-        }
-
         _getValues = getValues;
-
-        if (_isOnCooldown)
+        // Schedule on the throttler. The payload marshals back to the dispatcher because Shell_NotifyIconW
+        // and System.Drawing.Icon must touch the UI thread.
+        _ = _updateThrottler.RunAsync(ThrottleKey, _ =>
         {
-            _updatePending = true;
-            return;
-        }
-
-        ApplyUpdate();
-        _ = StartCooldown();
+            if (_dispatcher.HasShutdownStarted) return Task.CompletedTask;
+            if (_dispatcher.CheckAccess())
+            {
+                ApplyUpdate();
+                return Task.CompletedTask;
+            }
+            return _dispatcher.InvokeAsync(ApplyUpdate).Task;
+        });
     }
 
     /// <summary>
@@ -147,34 +148,12 @@ public sealed class TrayIconManager : IDisposable
 
     private void ApplyUpdate()
     {
-        if (_getValues == null) return;
+        Func<(Icon? icon, string tooltip)>? getter = _getValues;
+        if (getter == null) return;
 
-        (Icon? icon, string tooltip) = _getValues();
+        (Icon? icon, string tooltip) = getter();
         if (icon != null) _shellIcon.SetIcon(icon);
         _shellIcon.SetTooltip(tooltip);
-    }
-
-    private async Task StartCooldown()
-    {
-        try
-        {
-            _isOnCooldown = true;
-            await Task.Delay(UpdateCooldownMs);
-            _isOnCooldown = false;
-
-            // If updates came in during cooldown, refresh once more from the producer.
-            if (_updatePending && _getValues != null)
-            {
-                _updatePending = false;
-                ApplyUpdate();
-                _ = StartCooldown();
-            }
-        }
-        catch (Exception ex)
-        {
-            _isOnCooldown = false;
-            WPFLog.Log($"TrayIconManager.StartCooldown: {ex.Message}");
-        }
     }
 
     public void Dispose()
@@ -182,6 +161,7 @@ public sealed class TrayIconManager : IDisposable
         if (_disposed) return;
 
         _disposed = true;
-        _shellIcon.Dispose();
+        Safe.Dispose(_updateThrottler);
+        Safe.Dispose(_shellIcon);
     }
 }

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using VolumeTrayAppWPF.Audio.Interop;
+using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -45,13 +46,18 @@ internal static class EndpointSoundPlayback
         IntPtr formatPtr = IntPtr.Zero;
         try
         {
-            if (!TryParseWav(wavBytes, out int channels, out int samplesPerSec, out int bitsPerSample,
-                             out int blockAlign, out int dataOffset, out int dataLength))
-                return;
+            WavTemplate? wav = WavTemplate.FromBytes(wavBytes);
+            if (wav == null) return;
+            int channels = wav.Channels;
+            int samplesPerSec = wav.SamplesPerSec;
+            int bitsPerSample = wav.BitsPerSample;
+            int blockAlign = wav.BlockAlign;
+            int dataOffset = wav.DataOffset;
+            int dataLength = wav.DataLength;
 
             // Fresh enumerator + IMMDevice on this worker thread so the COM object lives in the same
             // apartment we'll be calling from. Re-acquiring is cheap (in-proc, microseconds).
-            enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+            enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCOMObject();
             enumerator.GetDevice(deviceId, out device);
             if (device == null) return;
 
@@ -125,10 +131,10 @@ internal static class EndpointSoundPlayback
         finally
         {
             if (formatPtr != IntPtr.Zero) Marshal.FreeHGlobal(formatPtr);
-            if (render != null) try { Marshal.FinalReleaseComObject(render); } catch { }
-            if (client != null) try { Marshal.FinalReleaseComObject(client); } catch { }
-            if (device != null) try { Marshal.FinalReleaseComObject(device); } catch { }
-            if (enumerator != null) try { Marshal.FinalReleaseComObject(enumerator); } catch { }
+            Safe.Release(render);
+            Safe.Release(client);
+            Safe.Release(device);
+            Safe.Release(enumerator);
         }
     }
 
@@ -152,47 +158,4 @@ internal static class EndpointSoundPlayback
         return bytesToWrite;
     }
 
-    // Walks RIFF / WAVE chunks for the fmt and data offsets. Mirrors the parser in VolumeFlyout
-    // but also returns the channel count and sample rate that the WASAPI Initialize call needs.
-    private static bool TryParseWav(byte[] data, out int channels, out int samplesPerSec,
-                                    out int bitsPerSample, out int blockAlign,
-                                    out int dataOffset, out int dataLength)
-    {
-        channels = 0; samplesPerSec = 0; bitsPerSample = 0; blockAlign = 0;
-        dataOffset = 0; dataLength = 0;
-
-        if (data.Length < 12) return false;
-        if (data[0] != 'R' || data[1] != 'I' || data[2] != 'F' || data[3] != 'F') return false;
-        if (data[8] != 'W' || data[9] != 'A' || data[10] != 'V' || data[11] != 'E') return false;
-
-        bool fmtSeen = false;
-        int pos = 12;
-        while (pos + 8 <= data.Length)
-        {
-            int chunkSize = BitConverter.ToInt32(data, pos + 4);
-            int chunkData = pos + 8;
-            if (chunkSize < 0 || chunkData + chunkSize > data.Length) return false;
-
-            if (data[pos] == 'f' && data[pos + 1] == 'm' && data[pos + 2] == 't' && data[pos + 3] == ' ')
-            {
-                if (chunkSize < 16) return false;
-                channels = BitConverter.ToUInt16(data, chunkData + 2);
-                samplesPerSec = (int)BitConverter.ToUInt32(data, chunkData + 4);
-                blockAlign = BitConverter.ToUInt16(data, chunkData + 12);
-                bitsPerSample = BitConverter.ToUInt16(data, chunkData + 14);
-                fmtSeen = channels > 0 && samplesPerSec > 0 && blockAlign > 0 && bitsPerSample > 0;
-            }
-            else if (data[pos] == 'd' && data[pos + 1] == 'a' && data[pos + 2] == 't' && data[pos + 3] == 'a')
-            {
-                if (!fmtSeen) return false;
-                dataOffset = chunkData;
-                dataLength = chunkSize;
-                return true;
-            }
-
-            pos = chunkData + chunkSize;
-            if ((chunkSize & 1) != 0) pos++;
-        }
-        return false;
-    }
 }

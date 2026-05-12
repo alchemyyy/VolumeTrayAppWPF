@@ -93,6 +93,18 @@ public class ThemeColor
 /// Construction does no IO.
 /// Use <see cref="LoadOrDefault"/> / <see cref="Load"/> to read theme.xml,
 /// and <see cref="Save"/> / <see cref="SaveToDefaultPath"/> to write it.
+///
+/// Design note - why we rebuild brushes imperatively (not via Light.xaml/Dark.xaml merged dictionaries):
+/// The WPF-idiomatic pattern swaps two static ResourceDictionary instances on theme change. We can't,
+/// because every brush composes a per-color user override (AppSettings.TextColor / BackgroundColor /
+/// TrayIconColor / per-meter color) on top of the active theme variant. A two-dictionary swap would have
+/// to be regenerated from the live model anyway, defeating the static-dictionary advantage. So
+/// App.UpdateThemeResources walks each ThemeColor on this instance, resolves the override against the
+/// active variant, and replaces every Resources["Theme*"] brush in place. DynamicResource consumers re-render
+/// off that swap - functionally identical to a merged-dictionary swap, with first-class support for
+/// user color overrides as a natural fallout. Cost: ~25 SolidColorBrush allocations per Changed signal;
+/// negligible at the rate settings actually change. Do not "fix" this back to merged dictionaries
+/// without first removing the per-color override feature.
 /// </summary>
 [XmlRoot("Theme")]
 public sealed class AppTheme : IDisposable
@@ -141,9 +153,6 @@ public sealed class AppTheme : IDisposable
 
     /// <summary>Windows accent color.</summary>
     public ThemeColor Accent { get; set; } = new("0078D4");
-
-    /// <summary>Semi-transparent acrylic background.</summary>
-    public ThemeColor Acrylic { get; set; } = new("D0F3F3F3", "D0202020");
 
     /// <summary>Secondary text color (slightly dimmed).</summary>
     public ThemeColor SecondaryForeground { get; set; } = new("222222", "DDDDDD");

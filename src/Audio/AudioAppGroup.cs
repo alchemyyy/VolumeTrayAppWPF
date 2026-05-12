@@ -7,7 +7,7 @@ using VolumeTrayAppWPF.Audio.Interop;
 
 namespace VolumeTrayAppWPF.Audio;
 
-// Aggregates every audio session that shares an AppId into a single slider, mirroring EarTrumpet's
+// Aggregates every audio session that shares an AppID into a single slider, mirroring EarTrumpet's
 // AudioDeviceSessionGroup. Discord, Chromium-based browsers, and Electron apps spawn several child
 // processes that each register their own IAudioSessionControl with WASAPI; without grouping, the
 // flyout would show two or three sliders for one app.
@@ -16,7 +16,7 @@ namespace VolumeTrayAppWPF.Audio;
 // Volume, IsMuted, PeakValue, State) so the flyout DataTemplate can bind to either type. Volume
 // and IsMuted writes fan out to every session in the group; reads return the first session's value.
 // PeakValue is the max across all sessions so the loudest stream drives the meter.
-internal sealed class AudioAppGroup(string appId, Dispatcher dispatcher) : INotifyPropertyChanged, IDisposable
+internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INotifyPropertyChanged, IDisposable
 {
     private readonly List<AudioSession> _sessions = [];
     private readonly Dispatcher _dispatcher = dispatcher;
@@ -26,7 +26,7 @@ internal sealed class AudioAppGroup(string appId, Dispatcher dispatcher) : INoti
     private bool _isExclusiveControlHolder;
     private bool _disposed;
 
-    public string AppId { get; } = appId;
+    public string AppID { get; } = appID;
 
     /// <summary>The sessions inside this group. Mutated only on the UI thread by AudioDevice.</summary>
     public IReadOnlyList<AudioSession> Sessions => _sessions;
@@ -95,7 +95,7 @@ internal sealed class AudioAppGroup(string appId, Dispatcher dispatcher) : INoti
     /// <summary>
     /// True when one of this group's sessions is the process currently holding the parent device
     /// in exclusive mode. Drives the mini-glyph lock overlay on the app icon. Backend stub:
-    /// AudioDevice pushes this true when its <see cref="AudioDevice.ExclusiveControlHolderPid"/>
+    /// AudioDevice pushes this true when its <see cref="AudioDevice.ExclusiveControlHolderPID"/>
     /// matches any session's PID. Until that detection lands the flag stays false.
     /// </summary>
     public bool IsExclusiveControlHolder

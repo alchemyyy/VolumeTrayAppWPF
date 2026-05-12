@@ -5,23 +5,33 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     mc:Ignorable="d"
     d:DesignWidth="660"
     d:DesignHeight="594"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils:SettingsKeyboardNavigation.IsContentSection="True">
+    <UserControl.Resources>
+        <!-- Page-scoped implicit TextBlock style: every label / value cell on this page reads from
+             ThemeForeground, so hoist the per-element Foreground attribute out. Applies only to
+             TextBlocks without an explicit Style assignment; the keyed SectionHeaderStyle and
+             AboutLabelStyle already set Foreground themselves. Hyperlink is not a TextBlock and
+             keeps its inline brush. -->
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
+        </Style>
+    </UserControl.Resources>
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_About_SectionHeader}"/>
 
         <TextBlock Text="VolumeTrayAppWPF"
                    FontSize="14"
                    FontWeight="Normal"
-                   Foreground="{DynamicResource ThemeForeground}"
                    Margin="0,0,0,4"/>
 
         <TextBlock Text="{loc:Loc Settings_About_Tagline}"
-                   Foreground="{DynamicResource ThemeForeground}"
                    Opacity="0.7"
                    TextWrapping="Wrap"
                    Margin="0,0,0,24"/>
@@ -29,22 +39,19 @@
         <StackPanel Orientation="Horizontal" Margin="{StaticResource AboutRowMargin}">
             <TextBlock Text="{loc:Loc Settings_About_BuildLabel}"
                        Style="{StaticResource AboutLabelStyle}"/>
-            <TextBlock x:Name="BuildNumberText"
-                       Foreground="{DynamicResource ThemeForeground}"/>
+            <TextBlock x:Name="BuildNumberText"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="{StaticResource AboutRowMargin}">
             <TextBlock Text="{loc:Loc Settings_About_RuntimeLabel}"
                        Style="{StaticResource AboutLabelStyle}"/>
-            <TextBlock x:Name="RuntimeText"
-                       Foreground="{DynamicResource ThemeForeground}"/>
+            <TextBlock x:Name="RuntimeText"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="{StaticResource AboutRowMargin}">
             <TextBlock Text="{loc:Loc Settings_About_AuthorLabel}"
                        Style="{StaticResource AboutLabelStyle}"/>
-            <TextBlock Text="alchemyyy"
-                       Foreground="{DynamicResource ThemeForeground}"/>
+            <TextBlock Text="alchemyyy"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="{StaticResource AboutRowMargin}">

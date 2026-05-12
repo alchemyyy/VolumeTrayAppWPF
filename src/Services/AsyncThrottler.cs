@@ -1,4 +1,4 @@
-﻿namespace VolumeTrayAppWPF.Services;
+namespace VolumeTrayAppWPF.Services;
 
 /// <summary>
 /// Per-key "latest-pending-wins" payload scheduler.
@@ -16,9 +16,9 @@
 /// sequence atomicity against other operations on the same key should still hold the appropriate mutex itself.
 /// </summary>
 /// <remarks>
-/// The payload receives an <see cref="IThrottlerContext"/> so it can:
+/// The payload receives a <see cref="ThrottlerContext"/> so it can:
 /// (a) honour cancellation when the throttler is disposed or the caller's token is signalled,
-/// (b) probe <see cref="IThrottlerContext.HasReplacement"/> to bail early during retry/dwell waits when a fresher
+/// (b) probe <see cref="ThrottlerContext.HasReplacement"/> to bail early during retry/dwell waits when a fresher
 /// payload has already been queued for the same key (no point completing the current write if a newer one will
 /// overwrite it immediately anyway).
 /// </remarks>
@@ -48,7 +48,7 @@ public sealed class AsyncThrottler<TKey>(int cooldownMs, IEqualityComparer<TKey>
     /// payload eventually runs to completion or, if it gets replaced before ever running, when the replacement
     /// chain terminates.
     /// </summary>
-    public Task RunAsync(TKey key, Func<IThrottlerContext, Task> payload, CancellationToken cancellationToken = default)
+    public Task RunAsync(TKey key, Func<ThrottlerContext, Task> payload, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(payload);
 
@@ -81,7 +81,7 @@ public sealed class AsyncThrottler<TKey>(int cooldownMs, IEqualityComparer<TKey>
             slot.NextPayload = payload;
             slot.NextCancellationToken = cancellationToken;
             slot.NextCompletionSource = completionSource;
-            slot.HasReplacement = true;
+            slot.ReplacementSignal.HasReplacement = true;
 
             if (!slot.DriverRunning)
             {
@@ -178,7 +178,7 @@ public sealed class AsyncThrottler<TKey>(int cooldownMs, IEqualityComparer<TKey>
         // to false - a fresh RunAsync call after that point starts a brand-new driver loop.
         while (true)
         {
-            Func<IThrottlerContext, Task>? payload;
+            Func<ThrottlerContext, Task>? payload;
             CancellationToken externalCancellationToken;
             TaskCompletionSource? completionSource;
 
@@ -196,10 +196,14 @@ public sealed class AsyncThrottler<TKey>(int cooldownMs, IEqualityComparer<TKey>
                 slot.NextPayload = null;
                 slot.NextCancellationToken = CancellationToken.None;
                 slot.NextCompletionSource = null;
-                slot.HasReplacement = false;
+                slot.ReplacementSignal.HasReplacement = false;
             }
 
-            ThrottlerContext throttlerContext = new(slot, externalCancellationToken, _shutdownTokenSource.Token);
+            CancellationToken linkedToken = !externalCancellationToken.CanBeCanceled
+                ? _shutdownTokenSource.Token
+                : CancellationTokenSource.CreateLinkedTokenSource(
+                    externalCancellationToken, _shutdownTokenSource.Token).Token;
+            ThrottlerContext throttlerContext = new(slot.ReplacementSignal, linkedToken);
 
             try
             {
@@ -239,30 +243,27 @@ public sealed class AsyncThrottler<TKey>(int cooldownMs, IEqualityComparer<TKey>
 
     private sealed class Slot
     {
-        public Func<IThrottlerContext, Task>? NextPayload;
+        public Func<ThrottlerContext, Task>? NextPayload;
         public CancellationToken NextCancellationToken;
         public TaskCompletionSource? NextCompletionSource;
         public bool DriverRunning;
-        // True between the moment a replacement payload is queued and the driver loop picking it up.
-        // Used by IThrottlerContext.HasReplacement to let the running payload bail early during waits.
-        public volatile bool HasReplacement;
+        // Shared with the live ThrottlerContext via reference so HasReplacement flips are visible
+        // without exposing the Slot type publicly.
+        public readonly ReplacementSignal ReplacementSignal = new();
     }
+}
 
-    private sealed class ThrottlerContext(
-        Slot slot,
-        CancellationToken externalCancellationToken,
-        CancellationToken shutdownCancellationToken)
-        : IThrottlerContext
+/// <summary>
+/// Carrier for the volatile "a fresher payload is queued" flag.
+/// Public so <see cref="ThrottlerContext"/> can expose it without exposing the throttler's internal Slot type.
+/// </summary>
+public sealed class ReplacementSignal
+{
+    private volatile bool _hasReplacement;
+    public bool HasReplacement
     {
-        public CancellationToken CancellationToken { get; } = !externalCancellationToken.CanBeCanceled
-            ? shutdownCancellationToken
-            : CancellationTokenSource.CreateLinkedTokenSource(
-                externalCancellationToken, shutdownCancellationToken).Token;
-
-        // Linked token covers BOTH the per-call deadline (item 16's sequence-level cancellation token) and the
-        // throttler's shutdown signal so payloads observe either as cancellation.
-
-        public bool HasReplacement => slot.HasReplacement;
+        get => _hasReplacement;
+        internal set => _hasReplacement = value;
     }
 }
 
@@ -271,9 +272,23 @@ public sealed class AsyncThrottler<TKey>(int cooldownMs, IEqualityComparer<TKey>
 /// (a) a CancellationToken that fires on disposal or caller-supplied deadline,
 /// (b) a HasReplacement flag indicating that a fresher payload has been queued for the same key - payloads
 /// should bail out of long dwells when this flips so the queued payload isn't kept waiting.
+/// Replaces the prior <c>IThrottlerContext</c> interface + private nested struct pair.
 /// </summary>
-public interface IThrottlerContext
+public readonly struct ThrottlerContext
 {
-    CancellationToken CancellationToken { get; }
-    bool HasReplacement { get; }
+    private readonly ReplacementSignal _signal;
+
+    internal ThrottlerContext(ReplacementSignal signal, CancellationToken cancellationToken)
+    {
+        _signal = signal;
+        CancellationToken = cancellationToken;
+    }
+
+    public CancellationToken CancellationToken { get; }
+
+    /// <summary>
+    /// True once a fresher payload has been queued for the same key.
+    /// Payloads should bail out of long dwells when this flips so the queued payload isn't kept waiting.
+    /// </summary>
+    public bool HasReplacement => _signal != null && _signal.HasReplacement;
 }

@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
 using VolumeTrayAppWPF.Services;
+using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -16,8 +17,23 @@ namespace VolumeTrayAppWPF.Audio;
 /// </summary>
 internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 {
-    private static Guid EventContext { get; } = new(AppIdentity.AppGuid);
+    // EventContext / Stgm live in Audio/Interop/AudioInterop.cs. AudioDevice references them
+    // through AudioEventContext.Value / Stgm.Read / Stgm.Write.
 
+    // Apartment-state contract for the COM RCWs below:
+    //  - _device is the IMMDevice handed to us by IMMDeviceEnumerator on the WPF UI-thread STA.
+    //    It MUST NOT be reused on any threadpool worker (the sample timer, EndpointSoundPlayback,
+    //    PolicyConfig writes, etc.). Cross-apartment marshalling fails as QueryInterface refusals.
+    //    Workers that need an IMMDevice re-acquire one via MMDeviceEnumerator.GetDevice(Id) on
+    //    their own thread; EndpointSoundPlayback is the documented example.
+    //  - _endpointVolume / _endpointMeter / _simpleVolume (via sessions) / _sessionManager are
+    //    activated through _device on the UI thread, but the implementations published by
+    //    audioses.dll register the free-threaded marshaler. That's why the sample timer can call
+    //    _endpointMeter.GetChannelsPeakValues on the threadpool and the volume throttler can call
+    //    SetMasterVolumeLevelScalar from worker tasks - both work today because audioses.dll's
+    //    proxies are MTA-compatible. If a future Windows build ever drops the FTM, the meter
+    //    reads need to move onto the dispatcher and the throttler payloads need to dispatch
+    //    their COM call too. _device access stays UI-thread-only either way.
     private readonly IMMDevice _device;
     // Endpoint COM proxies are only available on Active devices; on Disabled / NotPresent /
     // Unplugged endpoints, IMMDevice.Activate(IAudioEndpointVolume) returns AUDCLNT_E_DEVICE_INVALIDATED.
@@ -32,19 +48,18 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly AsyncThrottler<string> _volumeThrottler;
     private readonly ProcessExitMonitor _processExitMonitor;
-    private readonly string _volumeThrottlerKey;
 
     // Groups live in a public-readable observable collection; AudioDevice mutates it on the UI thread only.
-    // One group per AppId; sessions belonging to the same app (Discord's child processes, Chromium tabs,
+    // One group per AppID; sessions belonging to the same app (Discord's child processes, Chromium tabs,
     // etc.) collate into a single group so the flyout shows one slider per app.
     private readonly ObservableCollection<AudioAppGroup> _groups = [];
 
-    // Dedup index by SessionInstanceId. Same COM session can be delivered twice during the brief
+    // Dedup index by SessionInstanceID. Same COM session can be delivered twice during the brief
     // window between RegisterSessionNotification and EnumerateExistingSessions in the ctor:
     // OnSessionCreated marshals to the dispatcher, the synchronous enumerate picks the same session
     // up, and without this guard both arrivals create independent AudioSession wrappers around one
     // COM object - double meter polls, double event handlers, two sliders for one stream.
-    private readonly Dictionary<string, AudioSession> _sessionsByInstanceId = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AudioSession> _sessionsBySessionInstanceID = new(StringComparer.Ordinal);
 
     private string _friendlyName;
     private string _deviceDescription;
@@ -55,12 +70,12 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private bool _isDefault;
     private bool _isDefaultCommunications;
     private bool _isListeningToThisDevice;
-    private string? _listenTargetDeviceId;
+    private string? _listenTargetDeviceID;
     private bool _isListenTargetActive;
     private bool _isExclusiveModeAllowed;
     private bool _isExclusiveControlHeld;
-    private uint? _exclusiveControlHolderPid;
-    private EqualizerApoState _equalizerApoState;
+    private uint? _exclusiveControlHolderPID;
+    private EqualizerAPOState _equalizerAPOState;
     private DeviceState _state;
     private bool _disposed;
 
@@ -74,21 +89,17 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // release" - lock/unlock would just be ceremony.
     private int _policyConfigCallInFlight;
 
-    // Step-counter linear-interpolation state for the stereo peak meter. The sample timer's
-    // bg-thread half writes _rawPeakMin / _rawPeakMax from one IAudioMeterInformation call (min
-    // and max over the first two channels). The dispatched UI half (OnNewSample) copies them into
-    // the _target* fields, snapshots the current display values as _prev*, and resets the step
-    // counter. The render timer's UI tick advances _interpolationStep and lerps both display
-    // values across _interpolationSteps frames; min and max share the step counter so they
-    // advance together. With Fps > SampleRate, the dispatcher updates the lerps multiple times
-    // per sample interval - the screen at vsync catches a stepped sequence of intermediate values
-    // rather than a snap-to-latest sequence, which is what gives the meter its smoothness.
-    private float _rawPeakMin, _rawPeakMax;
-    private float _displayPeakMin, _displayPeakMax;
-    private float _prevPeakMin, _prevPeakMax;
-    private float _targetPeakMin, _targetPeakMax;
-    private int _interpolationStep;
-    private int _interpolationSteps = 1;
+    // Step-counter peak-meter lerp. Shared with AudioSession via the MeterLerp struct - both
+    // hosts compose one and call WriteRawPeaks / OnNewSample / OnRenderTick. With Fps > SampleRate
+    // the dispatcher updates the lerp multiple times per sample interval - the screen at vsync
+    // catches a stepped sequence of intermediate values rather than a snap-to-latest sequence,
+    // which is what gives the meter its smoothness.
+    private MeterLerp _meterLerp;
+
+    // Throttled COM-write driver for endpoint volume. Shape shared with AudioSession via the
+    // VolumeThrottle composition - the only difference is the COM call (SetMasterVolumeLevelScalar
+    // vs SetMasterVolume).
+    private readonly VolumeThrottle _volumeWrite;
 
     // True on a capture endpoint when no session is currently in the Active state. Windows lets
     // the capture engine idle when no app is streaming the mic, so the endpoint meter stops
@@ -202,13 +213,13 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// endpoint. Null means follow the system default playback device - mmsys.cpl encodes this by
     /// deleting the pid (PROPVARIANT VT_EMPTY) and we mirror that on writes.
     /// </summary>
-    public string? ListenTargetDeviceId
+    public string? ListenTargetDeviceID
     {
-        get => _listenTargetDeviceId;
+        get => _listenTargetDeviceID;
         private set
         {
-            if (string.Equals(_listenTargetDeviceId, value, StringComparison.Ordinal)) return;
-            _listenTargetDeviceId = value;
+            if (string.Equals(_listenTargetDeviceID, value, StringComparison.Ordinal)) return;
+            _listenTargetDeviceID = value;
             OnPropertyChanged();
         }
     }
@@ -216,7 +227,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Cached "the device we listen through right now is up" flag. Pushed in by
     /// <see cref="AudioDeviceManager"/> whenever the target endpoint's State, the system default
-    /// playback device, or this capture device's <see cref="ListenTargetDeviceId"/> changes, so
+    /// playback device, or this capture device's <see cref="ListenTargetDeviceID"/> changes, so
     /// the flyout's button-dim binding can react without doing cross-device lookup itself.
     /// Always false on render endpoints.
     /// </summary>
@@ -282,13 +293,13 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// nothing is. Bound by the mini-glyph overlay on app icons so the holding app's tile gets
     /// the lock decoration. Stays null while <see cref="IsExclusiveControlHeld"/> backend is stubbed.
     /// </summary>
-    public uint? ExclusiveControlHolderPid
+    public uint? ExclusiveControlHolderPID
     {
-        get => _exclusiveControlHolderPid;
+        get => _exclusiveControlHolderPID;
         internal set
         {
-            if (_exclusiveControlHolderPid == value) return;
-            _exclusiveControlHolderPid = value;
+            if (_exclusiveControlHolderPID == value) return;
+            _exclusiveControlHolderPID = value;
             OnPropertyChanged();
         }
     }
@@ -297,15 +308,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// Equalizer APO state for this endpoint. Drives the equalizer-button glyph between
     /// full-bright (Running) and dim (everything else), and selects the click action between
     /// uninstall and install / locate. Stub - always reports the system-wide
-    /// <see cref="EqualizerApoState.NotAvailable"/> until the detection backend lands.
+    /// <see cref="EqualizerAPOState.NotAvailable"/> until the detection backend lands.
     /// </summary>
-    public EqualizerApoState EqualizerApoState
+    public EqualizerAPOState EqualizerAPOState
     {
-        get => _equalizerApoState;
+        get => _equalizerAPOState;
         internal set
         {
-            if (_equalizerApoState == value) return;
-            _equalizerApoState = value;
+            if (_equalizerAPOState == value) return;
+            _equalizerAPOState = value;
             OnPropertyChanged();
         }
     }
@@ -332,9 +343,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// project plan (UI lands first; the integration goes in once the EAPO detection / install
     /// scaffolding is filled in).
     /// </summary>
-    internal void ToggleEqualizerApo()
+    internal void ToggleEqualizerAPO()
     {
-        WPFLog.Log($"AudioDevice.ToggleEqualizerApo({FriendlyName}, state={EqualizerApoState}): backend not implemented (stub)");
+        WPFLog.Log($"AudioDevice.ToggleEqualizerAPO({FriendlyName}, state={EqualizerAPOState}): backend not implemented (stub)");
     }
 
     // Registry-only ghost: the endpoint exists in the user's audio device registry but no driver
@@ -348,7 +359,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // cost; ExecutionAndPublication makes the lazy init safe under concurrent first access from
     // the threadpool callbacks below.
     private static readonly Lazy<IPolicyConfig> PolicyConfigClient = new(
-        () => (IPolicyConfig)new PolicyConfigClientComObject(),
+        () => (IPolicyConfig)new PolicyConfigClientCOMObject(),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
@@ -466,21 +477,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             _volume = clamped;
             OnPropertyChanged();
 
-            float captured = clamped;
-            _ = _volumeThrottler.RunAsync(_volumeThrottlerKey, _ =>
-            {
-                try
-                {
-                    Guid ctx = EventContext;
-                    proxy.SetMasterVolumeLevelScalar(captured, ref ctx);
-                }
-                catch
-                {
-                    // Endpoint may have been torn down between the user's drag and the deferred write.
-                    // The next OnNotify event (or device-changed rebuild) will reconcile the cached value.
-                }
-                return Task.CompletedTask;
-            });
+            _volumeWrite.Write(clamped, (v, ctx) => proxy.SetMasterVolumeLevelScalar(v, ref ctx));
         }
     }
 
@@ -495,7 +492,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
             try
             {
-                Guid ctx = EventContext;
+                Guid ctx = AudioEventContext.Value;
                 proxy.SetMute(value, ref ctx);
             }
             catch { return; }
@@ -509,13 +506,13 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// Smoothed min(L, R) peak. Drives the base meter bar (the level guaranteed in both
     /// channels). Updated every render tick from <see cref="OnRenderTick"/>; never set externally.
     /// </summary>
-    public float PeakValueMin => _displayPeakMin;
+    public float PeakValueMin => _meterLerp.DisplayMin;
 
     /// <summary>
     /// Smoothed max(L, R) peak. Drives the stereo overlay bar that paints on top of the base bar
     /// and extends to the loudest channel. For mono streams this equals <see cref="PeakValueMin"/>.
     /// </summary>
-    public float PeakValueMax => _displayPeakMax;
+    public float PeakValueMax => _meterLerp.DisplayMax;
 
     /// <summary>
     /// True when this is a capture endpoint with no currently-Active session. Windows idles the
@@ -538,7 +535,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         device.GetId(out string id);
         Id = id ?? string.Empty;
-        _volumeThrottlerKey = "endpoint:" + Id;
+        _volumeWrite = new VolumeThrottle(volumeThrottler, "endpoint:" + Id);
 
         (_friendlyName, _deviceDescription, _interfaceFriendlyName) = ResolveDeviceNames(device);
         _defaultFormat = ResolveDefaultFormat(device);
@@ -551,7 +548,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // through RefreshListenStateFromStore via the manager's property-change callback.
         if (DataFlow == EDataFlow.eCapture)
         {
-            (_isListeningToThisDevice, _listenTargetDeviceId) = ReadListenStateFromStore(_device);
+            (_isListeningToThisDevice, _listenTargetDeviceID) = ReadListenStateFromStore(_device);
         }
 
         // Exclusive-mode "allow" bit lives on both render and capture endpoints (mmsys.cpl shows
@@ -569,7 +566,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Re-read the listen-feature property pair (pid 1 = enable bool, pid 0 = target endpoint id)
     /// from the property store and update <see cref="IsListeningToThisDevice"/> +
-    /// <see cref="ListenTargetDeviceId"/>. No-op on render endpoints. Invoked by the manager when
+    /// <see cref="ListenTargetDeviceID"/>. No-op on render endpoints. Invoked by the manager when
     /// OnPropertyValueChanged fires for either listen-fmtid pid on this device id.
     /// </summary>
     internal void RefreshListenStateFromStore()
@@ -577,7 +574,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         if (_disposed || DataFlow != EDataFlow.eCapture) return;
         (bool enabled, string? target) = ReadListenStateFromStore(_device);
         IsListeningToThisDevice = enabled;
-        ListenTargetDeviceId = target;
+        ListenTargetDeviceID = target;
     }
 
     /// <summary>
@@ -595,11 +592,11 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Writes both the listen-target id (pid 0) and the listen-enable bit (pid 1) in one commit.
-    /// Passing null for <paramref name="targetDeviceId"/> deletes pid 0 (VT_EMPTY) which mmsys.cpl
+    /// Passing null for <paramref name="targetDeviceID"/> deletes pid 0 (VT_EMPTY) which mmsys.cpl
     /// reads back as 'Default Playback Device' - the audio service will follow whichever render
     /// endpoint is currently default. No-op on render endpoints.
     /// </summary>
-    internal void SetListenTarget(string? targetDeviceId, bool enable)
+    internal void SetListenTarget(string? targetDeviceID, bool enable)
     {
         if (_disposed || DataFlow != EDataFlow.eCapture) return;
 
@@ -607,17 +604,17 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IntPtr targetPtr = IntPtr.Zero;
         try
         {
-            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+            _device.OpenPropertyStore(Stgm.Write, out store);
 
-            PROPERTYKEY targetKey = PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceId;
+            PROPERTYKEY targetKey = PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceID;
             PROPVARIANT targetPv = default;
-            if (string.IsNullOrEmpty(targetDeviceId))
+            if (string.IsNullOrEmpty(targetDeviceID))
             {
                 targetPv.vt = PROPVARIANT.VT_EMPTY;
             }
             else
             {
-                targetPtr = Marshal.StringToCoTaskMemUni(targetDeviceId);
+                targetPtr = Marshal.StringToCoTaskMemUni(targetDeviceID);
                 targetPv.vt = PROPVARIANT.VT_LPWSTR;
                 targetPv.p1 = targetPtr;
             }
@@ -640,7 +637,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         finally
         {
             if (targetPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(targetPtr);
-            if (store != null) Marshal.FinalReleaseComObject(store);
+            Safe.Release(store);
         }
 
         RefreshListenStateFromStore();
@@ -651,7 +648,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IPropertyStore? store = null;
         try
         {
-            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+            _device.OpenPropertyStore(Stgm.Write, out store);
             PROPVARIANT pv = default;
             pv.vt = PROPVARIANT.VT_BOOL;
             pv.p1 = value ? new IntPtr(unchecked((int)0xFFFF)) : IntPtr.Zero;
@@ -664,7 +661,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (store != null) Marshal.FinalReleaseComObject(store);
+            Safe.Release(store);
         }
     }
 
@@ -684,7 +681,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IPropertyStore? store = null;
         try
         {
-            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+            _device.OpenPropertyStore(Stgm.Write, out store);
 
             // VT_UI4 lives in the low 32 bits of p1; high bits are ignored. mmsys.cpl writes
             // REG_DWORD 1 / 0 - matching that keeps the value layout identical for round-trips.
@@ -710,7 +707,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (store != null) Marshal.FinalReleaseComObject(store);
+            Safe.Release(store);
         }
     }
 
@@ -719,7 +716,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IPropertyStore? store = null;
         try
         {
-            device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            device.OpenPropertyStore(Stgm.Read, out store);
             PROPERTYKEY key = PropertyKeys.PKEY_AudioEndpoint_AllowExclusiveControl;
             store.GetValue(ref key, out PROPVARIANT pv);
             try
@@ -739,15 +736,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             finally { Ole32.PropVariantClear(ref pv); }
         }
         catch { return true; }
-        finally { if (store != null) Marshal.FinalReleaseComObject(store); }
+        finally { Safe.Release(store); }
     }
 
-    private static (bool Enabled, string? TargetDeviceId) ReadListenStateFromStore(IMMDevice device)
+    private static (bool Enabled, string? TargetDeviceID) ReadListenStateFromStore(IMMDevice device)
     {
         IPropertyStore? store = null;
         try
         {
-            device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            device.OpenPropertyStore(Stgm.Read, out store);
 
             PROPERTYKEY enableKey = PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice;
             store.GetValue(ref enableKey, out PROPVARIANT enablePv);
@@ -766,7 +763,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             }
             finally { Ole32.PropVariantClear(ref enablePv); }
 
-            PROPERTYKEY targetKey = PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceId;
+            PROPERTYKEY targetKey = PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceID;
             store.GetValue(ref targetKey, out PROPVARIANT targetPv);
             string? target;
             try { target = targetPv.GetString(); }
@@ -775,7 +772,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             return (enabled, target);
         }
         catch { return (false, null); }
-        finally { if (store != null) Marshal.FinalReleaseComObject(store); }
+        finally { Safe.Release(store); }
     }
 
     /// <summary>
@@ -851,11 +848,11 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Bg-thread half of the sample tick. Reads the endpoint per-channel peaks via COM into
-    /// <see cref="_rawPeakMin"/> / <see cref="_rawPeakMax"/> and cascades into every group so
-    /// per-session raw peaks are filled in parallel - all off the UI thread. The groups list is
-    /// snapshotted under try/catch since UI-thread mutations could otherwise tear the enumerator;
-    /// a torn frame just means we miss one tick for the affected device.
+    /// Bg-thread half of the sample tick. Reads the endpoint per-channel peaks via COM and stashes
+    /// them on the <see cref="MeterLerp"/> via <see cref="MeterLerp.WriteRawPeaks"/>, then cascades
+    /// into every group so per-session raw peaks are filled in parallel - all off the UI thread.
+    /// The groups list is snapshotted under try/catch since UI-thread mutations could otherwise
+    /// tear the enumerator; a torn frame just means we miss one tick for the affected device.
     /// The (unified, biasMultiplier) pair is forwarded into <see cref="MeterReader.ReadStereoPeaks"/>
     /// so unified mode collapses the per-channel result before it lands in the lerp targets.
     /// </summary>
@@ -871,16 +868,14 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             // meter holds the last value from when something was capturing - reading it would
             // freeze the level bar on a stale peak. Pin raw peaks to 0 instead; the lerp falls
             // smoothly to silence.
-            _rawPeakMin = 0f;
-            _rawPeakMax = 0f;
+            _meterLerp.PinRawPeaksToSilence();
         }
         else
         {
             try
             {
                 MeterReader.ReadStereoPeaks(meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
-                _rawPeakMin = minPeak;
-                _rawPeakMax = maxPeak;
+                _meterLerp.WriteRawPeaks(minPeak, maxPeak);
             }
             catch
             {
@@ -900,62 +895,31 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// UI-thread half of the sample tick. Snapshots the current display values as the new lerp
-    /// origins, copies the most recent <see cref="_rawPeakMin"/> / <see cref="_rawPeakMax"/>
-    /// (filled by <see cref="UpdatePeakValueBackground"/>) into the target fields, and arms the
-    /// step counter at the supplied span (typically Fps / SampleRate). Forwards the same call
-    /// into every <see cref="AudioAppGroup"/> so per-app session sliders interpolate too.
+    /// UI-thread half of the sample tick. Hands off to <see cref="MeterLerp.OnNewSample"/> which
+    /// snapshots the current display values as the new lerp origins and arms the step counter at
+    /// the supplied span (typically Fps / SampleRate). Forwards the same call into every
+    /// <see cref="AudioAppGroup"/> so per-app session sliders interpolate too.
     /// </summary>
     internal void OnNewSample(int interpolationSteps)
     {
         if (_disposed) return;
 
-        _prevPeakMin = _displayPeakMin;
-        _prevPeakMax = _displayPeakMax;
-        _targetPeakMin = _rawPeakMin;
-        _targetPeakMax = _rawPeakMax;
-        _interpolationStep = 0;
-        _interpolationSteps = interpolationSteps < 1 ? 1 : interpolationSteps;
+        _meterLerp.OnNewSample(interpolationSteps);
 
         for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnNewSample(interpolationSteps);
     }
 
     /// <summary>
-    /// Render-timer callback. Advances the shared step counter and writes the lerped min/max
-    /// peaks into the display fields, firing PropertyChanged on actual change so both bound
-    /// meter borders redraw every frame. UI-thread.
+    /// Render-timer callback. Advances the lerp step counter and fires PropertyChanged on actual
+    /// change so both bound meter borders redraw every frame. UI-thread.
     /// </summary>
     internal void OnRenderTick()
     {
         if (_disposed) return;
 
-        _interpolationStep++;
-
-        float newMin, newMax;
-        if (_interpolationStep >= _interpolationSteps)
-        {
-            // Reached or passed the targets - snap so a long render-only burst (e.g. paused
-            // samples) can't drift past the most recent sample.
-            newMin = _targetPeakMin;
-            newMax = _targetPeakMax;
-        }
-        else
-        {
-            float t = (float)_interpolationStep / _interpolationSteps;
-            newMin = _prevPeakMin + (_targetPeakMin - _prevPeakMin) * t;
-            newMax = _prevPeakMax + (_targetPeakMax - _prevPeakMax) * t;
-        }
-
-        if (newMin != _displayPeakMin)
-        {
-            _displayPeakMin = newMin;
-            OnPropertyChanged(nameof(PeakValueMin));
-        }
-        if (newMax != _displayPeakMax)
-        {
-            _displayPeakMax = newMax;
-            OnPropertyChanged(nameof(PeakValueMax));
-        }
+        _meterLerp.OnRenderTick(out bool minChanged, out bool maxChanged);
+        if (minChanged) OnPropertyChanged(nameof(PeakValueMin));
+        if (maxChanged) OnPropertyChanged(nameof(PeakValueMax));
 
         for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnRenderTick();
     }
@@ -982,7 +946,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (enumerator != null) Marshal.FinalReleaseComObject(enumerator);
+            Safe.Release(enumerator);
         }
     }
 
@@ -994,29 +958,29 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         {
             // Construction can fail if the session is already torn down (race with OnSessionCreated);
             // drop the COM ref and move on.
-            try { Marshal.FinalReleaseComObject(ctrl); } catch { }
+            Safe.Release(ctrl);
             return;
         }
 
         // Dedup: register-then-enumerate in the ctor opens a window where the same COM session is
         // both notified and enumerated. Drop the duplicate wrapper rather than letting two run.
-        string key = session.SessionInstanceId;
-        if (key.Length > 0 && _sessionsByInstanceId.ContainsKey(key))
+        string key = session.SessionInstanceID;
+        if (key.Length > 0 && _sessionsBySessionInstanceID.ContainsKey(key))
         {
-            try { session.Dispose(); } catch { }
+            Safe.Dispose(session);
             return;
         }
 
         session.Disconnected += OnSessionDisconnected;
         session.StateChanged += OnSessionStateChanged;
-        if (key.Length > 0) _sessionsByInstanceId[key] = session;
+        if (key.Length > 0) _sessionsBySessionInstanceID[key] = session;
 
-        // Route into the matching group by AppId, or create a new group when this is the first
+        // Route into the matching group by AppID, or create a new group when this is the first
         // session for the app. Linear scan is fine - typical session counts are well under a dozen.
         AudioAppGroup? group = null;
         for (int i = 0; i < _groups.Count; i++)
         {
-            if (_groups[i].AppId == session.AppId) { group = _groups[i]; break; }
+            if (_groups[i].AppID == session.AppID) { group = _groups[i]; break; }
         }
         if (group == null)
         {
@@ -1025,7 +989,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             // to rebuild its visible list - if the group is published while still empty, any
             // "skip empty groups" filter on the consumer side would hide the new app entirely
             // until the next unrelated _groups change forced another rebuild.
-            group = new AudioAppGroup(session.AppId, _dispatcher);
+            group = new AudioAppGroup(session.AppID, _dispatcher);
             group.Empty += OnGroupEmpty;
             group.AddSession(session);
             _groups.Add(group);
@@ -1096,8 +1060,8 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
     private void RemoveSession(AudioSession session)
     {
-        string key = session.SessionInstanceId;
-        if (key.Length > 0) _sessionsByInstanceId.Remove(key);
+        string key = session.SessionInstanceID;
+        if (key.Length > 0) _sessionsBySessionInstanceID.Remove(key);
 
         // Find the owning group by walking the list. Sessions can only belong to one group.
         for (int i = 0; i < _groups.Count; i++)
@@ -1108,7 +1072,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             session.Disconnected -= OnSessionDisconnected;
             session.StateChanged -= OnSessionStateChanged;
             g.RemoveSession(session);
-            try { session.Dispose(); } catch { }
+            Safe.Dispose(session);
             // Losing this session may have been the last active one; refresh the sleep flag.
             RecomputeCaptureSleepingState();
             return;
@@ -1119,7 +1083,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         group.Empty -= OnGroupEmpty;
         _groups.Remove(group);
-        try { group.Dispose(); } catch { }
+        Safe.Dispose(group);
     }
 
     /// <summary>
@@ -1144,7 +1108,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IntPtr stringPtr = IntPtr.Zero;
         try
         {
-            _device.OpenPropertyStore(1 /* STGM_WRITE */, out store);
+            _device.OpenPropertyStore(Stgm.Write, out store);
             PROPERTYKEY key = PropertyKeys.PKEY_Device_FriendlyName;
 
             PROPVARIANT pv = default;
@@ -1171,7 +1135,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         {
             // SetValue copies the buffer; safe to free our allocation either way.
             if (stringPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(stringPtr);
-            if (store != null) Marshal.FinalReleaseComObject(store);
+            Safe.Release(store);
         }
 
         RefreshFriendlyNameFromStore();
@@ -1270,7 +1234,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            Marshal.FinalReleaseComObject(client);
+            Safe.Release(client);
         }
     }
 
@@ -1318,7 +1282,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IPropertyStore? store = null;
         try
         {
-            device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            device.OpenPropertyStore(Stgm.Read, out store);
 
             string friendly = ReadStringProperty(store, PropertyKeys.PKEY_Device_FriendlyName) ?? Unknown;
             string deviceDesc = ReadStringProperty(store, PropertyKeys.PKEY_Device_DeviceDesc) ?? friendly;
@@ -1331,7 +1295,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (store != null) Marshal.FinalReleaseComObject(store);
+            Safe.Release(store);
         }
     }
 
@@ -1358,7 +1322,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IPropertyStore? store = null;
         try
         {
-            _device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            _device.OpenPropertyStore(Stgm.Read, out store);
             PROPERTYKEY key = PropertyKeys.PKEY_AudioEngine_DeviceFormat;
             store.GetValue(ref key, out PROPVARIANT pv);
             try { return pv.GetBlobBytes(); }
@@ -1370,9 +1334,14 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (store != null) Marshal.FinalReleaseComObject(store);
+            Safe.Release(store);
         }
     }
+
+    // WAVE_FORMAT_EXTENSIBLE: the wFormatTag value used by EXTENSIBLE-form WAVEFORMATEX blobs
+    // (channels > 2, channel masks present, SubFormat GUID). Same value referenced from BuildFormatBlob
+    // and ParseFormatBlob below.
+    private const ushort WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
 
     // Synthesizes a 40-byte WAVEFORMATEXTENSIBLE byte image for the given (channels, bits, rate).
     // SubFormat is always KSDATAFORMAT_SUBTYPE_PCM and the channel mask is the standard
@@ -1380,7 +1349,6 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // format. Mirrors the integer-PCM-only set mmsys.cpl's Default Format dropdown emits.
     private static byte[] BuildFormatBlob(ushort channels, ushort bits, uint sampleRate)
     {
-        const ushort WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
         const ushort EXTENSIBLE_CB_SIZE = 22;
 
         ushort blockAlign = (ushort)(channels * (bits / 8));
@@ -1418,7 +1386,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IPropertyStore? store = null;
         try
         {
-            device.OpenPropertyStore(0 /* STGM_READ */, out store);
+            device.OpenPropertyStore(Stgm.Read, out store);
 
             PROPERTYKEY key = PropertyKeys.PKEY_AudioEngine_DeviceFormat;
             store.GetValue(ref key, out PROPVARIANT pv);
@@ -1437,7 +1405,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (store != null) Marshal.FinalReleaseComObject(store);
+            Safe.Release(store);
         }
     }
 
@@ -1455,7 +1423,6 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         uint sampleRate = BitConverter.ToUInt32(blob, 4);
         ushort bits = BitConverter.ToUInt16(blob, 14);
 
-        const ushort WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
         if (formatTag == WAVE_FORMAT_EXTENSIBLE && blob.Length >= 22)
         {
             ushort valid = BitConverter.ToUInt16(blob, 18);
@@ -1487,7 +1454,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         // Drop any queued endpoint-volume write so the throttler driver doesn't try to call
         // SetMasterVolumeLevelScalar on the about-to-be-released RCW.
-        try { _volumeThrottler.Drop(_volumeThrottlerKey); } catch { }
+        _volumeWrite.Drop();
 
         if (_endpointVolume != null && _volumeBridge != null)
         {
@@ -1507,23 +1474,17 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             {
                 session.Disconnected -= OnSessionDisconnected;
                 session.StateChanged -= OnSessionStateChanged;
-                try { session.Dispose(); } catch { }
+                Safe.Dispose(session);
             }
-            try { group.Dispose(); } catch { }
+            Safe.Dispose(group);
         }
         _groups.Clear();
-        _sessionsByInstanceId.Clear();
+        _sessionsBySessionInstanceID.Clear();
 
-        TryRelease(_endpointVolume);
-        TryRelease(_endpointMeter);
-        TryRelease(_sessionManager);
-        TryRelease(_device);
-    }
-
-    private static void TryRelease(object? rcw)
-    {
-        if (rcw == null) return;
-        try { Marshal.FinalReleaseComObject(rcw); } catch { }
+        Safe.Release(_endpointVolume);
+        Safe.Release(_endpointMeter);
+        Safe.Release(_sessionManager);
+        Safe.Release(_device);
     }
 
     // Endpoint volume / mute callbacks. Marshal native AUDIO_VOLUME_NOTIFICATION_DATA from the
@@ -1539,7 +1500,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             AUDIO_VOLUME_NOTIFICATION_DATA data = Marshal.PtrToStructure<AUDIO_VOLUME_NOTIFICATION_DATA>(pNotify);
 
             // Suppress echoes from our own writes.
-            if (data.guidEventContext == EventContext) return 0;
+            if (data.guidEventContext == AudioEventContext.Value) return 0;
 
             float vol = data.fMasterVolume;
             bool muted = data.bMuted;

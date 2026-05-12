@@ -39,7 +39,7 @@ namespace VolumeTrayAppWPF.WPF;
 /// </summary>
 internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 {
-    private readonly string? _ownAppId;
+    private readonly string? _ownAppID;
     private readonly ObservableCollection<AudioAppGroup> _visibleGroups = [];
     private readonly HashSet<AudioAppGroup> _subscribedGroups = [];
 
@@ -74,6 +74,42 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
     /// <summary>True for capture-flow devices; XAML uses this to swap to the microphone glyph and label.</summary>
     public bool IsCapture => Device.DataFlow == EDataFlow.eCapture;
+
+    // Layout pivots projected from AppServices.Settings. Bound by the single unified cell DataTemplate
+    // so the same template handles both AppsAbove and AppsBelow without a DataTemplateSelector.
+    // AppsAbove: device row sits at Grid.Row=1, apps band at row 0.
+    // AppsBelow: device row sits at Grid.Row=0, apps band at row 1.
+
+    // Read-only projections of the global FlyoutDeviceLayout setting. They are not per-instance,
+    // but WPF data binding requires instance properties, so CA1822 is suppressed.
+#pragma warning disable CA1822
+    /// <summary>Grid.Row for the device band inside the unified cell template.</summary>
+    public int DeviceRowIndex =>
+        (AppServices.Settings?.FlyoutDeviceLayout ?? FlyoutDeviceLayoutStyle.AppsAboveDevice)
+            == FlyoutDeviceLayoutStyle.AppsBelowDevice ? 0 : 1;
+
+    /// <summary>Grid.Row for the apps band inside the unified cell template.</summary>
+    public int AppsRowIndex =>
+        (AppServices.Settings?.FlyoutDeviceLayout ?? FlyoutDeviceLayoutStyle.AppsAboveDevice)
+            == FlyoutDeviceLayoutStyle.AppsBelowDevice ? 1 : 0;
+
+    /// <summary>
+    /// True when this cell's apps band sits at the bottom edge of the cell, i.e. the AppsBelow
+    /// layout. Drives the rounded footer-bottom on the apps band of the last cell.
+    /// </summary>
+    public bool IsAppsBottomBand =>
+        (AppServices.Settings?.FlyoutDeviceLayout ?? FlyoutDeviceLayoutStyle.AppsAboveDevice)
+            == FlyoutDeviceLayoutStyle.AppsBelowDevice;
+#pragma warning restore CA1822
+
+    /// <summary>
+    /// True when this cell renders its apps as the icon-grid drawer. Capture cells with the
+    /// RecordingAppDrawerDisplayType set to Icons opt in; playback cells always use sliders.
+    /// </summary>
+    public bool UsesGridDrawer =>
+        IsCapture
+        && (AppServices.Settings?.RecordingAppDrawerDisplayType ?? AppDrawerDisplayType.Icons)
+            == AppDrawerDisplayType.Icons;
 
     // Rough per-row pixel height of SessionRowTemplate (icon area + the 9px bottom margin). Used
     // only as a multiplier when computing the slider drawer's overflow MaxHeight; matching the
@@ -127,10 +163,10 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public VolumeFlyoutCell(AudioDevice device, string? ownAppId)
+    public VolumeFlyoutCell(AudioDevice device, string? ownAppID)
     {
         Device = device;
-        _ownAppId = ownAppId;
+        _ownAppID = ownAppID;
         VisibleGroups = new ReadOnlyObservableCollection<AudioAppGroup>(_visibleGroups);
 
         ((INotifyCollectionChanged)Device.Groups).CollectionChanged += OnGroupsCollectionChanged;
@@ -145,6 +181,12 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
     {
         OnPropertyChanged(nameof(SliderDrawerMaxHeight));
         OnPropertyChanged(nameof(GridDrawerMaxHeight));
+        // Layout pivots feed the unified cell DataTemplate's DataTriggers; raise INPC so a layout
+        // or drawer-type flip mid-session restyles the live visuals without recreating cells.
+        OnPropertyChanged(nameof(DeviceRowIndex));
+        OnPropertyChanged(nameof(AppsRowIndex));
+        OnPropertyChanged(nameof(IsAppsBottomBand));
+        OnPropertyChanged(nameof(UsesGridDrawer));
         // HideInactive depends on a settings flag, so toggling the indicator must rerun the
         // filter; cheap enough to do unconditionally on any settings change.
         RebuildVisibleGroups();
@@ -276,7 +318,7 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
         if (g.State == AudioSessionState.Expired) return false;
         if (g.IsSystemSounds) return false;
         if (g.Sessions.Count == 0) return false;
-        if (_ownAppId != null && string.Equals(g.AppId, _ownAppId, StringComparison.Ordinal)) return false;
+        if (_ownAppID != null && string.Equals(g.AppID, _ownAppID, StringComparison.Ordinal)) return false;
         // HideInactive on a capture device: skip sessions that aren't actively using the mic,
         // so the drawer compacts down to just the live capturers. Identical to DimInactive's
         // gating conditions (capture + non-Active) but acts on inclusion instead of opacity.

@@ -170,24 +170,3 @@ internal sealed class TitleRowVerticalOffsetConverter : IMultiValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>
-/// Maps a bool (typically VolumeFlyoutCell.IsLast) to either the shared CornerRadiusFooterBottom
-/// (rounded bottom corners) or zero. Lets the bottom cell of the device stack pick up the same
-/// rounded-corner treatment the old monolithic footer Border used to apply unconditionally.
-/// Reads from the application resources every time so a runtime EnableRoundedCorners flip flows
-/// through without re-binding.
-/// </summary>
-internal sealed class IsLastToFooterCornerRadiusConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        bool isLast = value is true;
-        if (!isLast) return new CornerRadius(0);
-
-        object? resource = System.Windows.Application.Current?.Resources["CornerRadiusFooterBottom"];
-        return resource is CornerRadius radius ? radius : new CornerRadius(0, 0, 8, 8);
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotSupportedException();
-}

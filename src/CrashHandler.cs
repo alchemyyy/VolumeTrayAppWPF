@@ -134,8 +134,10 @@ internal static class CrashHandler
         {
             Process.Start(startInfo);
         }
-        catch
+        catch (Exception primary)
         {
+            // Log the primary failure so a watcher that never starts isn't invisible to diagnostics.
+            WPFLog.Log($"CrashHandler.LaunchWatcherDetached: cmd path failed: {primary.Message}");
             // If cmd.exe approach fails, try direct launch (will be a child process but still works).
             try
             {
@@ -147,9 +149,9 @@ internal static class CrashHandler
                     WindowStyle = ProcessWindowStyle.Hidden
                 });
             }
-            catch
+            catch (Exception fallback)
             {
-                // Silently fail - app will run without crash handler.
+                WPFLog.Log($"CrashHandler.LaunchWatcherDetached: direct launch also failed: {fallback.Message}");
             }
         }
     }
@@ -173,8 +175,9 @@ internal static class CrashHandler
 
             return Process.Start(startInfo);
         }
-        catch
+        catch (Exception ex)
         {
+            WPFLog.Log($"CrashHandler.LaunchApplication: {ex.Message}");
             return null;
         }
     }

@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
@@ -12,7 +13,16 @@
     d:DesignWidth="660"
     d:DesignHeight="594"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils1:SettingsKeyboardNavigation.IsContentSection="True">
+    <UserControl.Resources>
+        <!-- Page-scoped converters: drive child-card visibility off combo Tag strings so the
+             "Sliders vs Icons" recording drawer split and the "per-row vs per-column" icons-axis
+             split avoid runtime BindingOperations.SetBinding label swaps. -->
+        <utils1:StringEqualsVisibilityConverter x:Key="StringEqualsVisibility"/>
+        <utils1:StringInSetVisibilityConverter x:Key="StringInSetVisibility"/>
+        <utils1:VisibilityAndConverter x:Key="VisibilityAnd"/>
+    </UserControl.Resources>
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_DeviceAppDrawers_SectionHeader}"/>
 
@@ -23,9 +33,9 @@
                             Title="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Title}"
                             Description="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Description}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="PlaybackDrawerMaxAppsBox"
-                                      Minimum="1" Maximum="200"/>
+                <local:NumericSpinner x:Name="PlaybackDrawerMaxAppsBox"
+                                      Minimum="{x:Static models:AppSettings.AppDrawerSlidersMaxAppsMin}"
+                                      Maximum="{x:Static models:AppSettings.AppDrawerSlidersMaxAppsMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
@@ -37,7 +47,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="RecordingAppDrawerDisplayTypeCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="RecordingAppDrawerDisplayType" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="Icons" Content="{loc:Loc Settings_Flyout_RecordingAppDrawerDisplayType_Icons}"/>
                     <ComboBoxItem Tag="Sliders" Content="{loc:Loc Settings_Flyout_RecordingAppDrawerDisplayType_Sliders}"/>
@@ -45,13 +54,29 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <utils:SettingsCard x:Name="RecordingDrawerMaxAppsCard"
+        <!-- Recording drawer carries two distinct caps (sliders vs icons). Two adjacent cards,
+             mutually exclusive on the recording-drawer-display-type combo, each with its own
+             localized title + description and its own bound spinner. The previous single-card
+             plus runtime BindingOperations.SetBinding swap is gone. -->
+        <utils:SettingsCard x:Name="RecordingDrawerMaxAppsSlidersCard"
                             Title="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Title}"
-                            Description="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Description}">
+                            Description="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Sliders_Description}"
+                            Visibility="{Binding SelectedItem.Tag, ElementName=RecordingAppDrawerDisplayTypeCombo, Converter={StaticResource StringEqualsVisibility}, ConverterParameter=Sliders}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="RecordingDrawerMaxAppsBox"
-                                      Minimum="1" Maximum="200"/>
+                <local:NumericSpinner x:Name="RecordingDrawerMaxAppsSlidersBox"
+                                      Minimum="{x:Static models:AppSettings.AppDrawerSlidersMaxAppsMin}"
+                                      Maximum="{x:Static models:AppSettings.AppDrawerSlidersMaxAppsMax}"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="RecordingDrawerMaxAppsIconsCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Icons_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerMaxApps_Icons_Description}"
+                            Visibility="{Binding SelectedItem.Tag, ElementName=RecordingAppDrawerDisplayTypeCombo, Converter={StaticResource StringEqualsVisibility}, ConverterParameter=Icons}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner x:Name="RecordingDrawerMaxAppsIconsBox"
+                                      Minimum="{x:Static models:AppSettings.AppDrawerIconsMaxRowsMin}"
+                                      Maximum="{x:Static models:AppSettings.AppDrawerIconsMaxRowsMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
@@ -60,7 +85,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="CaptureActivityIndicatorCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="CaptureActivityIndicator" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="DimInactive" Content="{loc:Loc Settings_General_CaptureActivityIndicator_DimInactive}"/>
                     <ComboBoxItem Tag="ActiveGlyph" Content="{loc:Loc Settings_General_CaptureActivityIndicator_ActiveGlyph}"/>
@@ -70,13 +94,16 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
+        <!-- Icon-grid sub-options below cascade visibility off the recording-drawer-display-type combo
+             so they only appear when Icons is selected. The soft-max width spinner has an extra gate
+             on the center-mode combo because it only matters in CenteredSoftMax. -->
         <utils:SettingsCard x:Name="AppDrawerIconsCenteredCard"
                             Title="{loc:Loc Settings_Flyout_AppDrawerIconsCentered_Title}"
-                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsCentered_Description}">
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsCentered_Description}"
+                            Visibility="{Binding SelectedItem.Tag, ElementName=RecordingAppDrawerDisplayTypeCombo, Converter={StaticResource StringEqualsVisibility}, ConverterParameter=Icons}">
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="AppDrawerIconsCenterModeCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="AppDrawerIconsCenterMode" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="Off" Content="{loc:Loc Settings_Flyout_AppDrawerIconsCenterMode_Off}"/>
                     <ComboBoxItem Tag="Centered" Content="{loc:Loc Settings_Flyout_AppDrawerIconsCenterMode_Centered}"/>
@@ -87,31 +114,33 @@
 
         <utils:SettingsCard x:Name="AppDrawerIconsCenterSoftMaxCard"
                             Title="{loc:Loc Settings_Flyout_AppDrawerIconsCenterSoftMax_Title}"
-                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsCenterSoftMax_Description}">
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsCenterSoftMax_Description}"
+                            Visibility="{Binding SelectedItem.Tag, ElementName=AppDrawerIconsCenterModeCombo, Converter={StaticResource StringEqualsVisibility}, ConverterParameter=CenteredSoftMax}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="AppDrawerIconsCenterSoftMaxBox"
-                                      Minimum="1" Maximum="16"/>
+                <local:NumericSpinner x:Name="AppDrawerIconsCenterSoftMaxBox"
+                                      Minimum="{x:Static models:AppSettings.AppDrawerIconsCenterSoftMaxMin}"
+                                      Maximum="{x:Static models:AppSettings.AppDrawerIconsCenterSoftMaxMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
         <utils:SettingsCard x:Name="AppDrawerIconScaleCard"
                             Title="{loc:Loc Settings_Flyout_AppDrawerIconScale_Title}"
-                            Description="{loc:Loc Settings_Flyout_AppDrawerIconScale_Description}">
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconScale_Description}"
+                            Visibility="{Binding SelectedItem.Tag, ElementName=RecordingAppDrawerDisplayTypeCombo, Converter={StaticResource StringEqualsVisibility}, ConverterParameter=Icons}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="AppDrawerIconScaleBox"
-                                      Minimum="50" Maximum="200"/>
+                <local:NumericSpinner x:Name="AppDrawerIconScaleBox"
+                                      Minimum="{x:Static models:AppSettings.AppDrawerIconScalePercentMin}"
+                                      Maximum="{x:Static models:AppSettings.AppDrawerIconScalePercentMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
         <utils:SettingsCard x:Name="AppDrawerStackDirectionCard"
                             Title="{loc:Loc Settings_Flyout_AppDrawerStackDirection_Title}"
-                            Description="{loc:Loc Settings_Flyout_AppDrawerStackDirection_Description}">
+                            Description="{loc:Loc Settings_Flyout_AppDrawerStackDirection_Description}"
+                            Visibility="{Binding SelectedItem.Tag, ElementName=RecordingAppDrawerDisplayTypeCombo, Converter={StaticResource StringEqualsVisibility}, ConverterParameter=Icons}">
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="AppDrawerStackDirectionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="AppDrawerStackDirection" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="Auto" Content="{loc:Loc Settings_Flyout_AppDrawerStackDirection_Auto}"/>
                     <ComboBoxItem Tag="TopBottom" Content="{loc:Loc Settings_Flyout_AppDrawerStackDirection_TopBottom}"/>
@@ -122,13 +151,53 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
+        <!-- Icons-per-axis: per-row in TopBottom / BottomTop / Auto stack directions, per-column
+             in LeftRight / RightLeft. Two adjacent SettingsCards swap on the stack-direction Tag
+             via the StringInSetVisibility converter; the spinner inside each writes the same
+             AppDrawerIconsPerRow setting (the meaning is "icons per cross-axis row"). Both also
+             gate visibility on the recording-drawer-display-type combo so they only appear in Icons
+             mode. -->
         <utils:SettingsCard x:Name="AppDrawerIconsPerRowCard"
                             Title="{loc:Loc Settings_Flyout_AppDrawerIconsPerRow_Title}"
                             Description="{loc:Loc Settings_Flyout_AppDrawerIconsPerRow_Description}">
+            <utils:SettingsCard.Visibility>
+                <MultiBinding Converter="{StaticResource VisibilityAnd}">
+                    <MultiBinding.Bindings>
+                        <Binding ElementName="RecordingAppDrawerDisplayTypeCombo" Path="SelectedItem.Tag"
+                                 Converter="{StaticResource StringEqualsVisibility}"
+                                 ConverterParameter="Icons"/>
+                        <Binding ElementName="AppDrawerStackDirectionCombo" Path="SelectedItem.Tag"
+                                 Converter="{StaticResource StringInSetVisibility}"
+                                 ConverterParameter="!LeftRight|RightLeft"/>
+                    </MultiBinding.Bindings>
+                </MultiBinding>
+            </utils:SettingsCard.Visibility>
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="AppDrawerIconsPerRowBox"
-                                      Minimum="1" Maximum="16"/>
+                <local:NumericSpinner x:Name="AppDrawerIconsPerRowBox"
+                                      Minimum="{x:Static models:AppSettings.AppDrawerIconsPerRowMin}"
+                                      Maximum="{x:Static models:AppSettings.AppDrawerIconsPerRowMax}"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard x:Name="AppDrawerIconsPerColumnCard"
+                            Title="{loc:Loc Settings_Flyout_AppDrawerIconsPerColumn_Title}"
+                            Description="{loc:Loc Settings_Flyout_AppDrawerIconsPerColumn_Description}">
+            <utils:SettingsCard.Visibility>
+                <MultiBinding Converter="{StaticResource VisibilityAnd}">
+                    <MultiBinding.Bindings>
+                        <Binding ElementName="RecordingAppDrawerDisplayTypeCombo" Path="SelectedItem.Tag"
+                                 Converter="{StaticResource StringEqualsVisibility}"
+                                 ConverterParameter="Icons"/>
+                        <Binding ElementName="AppDrawerStackDirectionCombo" Path="SelectedItem.Tag"
+                                 Converter="{StaticResource StringInSetVisibility}"
+                                 ConverterParameter="LeftRight|RightLeft"/>
+                    </MultiBinding.Bindings>
+                </MultiBinding>
+            </utils:SettingsCard.Visibility>
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner x:Name="AppDrawerIconsPerColumnBox"
+                                      Minimum="{x:Static models:AppSettings.AppDrawerIconsPerRowMin}"
+                                      Maximum="{x:Static models:AppSettings.AppDrawerIconsPerRowMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
     </StackPanel>

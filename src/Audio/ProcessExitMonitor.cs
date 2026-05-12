@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
+using VolumeTrayAppWPF.Interop;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -27,12 +28,8 @@ internal sealed class ProcessExitMonitor : IDisposable
     // miss handle-driven detection and have to wait for the audio-session Expired callback.
     private const int MAXIMUM_WAIT_OBJECTS = 64;
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwProcessId);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(IntPtr hObject);
+    // OpenProcess / CloseHandle live in Interop/Kernel32.cs - one declaration site shared with
+    // ProcessHelper and AppIconResolver.
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern uint WaitForMultipleObjects(uint nCount, IntPtr[] lpHandles, [MarshalAs(UnmanagedType.Bool)] bool bWaitAll, uint dwMilliseconds);
@@ -87,7 +84,7 @@ internal sealed class ProcessExitMonitor : IDisposable
             return false;
         }
 
-        IntPtr handle = OpenProcess(SYNCHRONIZE, false, pid);
+        IntPtr handle = Kernel32.OpenProcess(SYNCHRONIZE, false, pid);
         if (handle == IntPtr.Zero)
         {
             // Process gone between session creation and our subscribe, or denied. Fire now.
@@ -103,7 +100,7 @@ internal sealed class ProcessExitMonitor : IDisposable
                 // Already watching this PID - fold the new callback into the existing watch
                 // and drop the redundant handle. SYNCHRONIZE handles refcount on the kernel
                 // side anyway; one is enough to drive the wait.
-                CloseHandle(handle);
+                Kernel32.CloseHandle(handle);
                 Action prev = existing.Callback;
                 existing.Callback = () =>
                 {
@@ -141,7 +138,7 @@ internal sealed class ProcessExitMonitor : IDisposable
 
         if (toClose != IntPtr.Zero)
         {
-            CloseHandle(toClose);
+            Kernel32.CloseHandle(toClose);
             SetEvent(_wakeEvent);
         }
     }
@@ -188,20 +185,20 @@ internal sealed class ProcessExitMonitor : IDisposable
             if (idx < 0 || idx >= handles.Length) continue;
             if (idx == 0) continue; // wake event - re-snapshot the watch set
 
-            uint signaledPid = pids[idx - 1];
+            uint signaledPID = pids[idx - 1];
             Action? callback = null;
             IntPtr toClose = IntPtr.Zero;
             lock (_gate)
             {
-                if (_watches.TryGetValue(signaledPid, out WatchEntry? w))
+                if (_watches.TryGetValue(signaledPID, out WatchEntry? w))
                 {
                     callback = w.Callback;
                     toClose = w.Handle;
-                    _watches.Remove(signaledPid);
+                    _watches.Remove(signaledPID);
                 }
             }
 
-            if (toClose != IntPtr.Zero) CloseHandle(toClose);
+            if (toClose != IntPtr.Zero) Kernel32.CloseHandle(toClose);
             try { callback?.Invoke(); }
             catch { /* never let a callback bring down the watcher */ }
         }
@@ -217,10 +214,10 @@ internal sealed class ProcessExitMonitor : IDisposable
 
         lock (_gate)
         {
-            foreach (WatchEntry w in _watches.Values) CloseHandle(w.Handle);
+            foreach (WatchEntry w in _watches.Values) Kernel32.CloseHandle(w.Handle);
             _watches.Clear();
         }
 
-        CloseHandle(_wakeEvent);
+        Kernel32.CloseHandle(_wakeEvent);
     }
 }

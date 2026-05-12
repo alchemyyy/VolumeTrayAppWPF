@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -7,7 +6,9 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using VolumeTrayAppWPF.Audio.Interop;
+using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;
+using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -16,7 +17,7 @@ namespace VolumeTrayAppWPF.Audio;
 //   1. Extraction. Three-layer chain mirrors EarTrumpet:
 //        System sounds (PID==0):     audiosrv.dll resource 203 (legacy mixer's speaker glyph)
 //        App-supplied icon path:     IAudioSessionControl.GetIconPath() (Discord, Teams, etc.)
-//        UWP/AppX:                   GetApplicationUserModelId -> SHCreateItemInKnownFolder
+//        UWP/AppX:                   GetApplicationUserModelID -> SHCreateItemInKnownFolder
 //                                    (AppsFolder, ...) -> IShellItemImageFactory.GetImage
 //        Win32 desktop:              PathParseIconLocationW splits "exe.exe,N" -> PE-resource
 //                                    extraction; no ordinal -> SHCreateItemFromParsingName
@@ -67,7 +68,7 @@ internal static class AppIconResolver
     private const string KEY_SHELL_UWP = "shell|uwp";
     private const string KEY_SHELL_DESKTOP = "shell|desktop";
 
-    private static readonly Guid ShellItem2Iid = typeof(IShellItem2).GUID;
+    private static readonly Guid ShellItem2IID = typeof(IShellItem2).GUID;
 
     // All cache state lives under one lock. Acquire is off the UI thread but called rarely (once
     // per new session); single-lock contention is dwarfed by the shell-namespace call it guards.
@@ -140,18 +141,18 @@ internal static class AppIconResolver
             // AUMID lookup or shell resolution fails (e.g. sub-process whose AUMID doesn't resolve).
             if (IsPackagedProcess(processId))
             {
-                string aumid = GetApplicationUserModelId(processId);
-                if (!string.IsNullOrEmpty(aumid))
+                string AUMID = GetApplicationUserModelID(processId);
+                if (!string.IsNullOrEmpty(AUMID))
                 {
-                    string canonical = string.Equals(aumid, CORTANA_BAD_AUMID, StringComparison.OrdinalIgnoreCase)
+                    string canonical = string.Equals(AUMID, CORTANA_BAD_AUMID, StringComparison.OrdinalIgnoreCase)
                         ? CORTANA_GOOD_AUMID
-                        : aumid;
+                        : AUMID;
                     string uwpKey = KEY_SHELL_UWP + "|" + canonical;
                     IconHandle? hit = TryAcquireIdentity(uwpKey);
                     if (hit != null) return hit;
 
-                    BitmapSource? uwpRaw = ExtractFromShell(canonical, isUwp: true);
-                    if (uwpRaw != null) return MemoizeAndCrop(uwpRaw, uwpKey);
+                    BitmapSource? UWPRaw = ExtractFromShell(canonical, isUWP: true);
+                    if (UWPRaw != null) return MemoizeAndCrop(UWPRaw, uwpKey);
                 }
             }
 
@@ -166,7 +167,7 @@ internal static class AppIconResolver
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"AppIconResolver.Acquire failed: pid={processId} {ex}");
+            WPFLog.Log($"AppIconResolver.Acquire failed: pid={processId} {ex}");
             return null;
         }
     }
@@ -204,7 +205,7 @@ internal static class AppIconResolver
         IconHandle? shellHit = TryAcquireIdentity(shellKey);
         if (shellHit != null) return shellHit;
 
-        BitmapSource? shellIcon = ExtractFromShell(shellPath, isUwp: false);
+        BitmapSource? shellIcon = ExtractFromShell(shellPath, isUWP: false);
         return shellIcon == null ? null : MemoizeAndCrop(shellIcon, shellKey);
     }
 
@@ -289,7 +290,7 @@ internal static class AppIconResolver
                 // in place without queueing for eviction.
                 entry.RefCount = 0;
                 string firstKey = entry.IdentityKeys.Count > 0 ? entry.IdentityKeys[0] : "?";
-                Trace.WriteLine($"AppIconResolver.ReleaseEntry refcount underflow on {firstKey}");
+                WPFLog.Log($"AppIconResolver.ReleaseEntry refcount underflow on {firstKey}");
                 return;
             }
 
@@ -396,7 +397,7 @@ internal static class AppIconResolver
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"AppIconResolver.CropTransparentBorder failed: {ex}");
+            WPFLog.Log($"AppIconResolver.CropTransparentBorder failed: {ex}");
             return FreezeIfNeeded(source);
         }
     }
@@ -494,21 +495,21 @@ internal static class AppIconResolver
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"AppIconResolver.ExtractFromPEResource {path},{iconOrdinal} {ex}");
+            WPFLog.Log($"AppIconResolver.ExtractFromPEResource {path},{iconOrdinal} {ex}");
             return null;
         }
         finally
         {
-            if (hIcon != IntPtr.Zero) IconExtraction.DestroyIcon(hIcon);
+            if (hIcon != IntPtr.Zero) User32.DestroyIcon(hIcon);
             IconExtraction.FreeLibrary(hModule);
         }
     }
 
     // Shell-icon-factory extraction: SHCreateItem* -> IShellItemImageFactory.GetImage -> HBITMAP.
     // For UWP the path is an AUMID resolved against AppsFolder; for desktop it's a file system path.
-    private static BitmapSource? ExtractFromShell(string path, bool isUwp)
+    private static BitmapSource? ExtractFromShell(string path, bool isUWP)
     {
-        string canonical = isUwp && string.Equals(path, CORTANA_BAD_AUMID, StringComparison.OrdinalIgnoreCase)
+        string canonical = isUWP && string.Equals(path, CORTANA_BAD_AUMID, StringComparison.OrdinalIgnoreCase)
             ? CORTANA_GOOD_AUMID
             : path;
 
@@ -518,15 +519,15 @@ internal static class AppIconResolver
             try
             {
                 shellItem = IconExtraction.SHCreateItemInKnownFolder(
-                    IconExtraction.AppsFolderId,
+                    IconExtraction.AppsFolderID,
                     IconExtraction.KF_FLAG_DONT_VERIFY,
                     canonical,
-                    ShellItem2Iid);
+                    ShellItem2IID);
             }
             catch
             {
                 // Apps-folder lookup fails for plain file paths; fall through to parsing-name.
-                shellItem = IconExtraction.SHCreateItemFromParsingName(canonical, IntPtr.Zero, ShellItem2Iid);
+                shellItem = IconExtraction.SHCreateItemFromParsingName(canonical, IntPtr.Zero, ShellItem2IID);
             }
 
             IntPtr hBitmap = IntPtr.Zero;
@@ -548,12 +549,12 @@ internal static class AppIconResolver
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"AppIconResolver.ExtractFromShell {canonical} {ex}");
+            WPFLog.Log($"AppIconResolver.ExtractFromShell {canonical} {ex}");
             return null;
         }
         finally
         {
-            if (shellItem != null) Marshal.FinalReleaseComObject(shellItem);
+            Safe.Release(shellItem);
         }
     }
 
@@ -562,23 +563,23 @@ internal static class AppIconResolver
     // various failures for unreachable processes) means "not packaged".
     private static bool IsPackagedProcess(uint processId)
     {
-        IntPtr handle = IconExtraction.OpenProcess(
-            IconExtraction.ProcessFlags.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        IntPtr handle = Kernel32.OpenProcess(
+            Kernel32.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
         if (handle == IntPtr.Zero) return false;
 
         try
         {
             int bufferSize = 0;
             int hr = IconExtraction.GetPackageId(handle, ref bufferSize, IntPtr.Zero);
-            return hr == IconExtraction.ERROR_INSUFFICIENT_BUFFER;
+            return hr == NativeErrors.ERROR_INSUFFICIENT_BUFFER;
         }
-        finally { IconExtraction.CloseHandle(handle); }
+        finally { Kernel32.CloseHandle(handle); }
     }
 
-    private static string GetApplicationUserModelId(uint processId)
+    private static string GetApplicationUserModelID(uint processId)
     {
-        IntPtr handle = IconExtraction.OpenProcess(
-            IconExtraction.ProcessFlags.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        IntPtr handle = Kernel32.OpenProcess(
+            Kernel32.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
         if (handle == IntPtr.Zero) return string.Empty;
 
         try
@@ -586,8 +587,8 @@ internal static class AppIconResolver
             int length = IconExtraction.MAX_AUMID_LEN;
             StringBuilder buffer = new(length);
             int hr = IconExtraction.GetApplicationUserModelId(handle, ref length, buffer);
-            return hr == IconExtraction.S_OK ? buffer.ToString() : string.Empty;
+            return hr == NativeErrors.S_OK ? buffer.ToString() : string.Empty;
         }
-        finally { IconExtraction.CloseHandle(handle); }
+        finally { Kernel32.CloseHandle(handle); }
     }
 }

@@ -1,6 +1,6 @@
-using System.Windows;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.WPF.Settings.Utils;
+using RoutedEventArgs = System.Windows.RoutedEventArgs;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace VolumeTrayAppWPF.WPF.Settings.Pages;
@@ -8,8 +8,9 @@ namespace VolumeTrayAppWPF.WPF.Settings.Pages;
 /// <summary>
 /// Devices settings page. Hosts the defaulting and per-state visibility toggles for the device list.
 /// Tray-menu device-link toggles live on <see cref="TrayIconPage"/>. Every toggle is Tag-bound so
-/// SettingsBindings.HandleBoolToggle does the dispatch; this page only manages seed-from-settings
-/// plus child-card visibility for the cascading "even if disabled" sections.
+/// SettingsBindings.HandleBoolToggle does the dispatch; the cascading "even if disabled" child cards
+/// drive their Visibility off XAML bindings against the parent toggles (InverseBoolToVisibility and
+/// AndBoolToVisibility), so this code-behind only manages seed-from-settings + the bool dispatch.
 /// </summary>
 public partial class DevicesPage : UserControl
 {
@@ -37,8 +38,6 @@ public partial class DevicesPage : UserControl
             ShowDefaultCommsRecordingEvenIfDisabledToggle.IsChecked = settings.ShowDefaultCommsRecordingDeviceEvenIfDisabled;
 
             ShowNotPresentToggle.IsChecked = settings.ShowNotPresentDevices;
-
-            UpdateChildCardVisibility();
         }
         finally
         {
@@ -50,44 +49,7 @@ public partial class DevicesPage : UserControl
     {
         if (_settings == null) return;
         SettingsBindings.HandleBoolToggle(sender, _settings, SaveAndNotify, () => _suppressChangeEvents);
-
-        UpdateChildCardVisibility();
     }
 
-    /// <summary>
-    /// Hides the cascading child cards under their parent toggles per the precedence the user spec
-    /// requires:
-    ///   * "show default ... even if disabled" only matters while the broad "show disabled" gate is OFF
-    ///   * the recording-side children all hide when the master ShowRecordingDevices is OFF
-    /// Visibility, not IsEnabled - the off-state UI stays clean rather than parading dimmed toggles
-    /// the user can't act on.
-    /// </summary>
-    private void UpdateChildCardVisibility()
-    {
-        if (_settings == null) return;
-
-        bool playbackDisabledShown = _settings.ShowDisabledPlaybackDevices;
-        ShowDefaultPlaybackEvenIfDisabledCard.Visibility = playbackDisabledShown ? Visibility.Collapsed : Visibility.Visible;
-        ShowDefaultCommsPlaybackEvenIfDisabledCard.Visibility = playbackDisabledShown ? Visibility.Collapsed : Visibility.Visible;
-
-        bool recordingShown = _settings.ShowRecordingDevices;
-        Visibility recordingChildVis = recordingShown ? Visibility.Visible : Visibility.Collapsed;
-        ShowDisabledRecordingCard.Visibility = recordingChildVis;
-
-        // The "even if disabled" recording cards live under the recording master AND under the
-        // recording-disabled gate - both must be in the right state for the cards to show.
-        bool recordingDisabledShown = _settings.ShowDisabledRecordingDevices;
-        Visibility evenIfDisabledVis = recordingShown && !recordingDisabledShown
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ShowDefaultRecordingEvenIfDisabledCard.Visibility = evenIfDisabledVis;
-        ShowDefaultCommsRecordingEvenIfDisabledCard.Visibility = evenIfDisabledVis;
-    }
-
-    private void SaveAndNotify()
-    {
-        if (_settings == null) return;
-        _settings.Save();
-        _settings.RaiseChanged();
-    }
+    private void SaveAndNotify() => SettingsBindings.SaveAndNotify(_settings);
 }

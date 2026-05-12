@@ -6,7 +6,7 @@ namespace VolumeTrayAppWPF.Visuals;
 
 internal static class IconRenderingHelper
 {
-    public static uint GetTaskbarDpi()
+    public static uint GetTaskbarDPI()
     {
         IntPtr deviceContext = User32.GetDC(IntPtr.Zero);
         if (deviceContext == IntPtr.Zero) return 96;
@@ -22,7 +22,7 @@ internal static class IconRenderingHelper
         }
     }
 
-    public static int GetIconSizeForDpi(uint dpi)
+    public static int GetIconSizeForDPI(uint dpi)
     {
         int size = User32.GetSystemMetricsForDpi(User32.SM_CXSMICON, dpi);
         return size > 0 ? size : (int)Math.Round(16 * dpi / 96.0);

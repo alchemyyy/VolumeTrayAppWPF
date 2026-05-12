@@ -35,10 +35,15 @@ public sealed class TrayIconRenderer(AppTheme theme) : IDisposable
     private string? _backdropGlyph;
 
     // Lazy init to avoid static-constructor COM issues with trimming.
-    private static Typeface? _segoeFluent;
-    private static Typeface SegoeFluent => _segoeFluent ??=
-        new Typeface(new FontFamily("Segoe Fluent Icons"),
-            FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+    // Lazy<T> guarantees the value factory runs exactly once even under multi-thread access,
+    // unlike the previous non-atomic ??= which could allocate two Typefaces if RenderBitmap
+    // was called concurrently from the icon-generator and the tray-renderer paths.
+    private static readonly Lazy<Typeface> _segoeFluent = new(
+        () => new Typeface(
+            new FontFamily("Segoe Fluent Icons"),
+            FontStyles.Normal, FontWeights.Normal, FontStretches.Normal));
+
+    private static Typeface SegoeFluent => _segoeFluent.Value;
 
     /// <summary>
     /// Whether the taskbar is using light theme.
@@ -117,8 +122,8 @@ public sealed class TrayIconRenderer(AppTheme theme) : IDisposable
 
         _isDirty = false;
 
-        uint dpi = IconRenderingHelper.GetTaskbarDpi();
-        int iconSize = IconRenderingHelper.GetIconSizeForDpi(dpi);
+        uint dpi = IconRenderingHelper.GetTaskbarDPI();
+        int iconSize = IconRenderingHelper.GetIconSizeForDPI(dpi);
 
         Color foregroundColor = _customColor ?? theme.Foreground.For(IsLightTheme);
 

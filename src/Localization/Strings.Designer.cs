@@ -63,9 +63,9 @@ namespace VolumeTrayAppWPF.Localization {
         /// <summary>
         ///   Looks up a localized string similar to argb hex:.
         /// </summary>
-        public static string ColorPicker_ArgbHexLabel {
+        public static string ColorPicker_ARGBHexLabel {
             get {
-                return ResourceManager.GetString("ColorPicker_ArgbHexLabel", resourceCulture);
+                return ResourceManager.GetString("ColorPicker_ARGBHexLabel", resourceCulture);
             }
         }
         
@@ -153,9 +153,9 @@ namespace VolumeTrayAppWPF.Localization {
         /// <summary>
         ///   Looks up a localized string similar to rgba hex:.
         /// </summary>
-        public static string ColorPicker_RgbaHexLabel {
+        public static string ColorPicker_RGBAHexLabel {
             get {
-                return ResourceManager.GetString("ColorPicker_RgbaHexLabel", resourceCulture);
+                return ResourceManager.GetString("ColorPicker_RGBAHexLabel", resourceCulture);
             }
         }
         
@@ -817,33 +817,6 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Apply.
-        /// </summary>
-        public static string Settings_General_Apply_Button {
-            get {
-                return ResourceManager.GetString("Settings_General_Apply_Button", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Automatically save changes..
-        /// </summary>
-        public static string Settings_General_Autosave_Description {
-            get {
-                return ResourceManager.GetString("Settings_General_Autosave_Description", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Auto-save.
-        /// </summary>
-        public static string Settings_General_Autosave_Title {
-            get {
-                return ResourceManager.GetString("Settings_General_Autosave_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
         ///   Looks up a localized string similar to App icons.
         /// </summary>
         public static string Settings_General_AppIcons_Header {
@@ -1124,15 +1097,6 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to s.
-        /// </summary>
-        public static string Settings_General_Seconds_Suffix {
-            get {
-                return ResourceManager.GetString("Settings_General_Seconds_Suffix", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to General.
         /// </summary>
         public static string Settings_General_SectionHeader {
@@ -1408,15 +1372,6 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Hotkeys_OpenSettings_Title {
             get {
                 return ResourceManager.GetString("Settings_Hotkeys_OpenSettings_Title", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Remove.
-        /// </summary>
-        public static string Settings_Hotkeys_Remove_Button {
-            get {
-                return ResourceManager.GetString("Settings_Hotkeys_Remove_Button", resourceCulture);
             }
         }
         
@@ -2186,29 +2141,11 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Communications.
-        /// </summary>
-        public static string Tray_Communications {
-            get {
-                return ResourceManager.GetString("Tray_Communications", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to Exit.
         /// </summary>
         public static string Tray_Exit {
             get {
                 return ResourceManager.GetString("Tray_Exit", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Recording.
-        /// </summary>
-        public static string Tray_Recording {
-            get {
-                return ResourceManager.GetString("Tray_Recording", resourceCulture);
             }
         }
         
@@ -2227,15 +2164,6 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Tray_SoundDevices {
             get {
                 return ResourceManager.GetString("Tray_SoundDevices", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Sounds.
-        /// </summary>
-        public static string Tray_Sounds {
-            get {
-                return ResourceManager.GetString("Tray_Sounds", resourceCulture);
             }
         }
         
@@ -2353,6 +2281,114 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Uninstaller_UninstallingButton {
             get {
                 return ResourceManager.GetString("Uninstaller_UninstallingButton", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Windows Store.
+        /// </summary>
+        public static string Settings_General_WindowsStore_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_WindowsStore_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Running from the Microsoft Store install.
+        /// </summary>
+        public static string Settings_General_StoreRunning {
+            get {
+                return ResourceManager.GetString("Settings_General_StoreRunning", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Not installed from the Microsoft Store.
+        /// </summary>
+        public static string Settings_General_StoreNotInstalled {
+            get {
+                return ResourceManager.GetString("Settings_General_StoreNotInstalled", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Open flyout.
+        /// </summary>
+        public static string Settings_Hotkeys_OpenFlyout_Title {
+            get {
+                return ResourceManager.GetString("Settings_Hotkeys_OpenFlyout_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Show the volume flyout near the tray icon.
+        /// </summary>
+        public static string Settings_Hotkeys_OpenFlyout_Description {
+            get {
+                return ResourceManager.GetString("Settings_Hotkeys_OpenFlyout_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Static tray icon color.
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Override the tray icon color when Tray icon style is set to Static. Each variant falls back to the default when unset.
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Light theme static tray icon color.
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_LightTooltip {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_LightTooltip", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Dark theme static tray icon color.
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_DarkTooltip {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_DarkTooltip", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Context menu.
+        /// </summary>
+        public static string Settings_Theme_ContextMenu_Header {
+            get {
+                return ResourceManager.GetString("Settings_Theme_ContextMenu_Header", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Flyout.
+        /// </summary>
+        public static string Settings_Theme_Flyout_Header {
+            get {
+                return ResourceManager.GetString("Settings_Theme_Flyout_Header", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Tray icon.
+        /// </summary>
+        public static string Settings_Theme_TrayIcon_Header {
+            get {
+                return ResourceManager.GetString("Settings_Theme_TrayIcon_Header", resourceCulture);
             }
         }
     }

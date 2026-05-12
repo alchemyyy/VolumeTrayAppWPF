@@ -6,12 +6,14 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
     xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     mc:Ignorable="d"
     d:DesignWidth="660"
     d:DesignHeight="594"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils1:SettingsKeyboardNavigation.IsContentSection="True">
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_TrayIcon_SectionHeader}"/>
@@ -34,7 +36,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="ContextMenuPositionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="ContextMenuPosition" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="Classic" Content="{loc:Loc Settings_TrayIcon_MenuPosition_Classic}"/>
                     <ComboBoxItem Tag="Modern" Content="{loc:Loc Settings_TrayIcon_MenuPosition_Modern}"/>
@@ -47,7 +48,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayMenuPlaybackDeviceNameStyleCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayMenuPlaybackDeviceNameStyle" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="NameAndModel" Content="{loc:Loc Settings_TrayIcon_DeviceName_NameAndModel}"/>
                     <ComboBoxItem Tag="Name" Content="{loc:Loc Settings_TrayIcon_DeviceName_Name}"/>
@@ -61,7 +61,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayMenuRecordingDeviceNameStyleCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayMenuRecordingDeviceNameStyle" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="NameAndModel" Content="{loc:Loc Settings_TrayIcon_DeviceName_NameAndModel}"/>
                     <ComboBoxItem Tag="Name" Content="{loc:Loc Settings_TrayIcon_DeviceName_Name}"/>
@@ -73,9 +72,9 @@
         <utils:SettingsCard Title="{loc:Loc Settings_TrayIcon_DeviceNameMaxLength_Title}"
                                Description="{loc:Loc Settings_TrayIcon_DeviceNameMaxLength_Description}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="TrayMenuDeviceNameMaxLengthBox"
-                                      Minimum="3" Maximum="200"/>
+                <local:NumericSpinner x:Name="TrayMenuDeviceNameMaxLengthBox"
+                                      Minimum="{x:Static models:AppSettings.TrayMenuDeviceNameMaxLengthMin}"
+                                      Maximum="{x:Static models:AppSettings.TrayMenuDeviceNameMaxLengthMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
@@ -129,7 +128,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayCtrlLeftClickActionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayCtrlLeftClickAction" SelectionChanged="EnumCombo_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
@@ -138,7 +136,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayAltLeftClickActionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayAltLeftClickAction" SelectionChanged="EnumCombo_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
@@ -147,7 +144,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayCtrlRightClickActionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayCtrlRightClickAction" SelectionChanged="EnumCombo_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
@@ -156,7 +152,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayAltRightClickActionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayAltRightClickAction" SelectionChanged="EnumCombo_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
@@ -165,7 +160,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayDoubleClickActionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayDoubleClickAction" SelectionChanged="EnumCombo_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
@@ -174,7 +168,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayCtrlDoubleLeftClickActionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayCtrlDoubleLeftClickAction" SelectionChanged="EnumCombo_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
@@ -183,7 +176,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="TrayAltDoubleLeftClickActionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="TrayAltDoubleLeftClickAction" SelectionChanged="EnumCombo_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>

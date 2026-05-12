@@ -6,12 +6,20 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
     mc:Ignorable="d"
     d:DesignWidth="660"
     d:DesignHeight="900"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils1:SettingsKeyboardNavigation.IsContentSection="True">
+    <UserControl.Resources>
+        <!-- Page-scoped because App.xaml only ships BoolToVisibility; the inverse + AND-of-bools
+             converters are only needed for the cascading "even if disabled" gates on this page. -->
+        <utils1:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <utils1:AndBoolToVisibilityConverter x:Key="AndBoolToVisibility"/>
+    </UserControl.Resources>
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_Devices_SectionHeader}"/>
 
@@ -40,10 +48,12 @@
         </utils:SettingsCard>
 
         <!-- "Even if disabled" entries are only meaningful while the broad disabled gate is OFF.
-             Hide them when ShowDisabledPlaybackDevices is on so the off-state UI stays uncluttered. -->
+             Hide them when ShowDisabledPlaybackDevices is on so the off-state UI stays uncluttered.
+             Visibility bound through the InverseBool converter so it follows the parent toggle live. -->
         <utils:SettingsCard x:Name="ShowDefaultPlaybackEvenIfDisabledCard"
                             Title="{loc:Loc Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Title}"
-                            Description="{loc:Loc Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Description}">
+                            Description="{loc:Loc Settings_Devices_ShowDefaultPlaybackEvenIfDisabled_Description}"
+                            Visibility="{Binding IsChecked, ElementName=ShowDisabledPlaybackToggle, Converter={StaticResource InverseBoolToVisibility}}">
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="ShowDefaultPlaybackEvenIfDisabledToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
@@ -54,7 +64,8 @@
 
         <utils:SettingsCard x:Name="ShowDefaultCommsPlaybackEvenIfDisabledCard"
                             Title="{loc:Loc Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Title}"
-                            Description="{loc:Loc Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Description}">
+                            Description="{loc:Loc Settings_Devices_ShowDefaultCommsPlaybackEvenIfDisabled_Description}"
+                            Visibility="{Binding IsChecked, ElementName=ShowDisabledPlaybackToggle, Converter={StaticResource InverseBoolToVisibility}}">
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="ShowDefaultCommsPlaybackEvenIfDisabledToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
@@ -87,10 +98,12 @@
 
         <!-- Recording-side children: hidden whenever the master ShowRecordingDevices is off so the
              off-state UI doesn't dangle dead toggles. The "even if disabled" pair is further gated
-             on ShowDisabledRecordingDevices being off, mirroring the playback section above. -->
+             on ShowDisabledRecordingDevices being off, mirroring the playback section above.
+             Visibility flows from XAML bindings against the parent toggles, no imperative refresh. -->
         <utils:SettingsCard x:Name="ShowDisabledRecordingCard"
                             Title="{loc:Loc Settings_Devices_ShowDisabledRecording_Title}"
-                            Description="{loc:Loc Settings_Devices_ShowDisabledRecording_Description}">
+                            Description="{loc:Loc Settings_Devices_ShowDisabledRecording_Description}"
+                            Visibility="{Binding IsChecked, ElementName=ShowRecordingToggle, Converter={StaticResource BoolToVisibility}}">
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="ShowDisabledRecordingToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
@@ -102,6 +115,13 @@
         <utils:SettingsCard x:Name="ShowDefaultRecordingEvenIfDisabledCard"
                             Title="{loc:Loc Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Title}"
                             Description="{loc:Loc Settings_Devices_ShowDefaultRecordingEvenIfDisabled_Description}">
+            <utils:SettingsCard.Visibility>
+                <MultiBinding Converter="{StaticResource AndBoolToVisibility}"
+                              ConverterParameter="01">
+                    <Binding ElementName="ShowRecordingToggle" Path="IsChecked"/>
+                    <Binding ElementName="ShowDisabledRecordingToggle" Path="IsChecked"/>
+                </MultiBinding>
+            </utils:SettingsCard.Visibility>
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="ShowDefaultRecordingEvenIfDisabledToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
@@ -113,6 +133,13 @@
         <utils:SettingsCard x:Name="ShowDefaultCommsRecordingEvenIfDisabledCard"
                             Title="{loc:Loc Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Title}"
                             Description="{loc:Loc Settings_Devices_ShowDefaultCommsRecordingEvenIfDisabled_Description}">
+            <utils:SettingsCard.Visibility>
+                <MultiBinding Converter="{StaticResource AndBoolToVisibility}"
+                              ConverterParameter="01">
+                    <Binding ElementName="ShowRecordingToggle" Path="IsChecked"/>
+                    <Binding ElementName="ShowDisabledRecordingToggle" Path="IsChecked"/>
+                </MultiBinding>
+            </utils:SettingsCard.Visibility>
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="ShowDefaultCommsRecordingEvenIfDisabledToggle"
                           Style="{StaticResource ToggleSwitchStyle}"

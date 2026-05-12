@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace VolumeTrayAppWPF.Audio.Interop;
+namespace VolumeTrayAppWPF.Interop;
 
 // Win32 + COM bindings used by AppIconResolver. Mirrors the trimmed-down subset of EarTrumpet's
 // interop layout that the resolver actually consumes:
@@ -12,14 +12,17 @@ namespace VolumeTrayAppWPF.Audio.Interop;
 //   - Shell-namespace icons (file):   SHCreateItemFromParsingName + IShellItemImageFactory.GetImage
 //   - UWP detection + AUMID lookup:   GetPackageId / GetApplicationUserModelId
 //   - Indirect icon path parser:      PathParseIconLocationW
+//
+// Lives in src/Interop/ (not Audio/Interop/) because the surface has zero audio concerns - it's
+// shell + PE-resource interop that happens to be consumed by AppIconResolver. Process P/Invokes
+// (OpenProcess / CloseHandle / PROCESS_QUERY_LIMITED_INFORMATION) live in Kernel32.cs;
+// DestroyIcon lives in User32.cs; S_OK / ERROR_INSUFFICIENT_BUFFER live in NativeErrors.cs.
 internal static class IconExtraction
 {
     public const int KF_FLAG_DONT_VERIFY = 0x00004000;
     public const int LOAD_LIBRARY_AS_DATAFILE = 0x02;
     public const int LOAD_LIBRARY_AS_IMAGE_RESOURCE = 0x20;
     public const int MAX_AUMID_LEN = 512;
-    public const int ERROR_INSUFFICIENT_BUFFER = 122;
-    public const int S_OK = 0;
 
     // Standard PE resource type ordinals (winuser.h: MAKEINTRESOURCE).
     public static readonly IntPtr RT_ICON = new(3);
@@ -27,13 +30,7 @@ internal static class IconExtraction
 
     // Known-folder GUID for the Apps folder. Used as the parent folder when resolving a UWP AUMID
     // through SHCreateItemInKnownFolder.
-    public static readonly Guid AppsFolderId = new("1E87508D-89C2-42F0-8A7E-645A0F50CA58");
-
-    [Flags]
-    public enum ProcessFlags : uint
-    {
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000,
-    }
+    public static readonly Guid AppsFolderID = new("1E87508D-89C2-42F0-8A7E-645A0F50CA58");
 
     public enum LoadImageFlags : uint
     {
@@ -58,7 +55,7 @@ internal static class IconExtraction
         public int cy;
     }
 
-    // -- kernel32
+    // -- kernel32 (icon-resource family only; process P/Invokes live in Kernel32.cs)
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr LoadLibraryExW(
@@ -69,16 +66,6 @@ internal static class IconExtraction
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool FreeLibrary(IntPtr hModule);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public static extern IntPtr OpenProcess(
-        ProcessFlags dwDesiredAccess,
-        [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle,
-        uint dwProcessId);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool CloseHandle(IntPtr hObject);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "FindResourceW")]
     public static extern IntPtr FindResource(IntPtr hModule, IntPtr lpName, IntPtr lpType);
@@ -101,7 +88,7 @@ internal static class IconExtraction
         ref int applicationUserModelIdLength,
         [MarshalAs(UnmanagedType.LPWStr)] StringBuilder applicationUserModelId);
 
-    // -- user32
+    // -- user32 (icon-resource family only; DestroyIcon lives in User32.cs)
 
     [DllImport("user32.dll")]
     public static extern int LookupIconIdFromDirectoryEx(
@@ -120,10 +107,6 @@ internal static class IconExtraction
         int cxDesired,
         int cyDesired,
         LoadImageFlags Flags);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool DestroyIcon(IntPtr hIcon);
 
     // -- shlwapi
 

@@ -1,5 +1,5 @@
 ﻿<Window
-    x:Class="VolumeTrayAppWPF.WPF.TAWPFColorPicker"
+    x:Class="VolumeTrayAppWPF.WPF.TAColorPicker"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
@@ -34,9 +34,10 @@
         <!-- ChannelSliderProgressButtonStyle / ChannelSliderTrackButtonStyle / ChannelSliderThumbStyle:
              Slim 4px-thick track, ThemeSliderTrack / ThemeSliderProgress brushes, capsule thumb.
              Vertical orientation for stacking R / G / B columns side-by-side. -->
-        <Style x:Key="ChannelSliderProgressButtonStyle" TargetType="RepeatButton">
+        <!-- Filled track-fill (above thumb, vertical orientation): ThemeSliderProgress, 4-DIP wide.
+             BasedOn the shared SliderTrackRepeatButtonStyle for common setters. -->
+        <Style x:Key="ChannelSliderProgressButtonStyle" TargetType="RepeatButton" BasedOn="{StaticResource SliderTrackRepeatButtonStyle}">
             <Setter Property="Background" Value="{DynamicResource ThemeSliderProgress}"/>
-            <Setter Property="Focusable" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
@@ -48,9 +49,8 @@
             </Setter>
         </Style>
 
-        <Style x:Key="ChannelSliderTrackButtonStyle" TargetType="RepeatButton">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Focusable" Value="False"/>
+        <!-- Empty track-fill (below thumb): transparent, 4-DIP wide, no corner radius. -->
+        <Style x:Key="ChannelSliderTrackButtonStyle" TargetType="RepeatButton" BasedOn="{StaticResource SliderTrackRepeatButtonStyle}">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
@@ -142,17 +142,10 @@
              through Slider.Foreground (TemplateBinding chain: Track.Thumb Background = Foreground,
              Thumb template Border Background = Background) so code can mutate the swatch the user sees
              on the grip without hunting through the visual tree. -->
-        <Style x:Key="HueAlphaSliderTrackButtonStyle" TargetType="RepeatButton">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RepeatButton">
-                        <Border Background="{TemplateBinding Background}"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <!-- Hue / alpha bar repeat-button: no width / corner radius (the Border fills its slot to
+             the slider's outer chrome which carries the rounded corners). BasedOn picks up Focusable
+             False and the default transparent + template chassis with no additional overrides. -->
+        <Style x:Key="HueAlphaSliderTrackButtonStyle" TargetType="RepeatButton" BasedOn="{StaticResource SliderTrackRepeatButtonStyle}"/>
 
         <Style x:Key="HueAlphaSliderThumbStyle" TargetType="Thumb">
             <Setter Property="Focusable" Value="False"/>
@@ -360,6 +353,7 @@
                     <Slider Grid.Row="0" Grid.RowSpan="2" Grid.Column="2"
                             x:Name="HueSlider" Tag="H"
                             Style="{StaticResource HueAlphaSliderStyle}"
+                            utils:SliderClickDragBehavior.Enable="True"
                             Minimum="0" Maximum="360" SmallChange="1" LargeChange="30">
                         <Slider.Background>
                             <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
@@ -376,14 +370,21 @@
                     <Slider Grid.Row="0" Grid.RowSpan="2" Grid.Column="4"
                             x:Name="AlphaSlider" Tag="A"
                             Style="{StaticResource HueAlphaSliderStyle}"
+                            utils:SliderClickDragBehavior.Enable="True"
                             Minimum="0" Maximum="255" SmallChange="1" LargeChange="16"
                             IsDirectionReversed="True"/>
                     <!-- Sliders fill row 1 (the bar/slider band) - no explicit Height, so changing the
                          row 1 height in one place re-flows everything. Tag carries the channel name
                          so a single set of mouse / value-changed handlers in the code-behind covers all three. -->
-                    <Slider Grid.Row="1" Grid.Column="6" x:Name="RSlider" Tag="R" Style="{StaticResource ChannelSliderStyle}"/>
-                    <Slider Grid.Row="1" Grid.Column="8" x:Name="GSlider" Tag="G" Style="{StaticResource ChannelSliderStyle}"/>
-                    <Slider Grid.Row="1" Grid.Column="10" x:Name="BSlider" Tag="B" Style="{StaticResource ChannelSliderStyle}"/>
+                    <Slider Grid.Row="1" Grid.Column="6" x:Name="RSlider" Tag="R"
+                            utils:SliderClickDragBehavior.Enable="True"
+                            Style="{StaticResource ChannelSliderStyle}"/>
+                    <Slider Grid.Row="1" Grid.Column="8" x:Name="GSlider" Tag="G"
+                            utils:SliderClickDragBehavior.Enable="True"
+                            Style="{StaticResource ChannelSliderStyle}"/>
+                    <Slider Grid.Row="1" Grid.Column="10" x:Name="BSlider" Tag="B"
+                            utils:SliderClickDragBehavior.Enable="True"
+                            Style="{StaticResource ChannelSliderStyle}"/>
 
                     <!-- Channel labels (row 2). FreePick has no label. -->
                     <TextBlock Grid.Row="2" Grid.Column="2" Text="{loc:Loc ColorPicker_ChannelLabel_Hue}" Style="{StaticResource ChannelColumnFooterStyle}"/>
@@ -432,15 +433,15 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0"
-                                   Text="{loc:Loc ColorPicker_RgbaHexLabel}"
+                                   Text="{loc:Loc ColorPicker_RGBAHexLabel}"
                                    Style="{StaticResource SettingTitleStyle}"
                                    VerticalAlignment="Center"/>
                         <TextBox Grid.Column="2"
-                                 x:Name="RgbaBox"
+                                 x:Name="RGBABox"
                                  Style="{StaticResource SettingsTextBoxStyle}"
                                  FontFamily="Consolas, Courier New"
                                  Width="94"
-                                 TextChanged="RgbaBox_TextChanged"/>
+                                 TextChanged="RGBABox_TextChanged"/>
                     </Grid>
 
                     <Grid Grid.Row="2" Grid.Column="0">
@@ -450,15 +451,15 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0"
-                                   Text="{loc:Loc ColorPicker_ArgbHexLabel}"
+                                   Text="{loc:Loc ColorPicker_ARGBHexLabel}"
                                    Style="{StaticResource SettingTitleStyle}"
                                    VerticalAlignment="Center"/>
                         <TextBox Grid.Column="2"
-                                 x:Name="ArgbBox"
+                                 x:Name="ARGBBox"
                                  Style="{StaticResource SettingsTextBoxStyle}"
                                  FontFamily="Consolas, Courier New"
                                  Width="94"
-                                 TextChanged="ArgbBox_TextChanged"/>
+                                 TextChanged="ARGBBox_TextChanged"/>
                     </Grid>
 
                     <!-- Default + Reset span the bottom grid's cols 2-10 (the 9 columns mirroring the

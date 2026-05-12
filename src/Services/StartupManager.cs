@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
+using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Services;
 
@@ -14,18 +15,30 @@ namespace VolumeTrayAppWPF.Services;
 /// (ProgramFiles, then LocalAppData, then the currently running exe) so a portable build only
 /// "wins" the shortcut when no installed copy exists.
 /// On every launch the shortcut is validated against the known install paths
-/// (<see cref="InstallationService.LocalAppDataInstallExe"/>
-/// / <see cref="InstallationService.ProgramFilesInstallExe"/>),
+/// (<see cref="InstallationService.LocalAppDataInstallEXE"/>
+/// / <see cref="InstallationService.ProgramFilesInstallEXE"/>),
 /// and a stale target gets repaired to the running install - see <see cref="RepairShortcutIfStale"/>.
 /// </summary>
 public static class StartupManager
 {
     private const string LegacyRunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    private static string ShortcutPath =>
+    /// <summary>
+    /// Canonical shell:startup .lnk path for the app.
+    /// Public so <see cref="VolumeTrayAppWPF.Utils.UninstallScript"/> can target the same file from its bat
+    /// without rebuilding the path string locally.
+    /// </summary>
+    public static string ShortcutPath =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.Startup),
             Program.ApplicationName + ".lnk");
+
+    /// <summary>
+    /// Registry-name + value-name of the legacy HKCU autostart entry. Kept here so the in-app removal
+    /// (<see cref="RemoveLegacyRunKey"/>) and the uninstall .bat (<see cref="VolumeTrayAppWPF.Utils.UninstallScript"/>)
+    /// target the same key.
+    /// </summary>
+    public static string LegacyRunKeyRegistryPath => LegacyRunKeyPath;
 
     public static bool GetRunOnStartup()
     {
@@ -86,8 +99,8 @@ public static class StartupManager
             string? current = TryReadShortcutTarget(lnk);
             if (!string.IsNullOrEmpty(current)
                 && string.Equals(
-                    NormalizePath(current),
-                    NormalizePath(desired),
+                    PathNormalization.Normalize(current),
+                    PathNormalization.Normalize(desired),
                     StringComparison.OrdinalIgnoreCase))
                 return;
             CreateShortcut(lnk, desired);
@@ -161,8 +174,8 @@ public static class StartupManager
             string? target = TryReadShortcutTarget(lnk);
             if (IsValidInstallationTarget(target)) return;
 
-            string? runningInstallExe = GetRunningInstallExePathOrNull();
-            if (runningInstallExe != null) CreateShortcut(lnk, runningInstallExe);
+            string? runningInstallEXE = GetRunningInstallEXEPathOrNull();
+            if (runningInstallEXE != null) CreateShortcut(lnk, runningInstallEXE);
         }
         catch (Exception ex)
         {
@@ -176,26 +189,26 @@ public static class StartupManager
 
         // Only count one of the known install locations as "valid" -
         // a stale shortcut left behind pointing at someone's old portable build under Downloads\ shouldn't pass.
-        string normalized = NormalizePath(targetPath);
+        string normalized = PathNormalization.Normalize(targetPath);
         return string.Equals(
-                normalized, NormalizePath(InstallationService.LocalAppDataInstallExe),
+                normalized, PathNormalization.Normalize(InstallationService.LocalAppDataInstallEXE),
                 StringComparison.OrdinalIgnoreCase)
             || string.Equals(
-                normalized, NormalizePath(InstallationService.ProgramFilesInstallExe),
+                normalized, PathNormalization.Normalize(InstallationService.ProgramFilesInstallEXE),
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? GetRunningInstallExePathOrNull()
+    private static string? GetRunningInstallEXEPathOrNull()
     {
         try
         {
             InstallationInfo? hit = InstallationService.DetectAll()
                 .FirstOrDefault(i => i is { Status: InstallStatus.CurrentlyRunning, Scope: InstallScope.LocalAppData or InstallScope.ProgramFiles });
-            return hit?.InstallExePath;
+            return hit?.InstallEXEPath;
         }
         catch (Exception ex)
         {
-            WPFLog.Log($"StartupManager.GetRunningInstallExePathOrNull: {ex.Message}");
+            WPFLog.Log($"StartupManager.GetRunningInstallEXEPathOrNull: {ex.Message}");
             return null;
         }
     }
@@ -220,12 +233,12 @@ public static class StartupManager
         {
             if (exclude != InstallScope.ProgramFiles)
             {
-                string programFiles = InstallationService.ProgramFilesInstallExe;
+                string programFiles = InstallationService.ProgramFilesInstallEXE;
                 if (File.Exists(programFiles)) return programFiles;
             }
             if (exclude != InstallScope.LocalAppData)
             {
-                string localAppData = InstallationService.LocalAppDataInstallExe;
+                string localAppData = InstallationService.LocalAppDataInstallEXE;
                 if (File.Exists(localAppData)) return localAppData;
             }
 
@@ -239,11 +252,11 @@ public static class StartupManager
             if (exclude.HasValue)
             {
                 string excludedExe = exclude.Value == InstallScope.ProgramFiles
-                    ? InstallationService.ProgramFilesInstallExe
-                    : InstallationService.LocalAppDataInstallExe;
+                    ? InstallationService.ProgramFilesInstallEXE
+                    : InstallationService.LocalAppDataInstallEXE;
                 if (string.Equals(
-                        NormalizePath(running),
-                        NormalizePath(excludedExe),
+                        PathNormalization.Normalize(running),
+                        PathNormalization.Normalize(excludedExe),
                         StringComparison.OrdinalIgnoreCase))
                     return string.Empty;
             }
@@ -255,19 +268,6 @@ public static class StartupManager
             WPFLog.Log($"StartupManager.ResolveStartupTarget: {ex.Message}");
         }
         return string.Empty;
-    }
-
-    private static string NormalizePath(string path)
-    {
-        if (string.IsNullOrEmpty(path)) return string.Empty;
-        try
-        {
-            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-        catch
-        {
-            return path;
-        }
     }
 
     // -- IShellLink COM glue --------------------------------------------------------
@@ -295,7 +295,7 @@ public static class StartupManager
         }
         finally
         {
-            if (linkObj != null) Marshal.FinalReleaseComObject(linkObj);
+            Safe.Release(linkObj);
         }
     }
 
@@ -327,7 +327,7 @@ public static class StartupManager
         }
         finally
         {
-            if (linkObj != null) Marshal.FinalReleaseComObject(linkObj);
+            Safe.Release(linkObj);
         }
     }
 

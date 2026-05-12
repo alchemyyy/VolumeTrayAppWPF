@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using VolumeTrayAppWPF.Interop;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -9,17 +10,9 @@ namespace VolumeTrayAppWPF.Audio;
 // this class only resolves a PID to a display name + image path.
 // QueryFullProcessImageName works against UWP and other restricted processes that
 // Process.MainModule.FileName cannot reach, so we go straight to the kernel32 API.
+// OpenProcess / CloseHandle / PROCESS_QUERY_LIMITED_INFORMATION live in Interop/Kernel32.cs.
 internal static class ProcessHelper
 {
-    private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwProcessId);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(IntPtr hObject);
-
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool QueryFullProcessImageNameW(IntPtr hProcess, uint dwFlags, StringBuilder lpExeName, ref uint lpdwSize);
@@ -31,7 +24,7 @@ internal static class ProcessHelper
     {
         if (processId == 0) return null;
 
-        IntPtr handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        IntPtr handle = Kernel32.OpenProcess(Kernel32.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
         if (handle == IntPtr.Zero) return null;
 
         try
@@ -41,7 +34,7 @@ internal static class ProcessHelper
             if (QueryFullProcessImageNameW(handle, 0, buffer, ref size))
                 return buffer.ToString(0, (int)size);
         }
-        finally { CloseHandle(handle); }
+        finally { Kernel32.CloseHandle(handle); }
 
         return null;
     }

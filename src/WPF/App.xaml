@@ -30,6 +30,15 @@
             <!-- Tray glyph (Segoe MDL2 / Fluent codepoint; runtime value comes from theme) -->
             <sys:String x:Key="GlyphSettings">&#xE713;</sys:String>
 
+            <!-- Single source of truth for the Fluent Icons font.
+                 XAML consumers should use FontFamily="{StaticResource IconFontFamily}"
+                 instead of hardcoding "Segoe Fluent Icons" inline. -->
+            <FontFamily x:Key="IconFontFamily">Segoe Fluent Icons</FontFamily>
+
+            <!-- ContextMenu font size; the implicit MenuItem style consumes this so the menu
+                 sizes consistently without per-instance assignment in code-behind. -->
+            <sys:Double x:Key="ContextMenuFontSize">15</sys:Double>
+
             <!-- Slider thumb (capsule defaults). All values are overwritten at runtime by App.xaml.cs
                  from the user-selected SliderThumbGlyphOption; the literals here are the at-rest design-time
                  fallback so the WPF designer / first-run before settings load shows a coherent thumb. -->
@@ -104,7 +113,7 @@
                  Tags are set in App.xaml.cs DissolveSeparatorsIntoNeighbors. -->
             <Style TargetType="MenuItem">
                 <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
-                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="FontSize" Value="{DynamicResource ContextMenuFontSize}"/>
                 <Setter Property="FontWeight" Value="Normal"/>
                 <Setter Property="Padding" Value="6,6"/>
                 <Setter Property="Margin" Value="0"/>
@@ -215,6 +224,40 @@
 
             <!-- === SETTINGS WINDOW STYLES === -->
 
+            <!-- Base for the family of transparent, rounded, hover-highlighting Button styles
+                 (SpinnerButtonStyle, DeviceIconButtonStyle, HeaderIconButtonStyle, and similar
+                 icon buttons across the flyout and settings chrome). Derived styles inherit the
+                 common setters (Background, BorderThickness, Cursor, FocusVisualStyle,
+                 ShowKeyboardFocus) and supply their own Template when the CornerRadius / hover
+                 brush identity differs from this default (CornerRadiusMedium + ThemeHover/Pressed). -->
+            <Style x:Key="TransparentRoundedButtonBase" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Border"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="{DynamicResource CornerRadiusMedium}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemePressed}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- Windows 11-style Toggle Switch -->
             <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
                 <Setter Property="Focusable" Value="True"/>
@@ -318,18 +361,16 @@
                 </Setter>
             </Style>
 
-            <!-- Settings Navigation Action (Button that looks like a nav item) -->
-            <Style x:Key="NavActionStyle" TargetType="Button">
-                <Setter Property="Background" Value="Transparent"/>
+            <!-- Settings Navigation Action (Button that looks like a nav item).
+                 Inherits common transparent-button setters from the base; overrides template to add
+                 the left-edge indicator slot that matches NavItemStyle's selection bar. -->
+            <Style x:Key="NavActionStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
                 <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
                 <Setter Property="Padding" Value="12,10"/>
                 <Setter Property="Margin" Value="4,2"/>
                 <Setter Property="HorizontalContentAlignment" Value="Left"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
-                <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="FontSize" Value="14"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -456,6 +497,7 @@
                 <Setter Property="Height" Value="32"/>
                 <Setter Property="Padding" Value="12,0"/>
                 <Setter Property="FontSize" Value="14"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
                 <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                 <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
@@ -541,16 +583,15 @@
                 </Setter>
             </Style>
 
-            <!-- Settings Button -->
-            <Style x:Key="SettingsButtonStyle" TargetType="Button">
+            <!-- Settings Button. Uses ThemeControlBackground (filled rest state) instead of the
+                 transparent base; full template override is required because the template adds an
+                 IsEnabled=false opacity setter that the base lacks. Common setters
+                 (BorderThickness, Cursor, FocusVisualStyle, ShowKeyboardFocus) inherit from base. -->
+            <Style x:Key="SettingsButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
                 <Setter Property="Background" Value="{DynamicResource ThemeControlBackground}"/>
                 <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
                 <Setter Property="BorderBrush" Value="Transparent"/>
-                <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="Padding" Value="12,6"/>
-                <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -586,13 +627,11 @@
                  ColorRowSwatchStyle below resolves it from per-section UserControls). -->
             <Thickness x:Key="ColorSwatchMargin">0,0,6,0</Thickness>
 
-            <!-- Color Swatch Button -->
-            <Style x:Key="ColorSwatchStyle" TargetType="Button">
+            <!-- Color Swatch Button. Inherits the common transparent-button setters from the base;
+                 overrides the template entirely (border-accent hover paint, no rounded ContentPresenter triggers). -->
+            <Style x:Key="ColorSwatchStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
                 <Setter Property="Width" Value="32"/>
                 <Setter Property="Height" Value="28"/>
-                <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -620,17 +659,14 @@
                 <Setter Property="Margin" Value="{StaticResource ColorSwatchMargin}"/>
             </Style>
 
-            <!-- Settings Window NumberBox spinner button -->
-            <Style x:Key="SpinnerButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="Transparent"/>
+            <!-- Settings Window NumberBox spinner button.
+                 Overrides the base template only to swap CornerRadiusMedium for CornerRadiusSmall;
+                 every other setter and trigger flows from TransparentRoundedButtonBase. -->
+            <Style x:Key="SpinnerButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
                 <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
-                <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
                 <Setter Property="FontSize" Value="8"/>
-                <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Focusable" Value="False"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -691,6 +727,23 @@
                                     <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeTextBoxFocused}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Base for slider track RepeatButtons: the tiny filled / empty rectangles that paint
+                 the left/right (or top/bottom) of a Slider's Track. Common pieces: Focusable=False,
+                 plus a Border template that fills the button bounds and respects TemplateBinding
+                 Background so the derived style sets the brush. Derived styles set Width or Height
+                 (orientation-specific) and CornerRadius when needed. -->
+            <Style x:Key="SliderTrackRepeatButtonStyle" TargetType="RepeatButton">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RepeatButton">
+                            <Border Background="{TemplateBinding Background}"/>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
@@ -886,17 +939,15 @@
                 </Setter>
             </Style>
 
-            <!-- === Caption Buttons (Win11 chrome) === -->
-            <Style x:Key="CaptionButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="Transparent"/>
+            <!-- === Caption Buttons (Win11 chrome) ===
+                 Square (zero CornerRadius) so the Win11 title-bar hover pill paints corner-to-corner;
+                 overrides the base template for that reason while keeping the rest of the base intact. -->
+            <Style x:Key="CaptionButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
                 <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
-                <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="Width" Value="46"/>
                 <Setter Property="Height" Value="32"/>
                 <Setter Property="FontFamily" Value="Segoe Fluent Icons"/>
                 <Setter Property="FontSize" Value="10"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -916,16 +967,15 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="CaptionCloseButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="Transparent"/>
+            <!-- Caption close button: same shape as CaptionButton but hover/pressed paint the
+                 red Win11 close brushes and flip the glyph fg to white. BasedOn the transparent base
+                 for the common setters; full template override drives the close-specific triggers. -->
+            <Style x:Key="CaptionCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource TransparentRoundedButtonBase}">
                 <Setter Property="Foreground" Value="{DynamicResource ThemeForeground}"/>
-                <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="Width" Value="46"/>
                 <Setter Property="Height" Value="32"/>
                 <Setter Property="FontFamily" Value="Segoe Fluent Icons"/>
                 <Setter Property="FontSize" Value="10"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                <Setter Property="utils1:KeyboardFocusBehavior.ShowKeyboardFocus" Value="True"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -1035,6 +1085,15 @@
             <Style x:Key="SettingsCardControlPanel" TargetType="StackPanel">
                 <Setter Property="Grid.Column" Value="1"/>
                 <Setter Property="Orientation" Value="Horizontal"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+
+            <!-- Implicit NumericSpinner style: every settings-page spinner uses Width=100 +
+                 VerticalAlignment=Center, so hoist those two setters out of the per-site attributes.
+                 Per-site overrides still win (the keyed DwellTimeSpinnerStyle below re-asserts both
+                 values for the same shape). -->
+            <Style TargetType="{x:Type local:NumericSpinner}">
+                <Setter Property="Width" Value="100"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
             </Style>
 

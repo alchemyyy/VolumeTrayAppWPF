@@ -13,21 +13,21 @@
     d:DesignWidth="660"
     d:DesignHeight="594"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils1:SettingsKeyboardNavigation.IsContentSection="True">
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_Theme_SectionHeader}"/>
 
         <TextBlock Text="{loc:Loc Settings_Theme_ContextMenu_Header}"
-                   Style="{StaticResource SettingTitleStyle}"
-                   FontWeight="SemiBold"
-                   Margin="0,0,0,8"/>
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
 
         <utils:SettingsCard Title="{loc:Loc Settings_Theme_FontSize_Title}"
                                Description="{loc:Loc Settings_Theme_FontSize_Description}">
             <utils:SettingsCard.Control>
                 <local:NumericSpinner Width="100" VerticalAlignment="Center"
                                       x:Name="ContextMenuFontSizeBox"
-                                      Minimum="8" Maximum="48"/>
+                                      Minimum="{x:Static models:AppSettings.ContextMenuFontSizeMin}"
+                                      Maximum="{x:Static models:AppSettings.ContextMenuFontSizeMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 

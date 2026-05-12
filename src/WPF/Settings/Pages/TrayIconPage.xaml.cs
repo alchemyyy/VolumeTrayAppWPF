@@ -114,10 +114,5 @@ public partial class TrayIconPage : UserControl
             sender, _settings, SaveAndNotify, () => _suppressChangeEvents, this);
     }
 
-    private void SaveAndNotify()
-    {
-        if (_settings == null) return;
-        _settings.Save();
-        _settings.RaiseChanged();
-    }
+    private void SaveAndNotify() => SettingsBindings.SaveAndNotify(_settings);
 }

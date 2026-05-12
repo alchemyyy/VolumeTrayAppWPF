@@ -54,8 +54,8 @@ internal interface IPolicyConfig
     void SetEndpointVisibility([MarshalAs(UnmanagedType.LPWStr)] string wszDeviceId, [MarshalAs(UnmanagedType.I2)] short isVisible);
 }
 
-// CoCreate target. Cast `new PolicyConfigClientComObject()` to IPolicyConfig and the runtime
+// CoCreate target. Cast `new PolicyConfigClientCOMObject()` to IPolicyConfig and the runtime
 // triggers CoCreateInstance with this CLSID.
 [ComImport]
 [Guid("870AF99C-171D-4F9E-AF0D-E63DF40C2BC9")]
-internal class PolicyConfigClientComObject { }
+internal class PolicyConfigClientCOMObject { }

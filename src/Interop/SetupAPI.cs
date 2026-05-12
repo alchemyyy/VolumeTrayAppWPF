@@ -13,7 +13,8 @@ internal static class SetupAPI
     public const int DIGCF_PRESENT = 0x00000002;
 
     public const int ERROR_NO_MORE_ITEMS = 259;
-    public const int ERROR_INSUFFICIENT_BUFFER = 122;
+    // ERROR_INSUFFICIENT_BUFFER moved to NativeErrors.cs. Unused inside SetupAPI; consumers that
+    // need it can read NativeErrors.ERROR_INSUFFICIENT_BUFFER directly.
 
     [StructLayout(LayoutKind.Sequential)]
     public struct SP_DEVINFO_DATA

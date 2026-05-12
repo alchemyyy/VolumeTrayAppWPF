@@ -93,8 +93,8 @@ internal interface IMMNotificationClient
     [PreserveSig] int OnPropertyValueChanged([MarshalAs(UnmanagedType.LPWStr)] string pwstrDeviceId, PROPERTYKEY key);
 }
 
-// CoCreate target for the device enumerator. Pattern: cast a `new MMDeviceEnumeratorComObject()`
+// CoCreate target for the device enumerator. Pattern: cast a `new MMDeviceEnumeratorCOMObject()`
 // to `IMMDeviceEnumerator` and the runtime triggers CoCreateInstance with this CLSID.
 [ComImport]
 [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-internal class MMDeviceEnumeratorComObject { }
+internal class MMDeviceEnumeratorCOMObject { }

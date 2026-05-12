@@ -27,6 +27,9 @@ public static class SettingsBindings
         ["RestoreFlyoutUndockedOnStartup"] = (s, v) => s.RestoreFlyoutUndockedOnStartup = v,
         ["FlyoutHeaderAtBottom"] = (s, v) => s.FlyoutHeaderAtBottom = v,
         ["UnifiedPeakMeter"] = (s, v) => s.UnifiedPeakMeter = v,
+        ["UseLogarithmicVolumeScale"] = (s, v) => s.UseLogarithmicVolumeScale = v,
+        ["PlayDeviceVolumeChangeSound"] = (s, v) => s.PlayDeviceVolumeChangeSound = v,
+        ["PlayAppVolumeChangeSound"] = (s, v) => s.PlayAppVolumeChangeSound = v,
         ["SetDefaultCommsToDefault"] = (s, v) => s.SetDefaultCommsToDefault = v,
         ["ShowDisabledPlaybackDevices"] = (s, v) => s.ShowDisabledPlaybackDevices = v,
         ["ShowDefaultPlaybackDeviceEvenIfDisabled"] = (s, v) => s.ShowDefaultPlaybackDeviceEvenIfDisabled = v,
@@ -123,7 +126,7 @@ public static class SettingsBindings
     /// applies the parsed enum to <paramref name="settings"/>,
     /// calls <paramref name="saveAndNotify"/>,
     /// then runs any registered post-action from the per-binding side-effect map
-    /// (e.g. ThemeMode -> ApplyDwmDarkMode).
+    /// (e.g. ThemeMode -> ApplyDWMDarkMode).
     /// </summary>
     public static void HandleEnumCombo<TOwner>(
         object sender,
@@ -179,5 +182,19 @@ public static class SettingsBindings
     public static void RestrictToDigits(TextCompositionEventArgs e)
     {
         if (e.Text.Any(c => !char.IsDigit(c))) e.Handled = true;
+    }
+
+    /// <summary>
+    /// Persists <paramref name="settings"/> to disk and fires the global Changed event so listeners
+    /// (App brush rebuild, audio retune logic, etc.) see the new values.
+    /// Null-safe: callers that bind their Save/RaiseChanged callback before AppSettings is injected
+    /// can keep passing the page's wrapper through BindSpinner / HandleBoolToggle without an extra
+    /// null guard at each site.
+    /// </summary>
+    public static void SaveAndNotify(AppSettings? settings)
+    {
+        if (settings == null) return;
+        settings.Save();
+        settings.RaiseChanged();
     }
 }

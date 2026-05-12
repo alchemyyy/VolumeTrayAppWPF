@@ -5,6 +5,7 @@
     xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
@@ -12,6 +13,7 @@
     d:DesignWidth="660"
     d:DesignHeight="594"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils1:SettingsKeyboardNavigation.IsContentSection="True">
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_General_SectionHeader}"/>
@@ -30,80 +32,45 @@
         <TextBlock Text="{loc:Loc Settings_General_Installation_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
 
-        <Border Style="{StaticResource SettingsCardStyle}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Style="{StaticResource SettingsCardTitlePanel}">
-                    <TextBlock Style="{StaticResource SettingTitleStyle}" Text="{loc:Loc Settings_General_LocalUser_Title}"/>
-                    <TextBlock x:Name="InstallLocalAppDataStatusText"
-                               Style="{StaticResource SettingDescriptionStyle}"
-                               Text="..."/>
-                </StackPanel>
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
+        <!-- Install rows. Status string flows into SettingsCard.Description from code-behind
+             (RefreshInstallationSection); the button-pair sits in SettingsCard.Control. Install /
+             Uninstall buttons toggle Visibility based on InstallStatus, set imperatively. -->
+        <utils:SettingsCard x:Name="InstallLocalAppDataCard"
+                            Title="{loc:Loc Settings_General_LocalUser_Title}">
+            <utils:SettingsCard.Control>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="InstallLocalAppDataButton"
                             Style="{StaticResource SettingsButtonStyle}"
                             Content="{loc:Loc Settings_General_Install_Button}"
-                            Padding="14,6"
                             Margin="{StaticResource RightSpacerSmall}"
                             Click="InstallLocalAppData_Click"/>
                     <Button x:Name="UninstallLocalAppDataButton"
                             Style="{StaticResource SettingsButtonStyle}"
                             Content="{loc:Loc Settings_General_Uninstall_Button}"
-                            Padding="14,6"
                             Click="UninstallLocalAppData_Click"/>
                 </StackPanel>
-            </Grid>
-        </Border>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
 
-        <Border Style="{StaticResource SettingsCardStyle}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Style="{StaticResource SettingsCardTitlePanel}">
-                    <TextBlock Style="{StaticResource SettingTitleStyle}" Text="{loc:Loc Settings_General_SystemWide_Title}"/>
-                    <TextBlock x:Name="InstallProgramFilesStatusText"
-                               Style="{StaticResource SettingDescriptionStyle}"
-                               Text="..."/>
-                </StackPanel>
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
+        <utils:SettingsCard x:Name="InstallProgramFilesCard"
+                            Title="{loc:Loc Settings_General_SystemWide_Title}">
+            <utils:SettingsCard.Control>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="InstallProgramFilesButton"
                             Style="{StaticResource SettingsButtonStyle}"
                             Content="{loc:Loc Settings_General_Install_Button}"
-                            Padding="14,6"
                             Margin="{StaticResource RightSpacerSmall}"
                             Click="InstallProgramFiles_Click"/>
                     <Button x:Name="UninstallProgramFilesButton"
                             Style="{StaticResource SettingsButtonStyle}"
                             Content="{loc:Loc Settings_General_Uninstall_Button}"
-                            Padding="14,6"
                             Click="UninstallProgramFiles_Click"/>
                 </StackPanel>
-            </Grid>
-        </Border>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
 
-        <Border Style="{StaticResource SettingsCardStyle}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Style="{StaticResource SettingsCardTitlePanel}">
-                    <TextBlock Style="{StaticResource SettingTitleStyle}" Text="{loc:Loc Settings_General_WindowsStore_Title}"/>
-                    <TextBlock x:Name="InstallStoreStatusText"
-                               Style="{StaticResource SettingDescriptionStyle}"
-                               Text="..."/>
-                </StackPanel>
-            </Grid>
-        </Border>
+        <utils:SettingsCard x:Name="InstallStoreCard"
+                            Title="{loc:Loc Settings_General_WindowsStore_Title}"/>
 
         <TextBlock Text="{loc:Loc Settings_General_Notifications_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
@@ -114,8 +81,9 @@
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="PlayDeviceVolumeChangeSoundToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
-                          Checked="PlayDeviceVolumeChangeSound_Changed"
-                          Unchecked="PlayDeviceVolumeChangeSound_Changed"/>
+                          Tag="PlayDeviceVolumeChangeSound"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
@@ -125,8 +93,9 @@
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="PlayAppVolumeChangeSoundToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
-                          Checked="PlayAppVolumeChangeSound_Changed"
-                          Unchecked="PlayAppVolumeChangeSound_Changed"/>
+                          Tag="PlayAppVolumeChangeSound"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
@@ -150,36 +119,36 @@
                             Description="{loc:Loc Settings_Theme_UnifiedMeterBias_Description}"
                             Visibility="{Binding IsChecked, ElementName=UnifiedPeakMeterToggle, Converter={StaticResource BoolToVisibility}}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="UnifiedMeterBiasBox"
-                                      Minimum="0" Maximum="100"/>
+                <local:NumericSpinner x:Name="UnifiedMeterBiasBox"
+                                      Minimum="{x:Static models:AppSettings.UnifiedMeterLowChannelBiasMultiplierMin}"
+                                      Maximum="{x:Static models:AppSettings.UnifiedMeterLowChannelBiasMultiplierMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
         <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakFps_Title}"
                                Description="{loc:Loc Settings_Theme_MeterPeakFps_Description}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="MeterPeakFpsBox"
-                                      Minimum="1" Maximum="1000"/>
+                <local:NumericSpinner x:Name="MeterPeakFpsBox"
+                                      Minimum="{x:Static models:AppSettings.MeterPeakFpsMin}"
+                                      Maximum="{x:Static models:AppSettings.MeterPeakFpsMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
         <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakSampleRate_Title}"
                                Description="{loc:Loc Settings_Theme_MeterPeakSampleRate_Description}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="MeterPeakSampleRateBox"
-                                      Minimum="1" Maximum="1000"/>
+                <local:NumericSpinner x:Name="MeterPeakSampleRateBox"
+                                      Minimum="{x:Static models:AppSettings.MeterPeakSampleRateMin}"
+                                      Maximum="{x:Static models:AppSettings.MeterPeakSampleRateMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
         <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakChangeCeiling_Title}"
                                Description="{loc:Loc Settings_Theme_MeterPeakChangeCeiling_Description}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="MeterPeakChangeCeilingBox"
-                                      Minimum="0" Maximum="100"/>
+                <local:NumericSpinner x:Name="MeterPeakChangeCeilingBox"
+                                      Minimum="{x:Static models:AppSettings.MeterPeakChangeCeilingMin}"
+                                      Maximum="{x:Static models:AppSettings.MeterPeakChangeCeilingMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
@@ -189,9 +158,9 @@
         <utils:SettingsCard Title="{loc:Loc Settings_General_IconRetryInterval_Title}"
                                Description="{loc:Loc Settings_General_IconRetryInterval_Description}">
             <utils:SettingsCard.Control>
-                <local:NumericSpinner Width="100" VerticalAlignment="Center"
-                                      x:Name="IconRetryIntervalBox"
-                                      Minimum="50" Maximum="5000"/>
+                <local:NumericSpinner x:Name="IconRetryIntervalBox"
+                                      Minimum="{x:Static models:AppSettings.IconRetryIntervalMsMin}"
+                                      Maximum="{x:Static models:AppSettings.IconRetryIntervalMsMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
@@ -201,8 +170,9 @@
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="LogarithmicVolumeScaleToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
-                          Checked="LogarithmicVolumeScale_Changed"
-                          Unchecked="LogarithmicVolumeScale_Changed"/>
+                          Tag="UseLogarithmicVolumeScale"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
     </StackPanel>

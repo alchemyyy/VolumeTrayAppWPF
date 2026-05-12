@@ -1,12 +1,12 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Timers;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
+using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -107,7 +107,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         // need - one final UpdateAllDefaults per quiet window is the goal.
         _defaultsRefreshThrottler = new AsyncThrottler<string>(0);
 
-        _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+        _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCOMObject();
 
         // Sample timer's Elapsed fires on the threadpool and does the COM peak read off the UI
         // thread; render timer's Elapsed BeginInvokes the lerp advancement onto the dispatcher.
@@ -286,7 +286,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (collection != null) Marshal.FinalReleaseComObject(collection);
+            Safe.Release(collection);
         }
     }
 
@@ -295,10 +295,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// (render or capture) so visibility-filter consumers can decide what to surface. Used for
     /// OnDeviceAdded paths.
     /// </summary>
-    private void AddDeviceById(string id)
+    private void AddDeviceByID(string id)
     {
         if (string.IsNullOrEmpty(id)) return;
-        if (FindDeviceById(id) != null) return;
+        if (FindDeviceByID(id) != null) return;
 
         IMMDevice? device = null;
         try
@@ -311,7 +311,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             // device with no usable flow.
             if (flow != EDataFlow.eRender && flow != EDataFlow.eCapture)
             {
-                Marshal.FinalReleaseComObject(device);
+                Safe.Release(device);
                 return;
             }
 
@@ -325,7 +325,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         catch
         {
             // Device gone between notification and our query; nothing to add.
-            if (device != null) { try { Marshal.FinalReleaseComObject(device); } catch { } }
+            Safe.Release(device);
         }
     }
 
@@ -333,14 +333,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// Remove a single device wrapper by ID, disposing its sessions and releasing its COM proxies.
     /// Used for OnDeviceRemoved.
     /// </summary>
-    private void RemoveDeviceById(string id)
+    private void RemoveDeviceByID(string id)
     {
         if (string.IsNullOrEmpty(id)) return;
-        AudioDevice? match = FindDeviceById(id);
+        AudioDevice? match = FindDeviceByID(id);
         if (match == null) return;
 
         _devices.Remove(match);
-        try { match.Dispose(); } catch { }
+        Safe.Dispose(match);
         ScheduleUpdateAllDefaults();
     }
 
@@ -353,12 +353,12 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     {
         if (string.IsNullOrEmpty(id)) return;
 
-        AudioDevice? match = FindDeviceById(id);
+        AudioDevice? match = FindDeviceByID(id);
         if (match == null)
         {
             // First time we've seen this device id - run the add path (e.g. user re-enabled a device
             // we never wrapped; we always wrap on first sight).
-            AddDeviceById(id);
+            AddDeviceByID(id);
             return;
         }
 
@@ -378,7 +378,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private void RefreshDeviceFriendlyName(string id)
     {
         if (string.IsNullOrEmpty(id)) return;
-        AudioDevice? match = FindDeviceById(id);
+        AudioDevice? match = FindDeviceByID(id);
         if (match == null) return;
         match.RefreshFriendlyNameFromStore();
     }
@@ -391,7 +391,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private void RefreshDeviceDefaultFormat(string id)
     {
         if (string.IsNullOrEmpty(id)) return;
-        AudioDevice? match = FindDeviceById(id);
+        AudioDevice? match = FindDeviceByID(id);
         if (match == null) return;
         match.RefreshDefaultFormatFromStore();
     }
@@ -404,7 +404,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private void RefreshDeviceListenState(string id)
     {
         if (string.IsNullOrEmpty(id)) return;
-        AudioDevice? match = FindDeviceById(id);
+        AudioDevice? match = FindDeviceByID(id);
         if (match == null) return;
         match.RefreshListenStateFromStore();
         UpdateListenTargetActiveness();
@@ -413,7 +413,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private void RefreshDeviceAllowExclusiveControl(string id)
     {
         if (string.IsNullOrEmpty(id)) return;
-        AudioDevice? match = FindDeviceById(id);
+        AudioDevice? match = FindDeviceByID(id);
         if (match == null) return;
         match.RefreshAllowExclusiveControlFromStore();
     }
@@ -435,13 +435,13 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         foreach (AudioDevice d in _devices)
         {
             if (d.DataFlow != EDataFlow.eCapture) continue;
-            string? targetId = d.ListenTargetDeviceId;
-            AudioDevice? target = targetId == null ? defaultRender : FindDeviceById(targetId);
+            string? targetID = d.ListenTargetDeviceID;
+            AudioDevice? target = targetID == null ? defaultRender : FindDeviceByID(targetID);
             d.IsListenTargetActive = target != null && target.IsActive;
         }
     }
 
-    private AudioDevice? FindDeviceById(string id)
+    private AudioDevice? FindDeviceByID(string id)
     {
         foreach (AudioDevice d in _devices)
         {
@@ -466,7 +466,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         try { return new AudioDevice(device, flow, _dispatcher, _volumeThrottler, _processExitMonitor); }
         catch
         {
-            try { Marshal.FinalReleaseComObject(device); } catch { }
+            Safe.Release(device);
             return null;
         }
     }
@@ -519,10 +519,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
         // Effective defaults: the active result when present, otherwise the persisted-id wrapper.
         // Returns null when the persisted id is empty or points to a device that's been removed.
-        AudioDevice? renderEffective = renderDefault ?? FindFallbackDefault(_settings?.LastKnownDefaultPlaybackDeviceId);
-        AudioDevice? renderCommsEffective = renderComms ?? FindFallbackDefault(_settings?.LastKnownDefaultCommsPlaybackDeviceId);
-        AudioDevice? captureEffective = captureDefault ?? FindFallbackDefault(_settings?.LastKnownDefaultRecordingDeviceId);
-        AudioDevice? captureCommsEffective = captureComms ?? FindFallbackDefault(_settings?.LastKnownDefaultCommsRecordingDeviceId);
+        AudioDevice? renderEffective = renderDefault ?? FindFallbackDefault(_settings?.LastKnownDefaultPlaybackDeviceID);
+        AudioDevice? renderCommsEffective = renderComms ?? FindFallbackDefault(_settings?.LastKnownDefaultCommsPlaybackDeviceID);
+        AudioDevice? captureEffective = captureDefault ?? FindFallbackDefault(_settings?.LastKnownDefaultRecordingDeviceID);
+        AudioDevice? captureCommsEffective = captureComms ?? FindFallbackDefault(_settings?.LastKnownDefaultCommsRecordingDeviceID);
 
         // IsDefault tracks the multimedia-role default for the device's flow. IsDefaultCommunications
         // tracks the comms-role default. Both honor the fallback so a disabled last-known-default
@@ -561,24 +561,24 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         if (_settings == null) return;
 
         bool dirty = false;
-        if (renderDefault != null && _settings.LastKnownDefaultPlaybackDeviceId != renderDefault.Id)
+        if (renderDefault != null && _settings.LastKnownDefaultPlaybackDeviceID != renderDefault.Id)
         {
-            _settings.LastKnownDefaultPlaybackDeviceId = renderDefault.Id;
+            _settings.LastKnownDefaultPlaybackDeviceID = renderDefault.Id;
             dirty = true;
         }
-        if (renderComms != null && _settings.LastKnownDefaultCommsPlaybackDeviceId != renderComms.Id)
+        if (renderComms != null && _settings.LastKnownDefaultCommsPlaybackDeviceID != renderComms.Id)
         {
-            _settings.LastKnownDefaultCommsPlaybackDeviceId = renderComms.Id;
+            _settings.LastKnownDefaultCommsPlaybackDeviceID = renderComms.Id;
             dirty = true;
         }
-        if (captureDefault != null && _settings.LastKnownDefaultRecordingDeviceId != captureDefault.Id)
+        if (captureDefault != null && _settings.LastKnownDefaultRecordingDeviceID != captureDefault.Id)
         {
-            _settings.LastKnownDefaultRecordingDeviceId = captureDefault.Id;
+            _settings.LastKnownDefaultRecordingDeviceID = captureDefault.Id;
             dirty = true;
         }
-        if (captureComms != null && _settings.LastKnownDefaultCommsRecordingDeviceId != captureComms.Id)
+        if (captureComms != null && _settings.LastKnownDefaultCommsRecordingDeviceID != captureComms.Id)
         {
-            _settings.LastKnownDefaultCommsRecordingDeviceId = captureComms.Id;
+            _settings.LastKnownDefaultCommsRecordingDeviceID = captureComms.Id;
             dirty = true;
         }
         if (dirty) _settings.Save();
@@ -587,7 +587,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private AudioDevice? FindFallbackDefault(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;
-        return FindDeviceById(id);
+        return FindDeviceByID(id);
     }
 
     private AudioDevice? LookupDefault(EDataFlow flow, ERole role)
@@ -605,7 +605,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         catch { return null; }
         finally
         {
-            if (defaultDevice != null) Marshal.FinalReleaseComObject(defaultDevice);
+            Safe.Release(defaultDevice);
         }
 
         if (string.IsNullOrEmpty(defaultId)) return null;
@@ -628,8 +628,8 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         _peakRenderTimer.Stop();
         _peakSampleTimer.Elapsed -= OnPeakSampleElapsed;
         _peakRenderTimer.Elapsed -= OnPeakRenderElapsed;
-        try { _peakSampleTimer.Dispose(); } catch { }
-        try { _peakRenderTimer.Dispose(); } catch { }
+        Safe.Dispose(_peakSampleTimer);
+        Safe.Dispose(_peakRenderTimer);
         if (_settings != null)
         {
             _settings.MeterPeakFpsChanged -= OnMeterPeakFpsChanged;
@@ -640,22 +640,22 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
         foreach (AudioDevice d in _devices.ToArray())
         {
-            try { d.Dispose(); } catch { }
+            Safe.Dispose(d);
         }
         _devices.Clear();
 
         // Dispose the throttler last - any payload still in flight will see _disposed on the
         // RCW it captured and bail out via its inner try/catch. Letting it run to completion
         // is preferable to forcibly cancelling, which can race with finalization.
-        try { _volumeThrottler.Dispose(); } catch { }
-        try { _defaultsRefreshThrottler.Dispose(); } catch { }
+        Safe.Dispose(_volumeThrottler);
+        Safe.Dispose(_defaultsRefreshThrottler);
 
         // Tear the watcher thread down after every device (and so every session) is disposed -
         // sessions Unwatch on Dispose, so by the time we get here the watch set is empty and the
         // monitor's worker thread is just blocked on the wake event.
-        try { _processExitMonitor.Dispose(); } catch { }
+        Safe.Dispose(_processExitMonitor);
 
-        try { Marshal.FinalReleaseComObject(_enumerator); } catch { }
+        Safe.Release(_enumerator);
     }
 
     // Notification callbacks fire on COM worker threads; everything is marshaled to the dispatcher
@@ -683,7 +683,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         {
             string id = pwstrDeviceId;
             WPFLog.Log($"AudioDeviceManager.OnDeviceAdded: id={id}");
-            _owner._dispatcher.BeginInvoke(() => _owner.AddDeviceById(id));
+            _owner._dispatcher.BeginInvoke(() => _owner.AddDeviceByID(id));
             return 0;
         }
 
@@ -691,7 +691,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         {
             string id = pwstrDeviceId;
             WPFLog.Log($"AudioDeviceManager.OnDeviceRemoved: id={id}");
-            _owner._dispatcher.BeginInvoke(() => _owner.RemoveDeviceById(id));
+            _owner._dispatcher.BeginInvoke(() => _owner.RemoveDeviceByID(id));
             return 0;
         }
 
@@ -722,7 +722,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             // still updates the dim state, and vice versa.
             else if (key.fmtid == PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice.fmtid &&
                 (key.pid == PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice.pid ||
-                 key.pid == PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceId.pid))
+                 key.pid == PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceID.pid))
             {
                 string id = pwstrDeviceId;
                 _owner._dispatcher.BeginInvoke(() => _owner.RefreshDeviceListenState(id));

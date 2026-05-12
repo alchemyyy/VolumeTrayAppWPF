@@ -4,6 +4,7 @@ using System.Windows.Media;
 using VolumeTrayAppWPF.Localization;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Visuals;
+using VolumeTrayAppWPF.WPF;
 using VolumeTrayAppWPF.WPF.Settings.Utils;
 using Button = System.Windows.Controls.Button;
 using Color = System.Windows.Media.Color;
@@ -15,14 +16,14 @@ namespace VolumeTrayAppWPF.WPF.Settings.Pages;
 /// Theme settings page.
 /// Owns its UI plus the color-swatch / reset click handlers.
 /// Routes generic Tag-based ToggleSwitch / ComboBox mutations through <see cref="SettingsBindings"/>.
-/// Theme-mode changes dispatch through an <see cref="IThemeHost"/> seam
+/// Theme-mode changes call back into the owning <see cref="SettingsWindow"/> via Window.GetWindow
 /// so the shell can re-apply the DWM dark-mode title-bar attribute against its own HWND
-/// - the page never reaches into the host window's chrome.
+/// - the page never reaches into the host window's chrome directly.
 /// </summary>
 public partial class ThemePage : UserControl
 {
     private AppSettings? _settings;
-    private IThemeHost? _themeHost;
+    private SettingsWindow? _themeHost;
     private bool _suppressChangeEvents;
     private bool _systemThemeSubscribed;
 
@@ -35,23 +36,35 @@ public partial class ThemePage : UserControl
     // Modeless lifecycle: re-clicking the same swatch must focus the existing picker
     // instead of stacking duplicates that fight over the same Temporary slot.
     // Pickers persist across tab switches; they close when the user X's them or the owning settings window closes.
-    private readonly Dictionary<(NullableThemeColor Target, bool IsLight), TAWPFColorPicker> _openPickers = [];
+    private readonly Dictionary<(NullableThemeColor Target, bool IsLight), TAColorPicker> _openPickers = [];
 
     // Singleton pickers for the meter-peak colors (single solid values, no light/dark split).
     // Re-clicking a swatch focuses the existing picker rather than stacking duplicates.
-    private TAWPFColorPicker? _openMeterPeakPicker;
-    private TAWPFColorPicker? _openMeterPeakStereoPicker;
+    private TAColorPicker? _openMeterPeakPicker;
+    private TAColorPicker? _openMeterPeakStereoPicker;
 
-    // Default meter peak colors used as the picker's Default seed and the Reset target.
-    // Kept in sync with the *DefaultHex consts in AppSettings so we don't reparse on every reset.
-    private static readonly Color MeterPeakDefaultColor = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
-    private static readonly Color MeterPeakStereoDefaultColor = Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF);
+    // Default meter peak colors used as the picker's Default seed. Parsed once from the
+    // *DefaultHex consts in AppSettings (single source of truth) instead of duplicating the
+    // literal ARGB tuples here - keeps the picker's Default match whatever the consts say.
+    private static readonly Color MeterPeakDefaultColor =
+        NullableThemeColor.ParseHexOrDefault(AppSettings.MeterPeakColorDefaultHex, Colors.White);
+    private static readonly Color MeterPeakStereoDefaultColor =
+        NullableThemeColor.ParseHexOrDefault(
+            AppSettings.MeterPeakStereoColorDefaultHex,
+            Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF));
 
     private static readonly Dictionary<string, Action<ThemePage>> EnumComboPostActions = new()
     {
         ["ThemeMode"] = p =>
         {
-            p._themeHost?.ApplyDwmDarkMode();
+            // Push the DWM dark-mode title-bar attribute through the owning SettingsWindow. The page
+            // can't call DwmSetWindowAttribute directly - it has no HWND of its own; the shell exposes
+            // ApplyDWMDarkMode(bool isLight) as a public method on SettingsWindow.
+            // ThemeResources.ResolveEffectiveIsLightTheme is the single source of truth for the
+            // effective light/dark side, so the value the shell receives matches what App.xaml.cs
+            // resolves elsewhere.
+            if (p._themeHost != null && p._settings != null)
+                p._themeHost.ApplyDWMDarkMode(ThemeResources.ResolveEffectiveIsLightTheme(p._settings, AppServices.Theme));
             p.UpdateColorSwatchVisibility();
         },
     };
@@ -63,11 +76,13 @@ public partial class ThemePage : UserControl
     }
 
     /// <summary>
-    /// Injects the AppSettings instance plus the host callback for DWM dark-mode updates and seeds
-    /// every control's value. The shell calls this from its own LoadFromSettings; subsequent calls
-    /// re-seed the page (used when settings are reloaded externally).
+    /// Injects the AppSettings instance plus the owning SettingsWindow (used for DWM dark-mode
+    /// updates after a ThemeMode change) and seeds every control's value. The shell calls this from
+    /// its own LoadFromSettings; subsequent calls re-seed the page (used when settings are reloaded
+    /// externally). Accepts the host directly (no IThemeHost interface) - the shell's public surface
+    /// ApplyDWMDarkMode(bool) is reached through this reference.
     /// </summary>
-    public void LoadFromSettings(AppSettings settings, IThemeHost themeHost)
+    public void LoadFromSettings(AppSettings settings, SettingsWindow themeHost)
     {
         _settings = settings;
         _themeHost = themeHost;
@@ -122,19 +137,11 @@ public partial class ThemePage : UserControl
         }
     }
 
-    // Effective light/dark side under the user's ThemeMode override - mirrors the resolution in
-    // SettingsWindow.ResolveEffectiveIsLight / App.ResolveEffectiveIsLightTheme so the visible swatch
-    // pair matches the theme that's actually painted everywhere else in the app.
-    private bool ResolveEffectiveIsLight()
-    {
-        if (_settings == null) return Theme?.IsLightTheme ?? false;
-        return _settings.ThemeMode switch
-        {
-            Models.ThemeMode.Light => true,
-            Models.ThemeMode.Dark => false,
-            _ => Theme?.IsLightTheme ?? false,
-        };
-    }
+    // Effective light/dark side under the user's ThemeMode override. Delegates to
+    // ThemeResources.ResolveEffectiveIsLightTheme so the visible swatch pair matches the theme that's
+    // actually painted everywhere else in the app - one source of truth instead of three near-copies.
+    private bool ResolveEffectiveIsLight() =>
+        ThemeResources.ResolveEffectiveIsLightTheme(_settings, Theme);
 
     private void BoolToggle_Changed(object sender, RoutedEventArgs e)
     {
@@ -219,7 +226,7 @@ public partial class ThemePage : UserControl
 
         // Re-clicking the same swatch focuses the existing picker - opening a duplicate would let two
         // pickers race the same Temporary slot, and the user already has one parked nearby.
-        if (_openPickers.TryGetValue((target, isLight), out TAWPFColorPicker? existing))
+        if (_openPickers.TryGetValue((target, isLight), out TAColorPicker? existing))
         {
             if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
             existing.Activate();
@@ -240,7 +247,7 @@ public partial class ThemePage : UserControl
 
         // Default button loads the per-swatch theme fallback so the user can always get back to
         // "what the swatch looks like when unset" without remembering the hex.
-        TAWPFColorPicker picker = new(title, hasAlpha: true, initial, defaultColor: fallback)
+        TAColorPicker picker = new(title, hasAlpha: true, initial, defaultColor: fallback)
         {
             Owner = Window.GetWindow(this),
         };
@@ -269,7 +276,7 @@ public partial class ThemePage : UserControl
             _openPickers.Remove((target, isLight));
             if (_settings == null) return;
 
-            TAWPFColorPicker closed = (TAWPFColorPicker)s!;
+            TAColorPicker closed = (TAColorPicker)s!;
             if (closed.IsDirty)
             {
                 Color finalColor = closed.CurrentColor;
@@ -318,7 +325,7 @@ public partial class ThemePage : UserControl
         Color initial = _settings.EffectiveMeterPeakColor;
         string title = LocalizationManager.Instance["Settings_Theme_MeterPeakColor_Title"];
 
-        TAWPFColorPicker picker = new(title, hasAlpha: true, initial, defaultColor: MeterPeakDefaultColor)
+        TAColorPicker picker = new(title, hasAlpha: true, initial, defaultColor: MeterPeakDefaultColor)
         {
             Owner = Window.GetWindow(this),
         };
@@ -335,7 +342,7 @@ public partial class ThemePage : UserControl
             _openMeterPeakPicker = null;
             if (_settings == null) return;
 
-            TAWPFColorPicker closed = (TAWPFColorPicker)s!;
+            TAColorPicker closed = (TAColorPicker)s!;
             if (closed.IsDirty)
             {
                 _settings.MeterPeakColorHex = NullableThemeColor.ToHex(closed.CurrentColor);
@@ -384,7 +391,7 @@ public partial class ThemePage : UserControl
         Color initial = _settings.EffectiveMeterPeakStereoColor;
         string title = LocalizationManager.Instance["Settings_Theme_MeterPeakStereoColor_Title"];
 
-        TAWPFColorPicker picker = new(title, hasAlpha: true, initial, defaultColor: MeterPeakStereoDefaultColor)
+        TAColorPicker picker = new(title, hasAlpha: true, initial, defaultColor: MeterPeakStereoDefaultColor)
         {
             Owner = Window.GetWindow(this),
         };
@@ -401,7 +408,7 @@ public partial class ThemePage : UserControl
             _openMeterPeakStereoPicker = null;
             if (_settings == null) return;
 
-            TAWPFColorPicker closed = (TAWPFColorPicker)s!;
+            TAColorPicker closed = (TAColorPicker)s!;
             if (closed.IsDirty)
             {
                 _settings.MeterPeakStereoColorHex = NullableThemeColor.ToHex(closed.CurrentColor);
@@ -489,10 +496,5 @@ public partial class ThemePage : UserControl
         }
     }
 
-    private void SaveAndNotify()
-    {
-        if (_settings == null) return;
-        _settings.Save();
-        _settings.RaiseChanged();
-    }
+    private void SaveAndNotify() => SettingsBindings.SaveAndNotify(_settings);
 }

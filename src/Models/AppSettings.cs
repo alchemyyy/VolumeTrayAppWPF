@@ -1,8 +1,6 @@
 using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
-using VolumeTrayAppWPF.Interop;
-using VolumeTrayAppWPF.Visuals;
 using Color = System.Windows.Media.Color;
 using Colors = System.Windows.Media.Colors;
 
@@ -177,174 +175,25 @@ public enum AppDrawerIconsCenterMode
 }
 
 /// <summary>
-/// A selectable volume-slider thumb glyph, stored with its own display properties
-/// (font family, font size, width, height, horizontal scale) so that differently-proportioned glyphs
-/// render correctly both in the dropdown preview and on the slider itself.
-/// Defaults target Segoe Fluent Icons at 18px.
-/// </summary>
-public class SliderThumbGlyphOption
-{
-    [XmlAttribute] public string Name { get; set; } = "Circle";
-    [XmlAttribute] public string Glyph { get; set; } = GlyphCatalog.CIRCLE;
-    [XmlAttribute] public string FontFamily { get; set; } = "Segoe Fluent Icons";
-    [XmlAttribute] public double FontSize { get; set; } = 18;
-    [XmlAttribute] public double Width { get; set; } = 18;
-    [XmlAttribute] public double Height { get; set; } = 18;
-
-    // Horizontal layout-scale applied to the rendered glyph.
-    // Lets a single glyph (e.g. Square) be repurposed as a narrower variant without authoring a new font character.
-    [XmlAttribute] public double XScale { get; set; } = 1.0;
-
-    // Glyph (default) draws a TextBlock from the Glyph string.
-    // Capsule draws a rounded-rectangle Border using Width/Height with a fully rounded corner radius,
-    // matching the OS toggle-switch pill aesthetic that can't be reproduced cleanly with a font character.
-    [XmlAttribute] public SliderThumbShape Shape { get; set; } = SliderThumbShape.Glyph;
-
-    [XmlIgnore] public bool IsGlyph => Shape == SliderThumbShape.Glyph;
-    [XmlIgnore] public bool IsCapsule => Shape == SliderThumbShape.Capsule;
-
-    public static List<SliderThumbGlyphOption> CreateDefaults() =>
-    [
-        new() { Name = "Capsule",  Shape = SliderThumbShape.Capsule, Width = 10, Height = 22 },
-        new() { Name = "Circle",   Glyph = GlyphCatalog.CIRCLE,  FontSize = 18 },
-        new() { Name = "Diamond",  Glyph = GlyphCatalog.DIAMOND, FontSize = 16 },
-        new() { Name = "Star",     Glyph = GlyphCatalog.STAR,    FontSize = 18 },
-        new() { Name = "Square",   Glyph = GlyphCatalog.SQUARE,  FontSize = 16 },
-        new() { Name = "Heart",    Glyph = GlyphCatalog.HEART,   FontSize = 16 },
-    ];
-}
-
-/// <summary>
-/// A user-overridable theme color with independent light and dark variants.
-/// Either side may be null, meaning "unset" - the upstream resolver falls back to the per-color default.
-/// While a color picker is open, TemporaryLightColor / TemporaryDarkColor short-circuit
-/// the persisted hex values so the rest of the app sees the in-flight edit through the same Resolve path
-/// without mutating (and risking persistence of) the saved hex until the user accepts.
-/// Callers wire one or more change handlers via the (Action) ctor or Subscribe;
-/// every mutation of LightHex / DarkHex / Temporary* fires the multicast handler.
-/// </summary>
-public class NullableThemeColor
-{
-    private string? _lightHex;
-    private string? _darkHex;
-    private Color? _tempLight;
-    private Color? _tempDark;
-    private Action? _changed;
-
-    // Required for XmlSerializer. Production callers should prefer the (Action) overload, or attach via Subscribe.
-    public NullableThemeColor() { }
-
-    // onChanged is invoked on every actual change (LightHex / DarkHex / Temporary*).
-    public NullableThemeColor(Action onChanged) => Subscribe(onChanged);
-
-    public void Subscribe(Action onChanged) => _changed += onChanged;
-
-    public void Unsubscribe(Action onChanged) => _changed -= onChanged;
-
-    [XmlElement]
-    public string? LightHex
-    {
-        get => _lightHex;
-        set
-        {
-            if (_lightHex == value) return;
-            _lightHex = value;
-            _changed?.Invoke();
-        }
-    }
-
-    [XmlElement]
-    public string? DarkHex
-    {
-        get => _darkHex;
-        set
-        {
-            if (_darkHex == value) return;
-            _darkHex = value;
-            _changed?.Invoke();
-        }
-    }
-
-    // Live-preview override for the light variant, set by the color picker on every edit
-    // and cleared when the picker accepts (committed to LightHex) or aborts.
-    // Never serialized.
-    [XmlIgnore]
-    public Color? TemporaryLightColor
-    {
-        get => _tempLight;
-        set
-        {
-            if (_tempLight == value) return;
-            _tempLight = value;
-            _changed?.Invoke();
-        }
-    }
-
-    // Live-preview override for the dark variant. Same lifecycle as TemporaryLightColor.
-    [XmlIgnore]
-    public Color? TemporaryDarkColor
-    {
-        get => _tempDark;
-        set
-        {
-            if (_tempDark == value) return;
-            _tempDark = value;
-            _changed?.Invoke();
-        }
-    }
-
-    public bool IsUnset => string.IsNullOrEmpty(LightHex) && string.IsNullOrEmpty(DarkHex);
-
-    public Color? LightColor => TemporaryLightColor ?? TryParse(LightHex);
-    public Color? DarkColor => TemporaryDarkColor ?? TryParse(DarkHex);
-
-    private static Color? TryParse(string? hex)
-    {
-        if (string.IsNullOrWhiteSpace(hex)) return null;
-
-        try
-        {
-            string hexString = hex.TrimStart('#');
-            return hexString.Length switch
-            {
-                6 => Color.FromRgb(
-                    Convert.ToByte(hexString[..2], 16),
-                    Convert.ToByte(hexString[2..4], 16),
-                    Convert.ToByte(hexString[4..6], 16)),
-                8 => Color.FromArgb(
-                    Convert.ToByte(hexString[..2], 16),
-                    Convert.ToByte(hexString[2..4], 16),
-                    Convert.ToByte(hexString[4..6], 16),
-                    Convert.ToByte(hexString[6..8], 16)),
-                _ => null
-            };
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public static string ToHex(Color c) =>
-        c.A == 255 ? $"#{c.R:X2}{c.G:X2}{c.B:X2}" : $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
-
-    /// <summary>
-    /// Public sibling of TryParse that yields <paramref name="fallback"/> when the input is null,
-    /// empty, or malformed. Lets non-NullableThemeColor settings (e.g. AppSettings.MeterPeakColorHex)
-    /// reuse the same hex parsing rules without duplicating the switch.
-    /// </summary>
-    public static Color ParseHexOrDefault(string? hex, Color fallback) => TryParse(hex) ?? fallback;
-
-    // Resolves the override for the given theme.
-    // Returns null when this side is unset so the upstream resolver falls through to the per-color default.
-    // The unset side is never derived from the counterpart - editing only the light variant must not rewrite
-    // what the dark variant displays (and vice versa).
-    public Color? Resolve(bool isLightTheme) => isLightTheme ? LightColor : DarkColor;
-}
-
-/// <summary>
 /// Root application settings class.
 /// Skeleton scaffold with a few illustrative fields - extend with project-specific settings in your fork.
+///
+/// Range / default conventions:
+///   Every clamped numeric setting exposes a public const triple <c>XxxMin</c> / <c>XxxMax</c> /
+///   <c>XxxDefault</c>. The same consts are referenced in three places: the field initializer
+///   (default), the property setter (clamp), and the XAML spinner via <c>{x:Static models:AppSettings.XxxMin}</c>.
+///   Adding a new clamped numeric should follow this pattern - no magic literals at call sites.
+///
+/// Change notification:
+///   The settings page code-behind calls <c>RaiseChanged()</c> after each user-driven write
+///   (`saveAndNotify`), so the global <see cref="Changed"/> event covers persistence and
+///   brush-rebuild for normal UI edits. Per-property events exist where a single consumer needs
+///   fine-grained granularity: <see cref="MeterPeakFpsChanged"/> / <see cref="MeterPeakSampleRateChanged"/>
+///   feed <c>AudioDeviceManager</c> retune logic, and fire from inside their setters.
+///   Computed projections (<see cref="EffectiveMeterPeakColor"/>, <see cref="EffectiveMeterPeakStereoColor"/>)
+///   have hex setters that DO RaiseChanged on every write so DynamicResource consumers re-resolve -
+///   this is the WPF binding-dot rule (derived projections need notifications on every input).
+///   The Temporary*Color live-preview setters also RaiseChanged for the same reason.
 /// </summary>
 [XmlRoot("AppSettings")]
 public class AppSettings
@@ -376,10 +225,10 @@ public class AppSettings
     // Windows had no other active device of that role / flow to promote. The fallback restores
     // IsDefault on the disabled wrapper so the visibility filter under the
     // ShowDefault*EvenIfDisabled toggles has a target to act on.
-    public string? LastKnownDefaultPlaybackDeviceId { get; set; }
-    public string? LastKnownDefaultCommsPlaybackDeviceId { get; set; }
-    public string? LastKnownDefaultRecordingDeviceId { get; set; }
-    public string? LastKnownDefaultCommsRecordingDeviceId { get; set; }
+    public string? LastKnownDefaultPlaybackDeviceID { get; set; }
+    public string? LastKnownDefaultCommsPlaybackDeviceID { get; set; }
+    public string? LastKnownDefaultRecordingDeviceID { get; set; }
+    public string? LastKnownDefaultCommsRecordingDeviceID { get; set; }
 
     // Registry-only ghost endpoints surfaced via DeviceState.NotPresent: every USB DAC port the user
     // has ever plugged into, every previous GPU's HDMI outputs, every paired Bluetooth headset that
@@ -412,7 +261,13 @@ public class AppSettings
 
     // Context menu
     public ContextMenuPosition ContextMenuPosition { get; set; } = ContextMenuPosition.Modern;
-    public int ContextMenuFontSize { get; set; } = 15;
+
+    // Tray context-menu font size. Drives all text in the menu; every other element scales relative
+    // to font size, so this is effectively the menu zoom level.
+    public const int ContextMenuFontSizeDefault = 15;
+    public const int ContextMenuFontSizeMin = 8;
+    public const int ContextMenuFontSizeMax = 48;
+    public int ContextMenuFontSize { get; set; } = ContextMenuFontSizeDefault;
 
     // Per-flow device-name style for the tray context menu rows. Defaults to Everything so the
     // initial UX matches the prior behavior (full Windows FriendlyName).
@@ -424,8 +279,8 @@ public class AppSettings
     // the menu width predictable. Clamped to the spinner's [Min, Max] range so a corrupt
     // settings.xml can't push the value outside what the UI accepts.
     public const int TrayMenuDeviceNameMaxLengthDefault = 32;
-    public const int TrayMenuDeviceNameLengthNumericBoxMin = 3;
-    public const int TrayMenuDeviceNameLengthNumericBoxMax = 200;
+    public const int TrayMenuDeviceNameMaxLengthMin = 3;
+    public const int TrayMenuDeviceNameMaxLengthMax = 200;
 
     private int _trayMenuDeviceNameMaxLength = TrayMenuDeviceNameMaxLengthDefault;
 
@@ -436,8 +291,8 @@ public class AppSettings
         set
         {
             int clamped = Math.Max(
-                TrayMenuDeviceNameLengthNumericBoxMin,
-                Math.Min(TrayMenuDeviceNameLengthNumericBoxMax, value));
+                TrayMenuDeviceNameMaxLengthMin,
+                Math.Min(TrayMenuDeviceNameMaxLengthMax, value));
             if (_trayMenuDeviceNameMaxLength == clamped) return;
             _trayMenuDeviceNameMaxLength = clamped;
         }
@@ -470,14 +325,21 @@ public class AppSettings
     // streams (or when L==R) the two bars coincide.
     public const string MeterPeakColorDefaultHex = "#FFFFFFFF";
     public const string MeterPeakStereoColorDefaultHex = "#80FFFFFF";
+
     public const int MeterPeakFpsDefault = 180;
+    public const int MeterPeakFpsMin = 1;
+    public const int MeterPeakFpsMax = 1000;
+
     public const int MeterPeakSampleRateDefault = 90;
+    public const int MeterPeakSampleRateMin = 1;
+    public const int MeterPeakSampleRateMax = 1000;
 
     // Per-redraw ceiling, in 0-100 volume units, on how far VolumeSlider's rendered peak can move
     // toward the incoming smoothed target. Caps single-frame jumps so a sudden silence-to-loud
     // (or loud-to-silence) transition ramps over a few frames instead of teleporting. 0 freezes
     // the meter; 100 disables the clamp (one-tick catch-up).
     public const int MeterPeakChangeCeilingDefault = 10;
+    public const int MeterPeakChangeCeilingMin = 0;
     public const int MeterPeakChangeCeilingMax = 100;
 
     // Unified peak meter collapses min(L, R) and max(L, R) into a single weighted value so the
@@ -486,6 +348,7 @@ public class AppSettings
     // of 0 falls back to plain max(L, R); 1 averages the channels; the default of 3 dampens
     // moment-to-moment stereo flutter without fully collapsing to min(L, R).
     public const int UnifiedMeterLowChannelBiasMultiplierDefault = 3;
+    public const int UnifiedMeterLowChannelBiasMultiplierMin = 0;
     public const int UnifiedMeterLowChannelBiasMultiplierMax = 100;
 
     public bool UnifiedPeakMeter { get; set; } = false;
@@ -498,7 +361,9 @@ public class AppSettings
         get => _unifiedMeterLowChannelBiasMultiplier;
         set
         {
-            int clamped = Math.Max(0, Math.Min(UnifiedMeterLowChannelBiasMultiplierMax, value));
+            int clamped = Math.Max(
+                UnifiedMeterLowChannelBiasMultiplierMin,
+                Math.Min(UnifiedMeterLowChannelBiasMultiplierMax, value));
             if (_unifiedMeterLowChannelBiasMultiplier == clamped) return;
             _unifiedMeterLowChannelBiasMultiplier = clamped;
         }
@@ -512,7 +377,7 @@ public class AppSettings
         get => _meterPeakFps;
         set
         {
-            int clamped = Math.Max(1, Math.Min(1000, value));
+            int clamped = Math.Max(MeterPeakFpsMin, Math.Min(MeterPeakFpsMax, value));
             if (_meterPeakFps == clamped) return;
             _meterPeakFps = clamped;
             MeterPeakFpsChanged?.Invoke();
@@ -527,7 +392,7 @@ public class AppSettings
         get => _meterPeakSampleRate;
         set
         {
-            int clamped = Math.Max(1, Math.Min(1000, value));
+            int clamped = Math.Max(MeterPeakSampleRateMin, Math.Min(MeterPeakSampleRateMax, value));
             if (_meterPeakSampleRate == clamped) return;
             _meterPeakSampleRate = clamped;
             MeterPeakSampleRateChanged?.Invoke();
@@ -542,7 +407,9 @@ public class AppSettings
         get => _meterPeakChangeCeiling;
         set
         {
-            int clamped = Math.Max(0, Math.Min(MeterPeakChangeCeilingMax, value));
+            int clamped = Math.Max(
+                MeterPeakChangeCeilingMin,
+                Math.Min(MeterPeakChangeCeilingMax, value));
             if (_meterPeakChangeCeiling == clamped) return;
             _meterPeakChangeCeiling = clamped;
         }
@@ -607,6 +474,10 @@ public class AppSettings
             string normalized = string.IsNullOrWhiteSpace(value) ? MeterPeakColorDefaultHex : value;
             if (_meterPeakColorHex == normalized) return;
             _meterPeakColorHex = normalized;
+            // Fire Changed so EffectiveMeterPeakColor's DynamicResource consumers re-resolve.
+            // Without this, a programmatic hex write goes unnoticed by the brush rebuild path
+            // (the WPF binding-dot trap: derived projections need notifications on every input).
+            RaiseChanged();
         }
     }
 
@@ -642,6 +513,8 @@ public class AppSettings
             string normalized = string.IsNullOrWhiteSpace(value) ? MeterPeakStereoColorDefaultHex : value;
             if (_meterPeakStereoColorHex == normalized) return;
             _meterPeakStereoColorHex = normalized;
+            // See MeterPeakColorHex setter: derived EffectiveMeterPeakStereoColor needs notification.
+            RaiseChanged();
         }
     }
 
@@ -765,7 +638,13 @@ public class AppSettings
     public const int AppDrawerIconsCenterSoftMaxMax = 16;
     public AppDrawerIconsCenterMode AppDrawerIconsCenterMode { get; set; } = AppDrawerIconsCenterMode.Off;
     public int AppDrawerIconsCenterSoftMax { get; set; } = AppDrawerIconsCenterSoftMaxDefault;
-    public int AppDrawerIconScalePercent { get; set; } = 115;
+
+    // Integer percent applied to grid-drawer icon visuals. 100 = baseline; default 115 reads a touch
+    // larger than the slider-drawer reference. Range spans 50..200 to keep icons readable at both ends.
+    public const int AppDrawerIconScalePercentDefault = 115;
+    public const int AppDrawerIconScalePercentMin = 50;
+    public const int AppDrawerIconScalePercentMax = 200;
+    public int AppDrawerIconScalePercent { get; set; } = AppDrawerIconScalePercentDefault;
 
     // Maximum icons per row in the grid drawer. The slot grid auto-shrinks the cell width when this
     // exceeds 8 so the grid stays inside the drawer's inner band; below 8 the slot stays at 40 and
@@ -787,12 +666,19 @@ public class AppSettings
     // even though playback is currently hard-wired to Sliders, the Icons cap is still stored for
     // future symmetry. Defaults: 24 slider rows / 10 icon rows match the heaviest usable density
     // before a typical flyout exceeds the screen.
-    public int PlaybackAppDrawerSlidersMaxApps { get; set; } = 24;
-    public int PlaybackAppDrawerIconsMaxRows { get; set; } = 10;
-    public int RecordingAppDrawerSlidersMaxApps { get; set; } = 24;
-    public int RecordingAppDrawerIconsMaxRows { get; set; } = 10;
+    public const int AppDrawerSlidersMaxAppsDefault = 24;
+    public const int AppDrawerSlidersMaxAppsMin = 1;
+    public const int AppDrawerSlidersMaxAppsMax = 200;
+    public const int AppDrawerIconsMaxRowsDefault = 10;
+    public const int AppDrawerIconsMaxRowsMin = 1;
+    public const int AppDrawerIconsMaxRowsMax = 200;
 
-    // Empty by default; defaults are seeded by EnsureDefaultHotkeys() after construction or load.
+    public int PlaybackAppDrawerSlidersMaxApps { get; set; } = AppDrawerSlidersMaxAppsDefault;
+    public int PlaybackAppDrawerIconsMaxRows { get; set; } = AppDrawerIconsMaxRowsDefault;
+    public int RecordingAppDrawerSlidersMaxApps { get; set; } = AppDrawerSlidersMaxAppsDefault;
+    public int RecordingAppDrawerIconsMaxRows { get; set; } = AppDrawerIconsMaxRowsDefault;
+
+    // Empty by default; defaults are seeded by HotkeyDefaults.EnsureDefaults after construction or load.
     // The previous in-place initializer collided with XmlSerializer's "append to existing list" behavior:
     // the deserializer adds <Binding> elements to the list returned by the getter, so any default
     // listed here would duplicate every time the saved settings.xml was reloaded.
@@ -927,8 +813,8 @@ public class AppSettings
                     // Top up any defaults missing from the persisted list (e.g. when a new build ships a new
                     // default action). Skips entries the user has tombstoned via the UI (RemovedByUser=true)
                     // so an explicit removal isn't undone on the next launch.
-                    bool changed = loaded.DedupeHotkeysByIdentity();
-                    changed |= loaded.EnsureDefaultHotkeys();
+                    bool changed = HotkeyDefaults.DedupeByIdentity(loaded.Hotkeys);
+                    changed |= HotkeyDefaults.EnsureDefaults(loaded.Hotkeys);
                     if (changed) loaded.Save(path);
                     return loaded;
                 }
@@ -939,101 +825,9 @@ public class AppSettings
             // fall through to default
         }
         AppSettings defaults = new();
-        defaults.EnsureDefaultHotkeys();
+        HotkeyDefaults.EnsureDefaults(defaults.Hotkeys);
         defaults.Save(path);
         return defaults;
     }
 
-    /// <summary>
-    /// The set of built-in hotkey bindings seeded for fresh installs and topped up on every launch.
-    /// Identity is (Action, Parameter, BindingID): defaults always live on BindingID 0 (the primary row),
-    /// so a user-added secondary binding (BindingID >= 1) for the same action does not block re-seeding
-    /// the primary row.
-    /// Skeleton ships with one illustrative binding; replace with your project's own defaults.
-    /// </summary>
-    private static IReadOnlyList<HotkeyBinding> CreateDefaultHotkeys() =>
-    [
-        new HotkeyBinding
-        {
-            Action = HotkeyAction.OpenSettings,
-            Parameter = string.Empty,
-            Modifiers = User32.MOD_CONTROL | User32.MOD_WIN | User32.MOD_ALT,
-            VirtualKey = 0x53, // VK_S
-            Enabled = true,
-            BindingID = 0,
-        },
-    ];
-
-    /// <summary>
-    /// True if the binding occupies the same identity slot as one of the built-in defaults
-    /// (same Action, Parameter, and BindingID). Used by the settings UI to decide whether removing
-    /// a binding should hard-delete it or keep it as a tombstone (RemovedByUser=true) so the default
-    /// doesn't reappear on the next launch.
-    /// </summary>
-    public static bool IsDefaultHotkeyIdentity(HotkeyAction action, string parameter, int bindingID)
-    {
-        foreach (HotkeyBinding d in CreateDefaultHotkeys())
-            if (d.Matches(action, parameter, bindingID)) return true;
-        return false;
-    }
-
-    /// <summary>
-    /// Removes redundant hotkey rows that share the same identity tuple (Action, Parameter, BindingID),
-    /// keeping the first occurrence.
-    /// Returns true when at least one row was dropped (caller should persist).
-    /// </summary>
-    public bool DedupeHotkeysByIdentity()
-    {
-        HashSet<(HotkeyAction, string, int)> seen = [];
-        int writeIndex = 0;
-        for (int readIndex = 0; readIndex < Hotkeys.Count; readIndex++)
-        {
-            HotkeyBinding b = Hotkeys[readIndex];
-            (HotkeyAction, string, int) key = (b.Action, b.Parameter ?? string.Empty, b.BindingID);
-            if (!seen.Add(key)) continue;
-
-            if (writeIndex != readIndex) Hotkeys[writeIndex] = b;
-            writeIndex++;
-        }
-        if (writeIndex == Hotkeys.Count) return false;
-
-        Hotkeys.RemoveRange(writeIndex, Hotkeys.Count - writeIndex);
-        return true;
-    }
-
-    /// <summary>
-    /// Adds any built-in default hotkey bindings that aren't already represented in Hotkeys.
-    /// "Represented" means: an existing entry with the same (Action, Parameter, BindingID) - including
-    /// tombstoned entries with RemovedByUser=true - so a user who has explicitly removed a default
-    /// is not re-seeded.
-    /// Returns true when at least one default was newly added (caller should persist).
-    /// </summary>
-    public bool EnsureDefaultHotkeys()
-    {
-        bool added = false;
-        foreach (HotkeyBinding d in CreateDefaultHotkeys())
-        {
-            bool present = false;
-            foreach (HotkeyBinding existing in Hotkeys)
-            {
-                if (!existing.Matches(d.Action, d.Parameter, d.BindingID)) continue;
-
-                present = true;
-                break;
-            }
-            if (present) continue;
-
-            Hotkeys.Add(new HotkeyBinding
-            {
-                Action = d.Action,
-                Parameter = d.Parameter,
-                Modifiers = d.Modifiers,
-                VirtualKey = d.VirtualKey,
-                Enabled = d.Enabled,
-                BindingID = d.BindingID,
-            });
-            added = true;
-        }
-        return added;
-    }
 }

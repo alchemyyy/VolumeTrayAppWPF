@@ -12,7 +12,7 @@ namespace VolumeTrayAppWPF.Audio;
 ///   EnhancementsOff   APO is installed against this device but PKEY_AudioEndpoint_Disable_SysFx
 ///                     is set, so the engine bypasses every APO. Button dimmed; click re-enables.
 ///   Running           APO is active on this device. Button full bright; click uninstalls.
-internal enum EqualizerApoState
+internal enum EqualizerAPOState
 {
     NotAvailable,
     NotInstalled,
@@ -27,7 +27,7 @@ internal enum EqualizerApoState
 /// FileSystemWatcher / registry watch so the UI re-evaluates when state changes, but
 /// <see cref="IsAvailable"/> always reads false until the detection logic lands.
 /// </summary>
-internal static class EqualizerApoMonitor
+internal static class EqualizerAPOMonitor
 {
     // Default 64-bit install location. Equalizer APO ships an x64 installer that lands here.
     // The user can also point us at a custom path via AppSettings (TODO once the settings entry
@@ -38,7 +38,7 @@ internal static class EqualizerApoMonitor
     // Sourceforge mirror of the latest x64 installer. Surface in the not-available dialog so the
     // user can grab the EXE in one click. Pinned to a known-good version - chasing 'latest' here
     // would mean parsing Sourceforge's HTML on every flyout open.
-    public const string LatestInstallerUrl =
+    public const string LatestInstallerURL =
         "https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download";
 
     // Raised whenever the watcher believes EAPO availability MAY have changed. Listeners must
@@ -51,18 +51,19 @@ internal static class EqualizerApoMonitor
     private static FileSystemWatcher? _dirWatcher;
 
     /// <summary>
-    /// Whether Equalizer APO can be invoked on this system. Stubbed to false until the detection
-    /// logic lands - the UI binding path stays correct so flipping this to a real probe later
-    /// lights up every device row's button glyph without further wiring.
+    /// Whether Equalizer APO can be invoked on this system. STUB - in-progress feature: always
+    /// returns false today and the watcher only fires AvailabilityChanged from the filesystem.
+    /// The UI binding path is wired so flipping this to a real probe later lights up every device
+    /// row's button glyph without further wiring.
     /// </summary>
     public static bool IsAvailable
     {
         get
         {
             EnsureWatching();
-            // TODO: real detection - File.Exists(Path.Combine(InstallDir, ConfiguratorExeName))
-            // AND that the APO COM server is registered. Until then we always report false so the
-            // device-row button surfaces the install-or-locate dialog on click.
+            // STUB: always returns false until the detection backend lands (File.Exists +
+            // Configurator.exe + APO COM-server registered check). UI surfaces the install /
+            // locate dialog while this returns false.
             return false;
         }
     }
@@ -102,13 +103,13 @@ internal static class EqualizerApoMonitor
             _dirWatcher.Renamed += OnFsChange;
             _dirWatcher.EnableRaisingEvents = true;
         }
-        catch (Exception ex) { WPFLog.Log($"EqualizerApoMonitor.TryStartDirWatcher: {ex.Message}"); }
+        catch (Exception ex) { WPFLog.Log($"EqualizerAPOMonitor.TryStartDirWatcher: {ex.Message}"); }
     }
 
     private static void OnFsChange(object sender, FileSystemEventArgs e)
     {
         try { AvailabilityChanged?.Invoke(); }
-        catch (Exception ex) { WPFLog.Log($"EqualizerApoMonitor.OnFsChange: {ex.Message}"); }
+        catch (Exception ex) { WPFLog.Log($"EqualizerAPOMonitor.OnFsChange: {ex.Message}"); }
     }
 
     /// <summary>
@@ -119,6 +120,6 @@ internal static class EqualizerApoMonitor
     /// </summary>
     public static void OpenConfigurationEditor(AudioDevice device)
     {
-        WPFLog.Log($"EqualizerApoMonitor.OpenConfigurationEditor({device.FriendlyName}): backend not implemented (stub)");
+        WPFLog.Log($"EqualizerAPOMonitor.OpenConfigurationEditor({device.FriendlyName}): backend not implemented (stub)");
     }
 }

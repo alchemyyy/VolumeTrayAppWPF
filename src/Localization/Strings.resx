@@ -58,7 +58,7 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="ColorPicker_ArgbHexLabel" xml:space="preserve">
+  <data name="ColorPicker_ARGBHexLabel" xml:space="preserve">
     <value>argb hex:</value>
   </data>
   <data name="ColorPicker_ChannelLabel_Alpha" xml:space="preserve">
@@ -88,7 +88,7 @@
   <data name="ColorPicker_ResetButton" xml:space="preserve">
     <value>Reset</value>
   </data>
-  <data name="ColorPicker_RgbaHexLabel" xml:space="preserve">
+  <data name="ColorPicker_RGBAHexLabel" xml:space="preserve">
     <value>rgba hex:</value>
   </data>
   <data name="Flyout_Redock_Tooltip" xml:space="preserve">
@@ -355,15 +355,6 @@
   <data name="Settings_Flyout_AppDrawerMaxApps_Icons_Description" xml:space="preserve">
     <value>Caps how many icon rows render before the drawer enters scrolling overflow.</value>
   </data>
-  <data name="Settings_General_Apply_Button" xml:space="preserve">
-    <value>Apply</value>
-  </data>
-  <data name="Settings_General_Autosave_Description" xml:space="preserve">
-    <value>Automatically save changes.</value>
-  </data>
-  <data name="Settings_General_Autosave_Title" xml:space="preserve">
-    <value>Auto-save</value>
-  </data>
   <data name="Settings_General_Cancel_Button" xml:space="preserve">
     <value>Cancel</value>
   </data>
@@ -448,9 +439,6 @@ Target: {1}</value>
   </data>
   <data name="Settings_General_RunOnStartup_Title" xml:space="preserve">
     <value>Run on startup automatically</value>
-  </data>
-  <data name="Settings_General_Seconds_Suffix" xml:space="preserve">
-    <value>s</value>
   </data>
   <data name="Settings_General_SectionHeader" xml:space="preserve">
     <value>General</value>
@@ -544,9 +532,6 @@ Target: {1}</value>
   </data>
   <data name="Settings_Hotkeys_OpenSettings_Title" xml:space="preserve">
     <value>Open settings</value>
-  </data>
-  <data name="Settings_Hotkeys_Remove_Button" xml:space="preserve">
-    <value>Remove</value>
   </data>
   <data name="Settings_Hotkeys_SearchLabel" xml:space="preserve">
     <value>Search:</value>
@@ -815,41 +800,29 @@ Target: {1}</value>
   <data name="Flyout_ExclusiveMode_Tooltip_Disallowed" xml:space="preserve">
     <value>Exclusive mode is disallowed. Click to allow apps to take exclusive control of this device.</value>
   </data>
-  <data name="Flyout_EqualizerApo_Tooltip_Running" xml:space="preserve">
+  <data name="Flyout_EqualizerAPO_Tooltip_Running" xml:space="preserve">
     <value>Equalizer APO is running on this device. Click to uninstall. Ctrl+click or right-click: open the Configuration Editor.</value>
   </data>
-  <data name="Flyout_EqualizerApo_Tooltip_EnhancementsOff" xml:space="preserve">
+  <data name="Flyout_EqualizerAPO_Tooltip_EnhancementsOff" xml:space="preserve">
     <value>Equalizer APO is installed but enhancements are disabled for this device. Click to enable. Ctrl+click or right-click: open the Configuration Editor.</value>
   </data>
-  <data name="Flyout_EqualizerApo_Tooltip_NotInstalled" xml:space="preserve">
+  <data name="Flyout_EqualizerAPO_Tooltip_NotInstalled" xml:space="preserve">
     <value>Equalizer APO is not installed on this device. Click to install. Ctrl+click or right-click: open the Configuration Editor.</value>
   </data>
-  <data name="Flyout_EqualizerApo_Tooltip_NotAvailable" xml:space="preserve">
+  <data name="Flyout_EqualizerAPO_Tooltip_NotAvailable" xml:space="preserve">
     <value>Equalizer APO is not detected on this system. Click for installation options.</value>
   </data>
-  <data name="EqualizerApo_NotAvailable_Title" xml:space="preserve">
+  <data name="EqualizerAPO_NotAvailable_Title" xml:space="preserve">
     <value>Equalizer APO not detected</value>
   </data>
-  <data name="EqualizerApo_NotAvailable_Body" xml:space="preserve">
+  <data name="EqualizerAPO_NotAvailable_Body" xml:space="preserve">
     <value>Equalizer APO was not found on this system. Set its install location in the app settings, or download the latest x64 installer.</value>
   </data>
-  <data name="EqualizerApo_NotAvailable_DownloadButton" xml:space="preserve">
+  <data name="EqualizerAPO_NotAvailable_DownloadButton" xml:space="preserve">
     <value>Download installer</value>
-  </data>
-  <data name="EqualizerApo_NotAvailable_OpenSettingsButton" xml:space="preserve">
-    <value>Open settings</value>
   </data>
   <data name="Tray_Bluetooth" xml:space="preserve">
     <value>Bluetooth</value>
-  </data>
-  <data name="Tray_Communications" xml:space="preserve">
-    <value>Communications</value>
-  </data>
-  <data name="Tray_Recording" xml:space="preserve">
-    <value>Recording</value>
-  </data>
-  <data name="Tray_Sounds" xml:space="preserve">
-    <value>Sounds</value>
   </data>
   <data name="Settings_DeviceAppDrawers_SectionHeader" xml:space="preserve">
     <value>Device app drawers</value>
@@ -1000,5 +973,41 @@ Target: {1}</value>
   </data>
   <data name="Uninstaller_UninstallingButton" xml:space="preserve">
     <value>Uninstalling...</value>
+  </data>
+  <data name="Settings_General_WindowsStore_Title" xml:space="preserve">
+    <value>Windows Store</value>
+  </data>
+  <data name="Settings_General_StoreRunning" xml:space="preserve">
+    <value>Running from the Microsoft Store install.</value>
+  </data>
+  <data name="Settings_General_StoreNotInstalled" xml:space="preserve">
+    <value>Not installed from the Microsoft Store.</value>
+  </data>
+  <data name="Settings_Hotkeys_OpenFlyout_Title" xml:space="preserve">
+    <value>Open flyout</value>
+  </data>
+  <data name="Settings_Hotkeys_OpenFlyout_Description" xml:space="preserve">
+    <value>Show the volume flyout near the tray icon.</value>
+  </data>
+  <data name="Settings_Theme_StaticIconColor_Title" xml:space="preserve">
+    <value>Static tray icon color</value>
+  </data>
+  <data name="Settings_Theme_StaticIconColor_Description" xml:space="preserve">
+    <value>Override the tray icon color when Tray icon style is set to Static. Each variant falls back to the default when unset.</value>
+  </data>
+  <data name="Settings_Theme_StaticIconColor_LightTooltip" xml:space="preserve">
+    <value>Light theme static tray icon color</value>
+  </data>
+  <data name="Settings_Theme_StaticIconColor_DarkTooltip" xml:space="preserve">
+    <value>Dark theme static tray icon color</value>
+  </data>
+  <data name="Settings_Theme_ContextMenu_Header" xml:space="preserve">
+    <value>Context menu</value>
+  </data>
+  <data name="Settings_Theme_Flyout_Header" xml:space="preserve">
+    <value>Flyout</value>
+  </data>
+  <data name="Settings_Theme_TrayIcon_Header" xml:space="preserve">
+    <value>Tray icon</value>
   </data>
 </root>

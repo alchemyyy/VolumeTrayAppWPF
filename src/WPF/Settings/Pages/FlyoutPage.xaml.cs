@@ -1,7 +1,7 @@
-using System.Windows;
 using System.Windows.Controls;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.WPF.Settings.Utils;
+using RoutedEventArgs = System.Windows.RoutedEventArgs;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace VolumeTrayAppWPF.WPF.Settings.Pages;
@@ -11,7 +11,8 @@ namespace VolumeTrayAppWPF.WPF.Settings.Pages;
 /// and recording-visibility controls. Drawer-shaped settings (playback / recording caps + icon-mode
 /// knobs) live on <see cref="DeviceAppDrawersPage"/>. The shell calls <see cref="LoadFromSettings"/>
 /// after construction to inject AppSettings and seed control values. Tag-based mutations route
-/// through <see cref="SettingsBindings"/>.
+/// through <see cref="SettingsBindings"/>. Child-card visibility is XAML-bound via BoolToVisibility
+/// so no imperative refresh is needed after toggle changes.
 /// </summary>
 public partial class FlyoutPage : UserControl
 {
@@ -41,8 +42,6 @@ public partial class FlyoutPage : UserControl
             ShowRecordingDevicesInFlyoutToggle.IsChecked = settings.ShowRecordingDevicesInFlyout;
             IntermixRecordingWithPlaybackInFlyoutToggle.IsChecked = settings.IntermixRecordingWithPlaybackInFlyout;
             ShowListenButtonInFlyoutToggle.IsChecked = settings.ShowListenButtonInFlyout;
-
-            UpdateChildCardVisibility();
         }
         finally
         {
@@ -54,30 +53,13 @@ public partial class FlyoutPage : UserControl
     {
         if (_settings == null) return;
         SettingsBindings.HandleBoolToggle(sender, _settings, SaveAndNotify, () => _suppressChangeEvents);
-        UpdateChildCardVisibility();
     }
 
     private void EnumCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_settings == null) return;
         SettingsBindings.HandleEnumCombo(sender, _settings, SaveAndNotify, () => _suppressChangeEvents, this);
-        UpdateChildCardVisibility();
     }
 
-    /// <summary>
-    /// Hides the Intermix toggle when ShowRecordingDevicesInFlyout is off so the off-state UI
-    /// doesn't dangle a dead child knob.
-    /// </summary>
-    private void UpdateChildCardVisibility()
-    {
-        if (_settings == null) return;
-        IntermixRecordingCard.Visibility = _settings.ShowRecordingDevicesInFlyout ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void SaveAndNotify()
-    {
-        if (_settings == null) return;
-        _settings.Save();
-        _settings.RaiseChanged();
-    }
+    private void SaveAndNotify() => SettingsBindings.SaveAndNotify(_settings);
 }

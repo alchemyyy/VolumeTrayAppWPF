@@ -5,12 +5,14 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
     mc:Ignorable="d"
     d:DesignWidth="660"
     d:DesignHeight="594"
     d:Background="#1F1F1F"
+    d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils1:SettingsKeyboardNavigation.IsContentSection="True">
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_Flyout_SectionHeader}"/>
@@ -56,7 +58,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="SoundSettingsTargetCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="SoundSettingsTarget" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="LegacySoundPanel" Content="{loc:Loc Settings_Flyout_SoundSettingsTarget_Legacy}"/>
                     <ComboBoxItem Tag="WindowsSettingsApp" Content="{loc:Loc Settings_Flyout_SoundSettingsTarget_Modern}"/>
@@ -72,7 +73,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="FlyoutDeviceLayoutCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="FlyoutDeviceLayout" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="AppsAboveDevice" Content="{loc:Loc Settings_Flyout_DeviceLayout_AppsAbove}"/>
                     <ComboBoxItem Tag="AppsBelowDevice" Content="{loc:Loc Settings_Flyout_DeviceLayout_AppsBelow}"/>
@@ -85,7 +85,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="FlyoutDeviceTitlePositionCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="FlyoutDeviceTitlePosition" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="BelowSlider" Content="{loc:Loc Settings_Flyout_DeviceTitlePosition_BelowSlider}"/>
                     <ComboBoxItem Tag="AboveSlider" Content="{loc:Loc Settings_Flyout_DeviceTitlePosition_AboveSlider}"/>
@@ -98,7 +97,6 @@
             <utils:SettingsCard.Control>
                 <ComboBox x:Name="FlyoutDeviceSortCombo"
                           Style="{StaticResource SettingsComboBoxStyle}"
-                          VerticalAlignment="Center"
                           Tag="FlyoutDeviceSort" SelectionChanged="EnumCombo_Changed">
                     <ComboBoxItem Tag="StateGrouped" Content="{loc:Loc Settings_Flyout_DeviceSort_StateGrouped}"/>
                     <ComboBoxItem Tag="WindowsEnumeration" Content="{loc:Loc Settings_Flyout_DeviceSort_WindowsEnumeration}"/>
@@ -117,9 +115,12 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
+        <!-- Visibility cascades off the master ShowRecordingDevicesInFlyoutToggle so the off-state UI
+             doesn't dangle a dead child knob. Driven by XAML BoolToVisibility, no imperative refresh. -->
         <utils:SettingsCard x:Name="IntermixRecordingCard"
                             Title="{loc:Loc Settings_Flyout_IntermixRecording_Title}"
-                            Description="{loc:Loc Settings_Flyout_IntermixRecording_Description}">
+                            Description="{loc:Loc Settings_Flyout_IntermixRecording_Description}"
+                            Visibility="{Binding IsChecked, ElementName=ShowRecordingDevicesInFlyoutToggle, Converter={StaticResource BoolToVisibility}}">
             <utils:SettingsCard.Control>
                 <CheckBox x:Name="IntermixRecordingWithPlaybackInFlyoutToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
