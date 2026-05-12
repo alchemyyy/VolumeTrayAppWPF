@@ -1,4 +1,4 @@
-﻿namespace VolumeTrayAppWPF;
+namespace VolumeTrayAppWPF;
 
 // Central registry of hardcoded time values used across the app. Anything that
 // is genuinely user-configurable lives on AppSettings instead -- this file is
@@ -50,9 +50,9 @@ public static class TimeConstants
 
     // Trailing-edge debounce window for the volume-change ding. Each scroll/wheel event resets this
     // timer; the ding only fires once the timer elapses with no fresh event arriving. Keeps a fast
-    // wheel spin (or rapid slider drag releases) from machine-gunning the beep. 150ms is long enough
+    // wheel spin (or rapid slider drag releases) from machine-gunning the beep. long enough
     // to cover a normal scroll cadence and short enough that the ding still feels coupled to the gesture.
-    public const int VolumeFeedbackDingDelayMs = 150;
+    public const int VolumeFeedbackDingDelayMs = 350;
 
     // Logging
     // 7 days in ms = 7 * 24 * 60 * 60 * 1000 = 604_800_000.

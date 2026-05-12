@@ -793,15 +793,17 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// <summary>
     /// Mouse-up on a slider fires per-app / per-device volume feedback. The captured-drag side of
     /// the gesture lives in SliderClickDragBehavior; we only need to play the wav once the user
-    /// finishes interacting (thumb drag, track click, or wheel-spin landing on mouseup).
+    /// finishes interacting (thumb drag or track click). immediate=true bypasses the trailing
+    /// dwell that the wheel handler relies on - a drag release is a single discrete commit, so the
+    /// ding should land on mouse-up rather than ~200ms later.
     /// Branches on DataContext type: the slider's context is the device wrapper for device sliders
     /// and the AudioAppGroup for session sliders.
     /// </summary>
     private void Slider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is not Slider slider) return;
-        if (slider.DataContext is AudioDevice device) _feedback.PlayForDevice(device);
-        else if (slider.DataContext is AudioAppGroup group) _feedback.PlayForApp(group.Volume);
+        if (slider.DataContext is AudioDevice device) _feedback.PlayForDevice(device, immediate: true);
+        else if (slider.DataContext is AudioAppGroup group) _feedback.PlayForApp(group.Volume, immediate: true);
     }
 
     /// <summary>

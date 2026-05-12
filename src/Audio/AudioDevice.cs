@@ -581,11 +581,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// Writes the listen-enable bit (pid 1) to the endpoint property store. Leaves the target
     /// (pid 0) untouched - the audio service falls back to whatever target was previously chosen,
     /// matching the user's expectation that toggling on doesn't replace their target selection.
+    /// When enabling, also force-clears the Disable_SysFx bit so the listen monitor isn't muted
+    /// by a stale "Disable all enhancements" checkbox - the audio engine routes the monitor
+    /// through the sysfx pipeline and a 1 there silently breaks the listen path.
     /// No-op on render endpoints.
     /// </summary>
     internal void SetListenEnabled(bool enabled)
     {
         if (_disposed || DataFlow != EDataFlow.eCapture) return;
+        if (enabled) WriteDisableSysFx(false);
         WriteListenBool(PropertyKeys.PKEY_AudioEndpoint_ListenToThisDevice, enabled);
         RefreshListenStateFromStore();
     }
@@ -594,11 +598,14 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// Writes both the listen-target id (pid 0) and the listen-enable bit (pid 1) in one commit.
     /// Passing null for <paramref name="targetDeviceID"/> deletes pid 0 (VT_EMPTY) which mmsys.cpl
     /// reads back as 'Default Playback Device' - the audio service will follow whichever render
-    /// endpoint is currently default. No-op on render endpoints.
+    /// endpoint is currently default. When enabling, also force-clears the Disable_SysFx bit so
+    /// the engine actually emits the monitor (see SetListenEnabled). No-op on render endpoints.
     /// </summary>
     internal void SetListenTarget(string? targetDeviceID, bool enable)
     {
         if (_disposed || DataFlow != EDataFlow.eCapture) return;
+
+        if (enable) WriteDisableSysFx(false);
 
         IPropertyStore? store = null;
         IntPtr targetPtr = IntPtr.Zero;
@@ -658,6 +665,34 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             WPFLog.Log($"AudioDevice.WriteListenBool({FriendlyName}, pid={key.pid}): {ex.Message}");
+        }
+        finally
+        {
+            Safe.Release(store);
+        }
+    }
+
+    // Writes PKEY_AudioEndpoint_Disable_SysFx as VT_UI4 DWORD. disabled=false -> 0 (engine
+    // applies enhancements + the listen monitor); disabled=true -> 1 (engine bypasses both).
+    // Callers force this to false when enabling the listen feature so a stale "Disable all
+    // enhancements" checkbox can't silently no-op the listen monitor. Best-effort - on drivers
+    // that don't expose an enhancements pipeline the write is harmless.
+    private void WriteDisableSysFx(bool disabled)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            _device.OpenPropertyStore(Stgm.Write, out store);
+            PROPVARIANT pv = default;
+            pv.vt = PROPVARIANT.VT_UI4;
+            pv.p1 = new IntPtr(disabled ? 1 : 0);
+            PROPERTYKEY key = PropertyKeys.PKEY_AudioEndpoint_Disable_SysFx;
+            store.SetValue(ref key, ref pv);
+            store.Commit();
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.WriteDisableSysFx({FriendlyName}, disabled={disabled}): {ex.Message}");
         }
         finally
         {

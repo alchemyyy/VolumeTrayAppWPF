@@ -170,6 +170,15 @@ internal static class PropertyKeys
     public static readonly PROPERTYKEY PKEY_AudioEndpoint_ExclusiveModeAppsPriority = new(
         new Guid(0xB3F8FA53, 0x0004, 0x438E, 0x90, 0x03, 0x51, 0xA4, 0x6E, 0x13, 0x9B, 0xFC), 4);
 
+    // "Disable all enhancements" master checkbox on the mmsys.cpl Enhancements tab. Stored as
+    // VT_UI4 DWORD: 0 = enhancements enabled (engine default when absent), 1 = disabled. On
+    // capture endpoints the audio engine routes the listen-to-this-device monitor through the
+    // same sysfx pipeline, so flipping this to 1 silently breaks the listen feature even when
+    // PKEY_AudioEndpoint_ListenToThisDevice is true. Same fmtid as PKEY_AudioEndpoint_GUID,
+    // pid 5; defined in audioendpoints.h.
+    public static readonly PROPERTYKEY PKEY_AudioEndpoint_Disable_SysFx = new(
+        new Guid(0x1DA5D803, 0xD492, 0x4EDD, 0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E), 5);
+
     // Endpoint default mix format. VT_BLOB holding a WAVEFORMATEX (or WAVEFORMATEXTENSIBLE when
     // wFormatTag == 0xFFFE). Same value the Sound Control Panel's Advanced tab edits, and what the
     // audio engine resamples / mixes to before handing buffers to the driver.

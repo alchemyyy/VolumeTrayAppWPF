@@ -299,7 +299,7 @@
              cell. Going up two ContentPresenter levels lands us at the outer ContentPresenter whose
              DataContext is the VolumeFlyoutCell. -->
         <DataTemplate x:Key="SessionRowTemplate" DataType="{x:Type audio:AudioAppGroup}">
-            <Grid Margin="0,0,0,9">
+            <Grid Margin="0,0,0,8">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Opacity" Value="1.0"/>
@@ -511,7 +511,7 @@
                        3  Listen-to-this-device (capture endpoints only; collapses to zero on render)
                        4  device icon (set as default / enable-disable hub). -->
                 <Grid Grid.Row="{Binding DeviceTitleRowIndex, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                      Margin="-1,-4,0,10">
+                      Margin="-1,-4,0,6">
                     <!-- AboveSlider: TranslateTransform anchors the title's visual bottom to the
                          percent textblock's top (the volume-level indicator) via element-name
                          bindings to DeviceSliderRow and DeviceVolumePercent. BelowSlider: converter
@@ -745,7 +745,7 @@
                     </Button>
                     <Button Grid.Column="4"
                             Style="{StaticResource DeviceIconButtonStyle}"
-                            Margin="6,3,-1,-3"
+                            Margin="0,3,-1,-3"
                             Tag="{Binding}"
                             Click="DeviceIcon_Click"
                             PreviewMouseRightButtonUp="DeviceIcon_PreviewMouseRightButtonUp"
@@ -1160,13 +1160,15 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ContentControl">
                         <Border Background="{DynamicResource ThemeFooterBackground}"
-                                Padding="14,10,12,0"
                                 Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
                             <Border.Style>
                                 <!-- Round the bottom corners only when this apps band sits flush
-                                     against the flyout's outer rounded bottom (AppsBelow + IsLast). -->
+                                     against the flyout's outer rounded bottom (AppsBelow + IsLast).
+                                     Padding lives in the style (not as a local attribute) so the
+                                     AppsBelow flip trigger can override it. -->
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="0"/>
+                                    <Setter Property="Padding" Value="14,10,12,0"/>
                                     <Style.Triggers>
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
@@ -1175,6 +1177,12 @@
                                             </MultiDataTrigger.Conditions>
                                             <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
                                         </MultiDataTrigger>
+                                        <!-- AppsBelow: drawer sits at the bottom of the cell, so its
+                                             breathing room moves from above the slider list to below
+                                             it, mirroring the AppsAbove layout. -->
+                                        <DataTrigger Binding="{Binding IsAppsBottomBand}" Value="True">
+                                            <Setter Property="Padding" Value="14,0,12,10"/>
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
@@ -1205,8 +1213,11 @@
                                         Padding="13,0,11,0"
                                         Visibility="{Binding HasVisibleGroups, Converter={StaticResource BoolToVisibility}}">
                                     <Border.Style>
+                                        <!-- Margin lives in the style (not as a local attribute) so
+                                             the AppsBelow flip trigger can override it. -->
                                         <Style TargetType="Border">
                                             <Setter Property="CornerRadius" Value="0"/>
+                                            <Setter Property="Margin" Value="0,-3,0,-4"/>
                                             <Style.Triggers>
                                                 <MultiDataTrigger>
                                                     <MultiDataTrigger.Conditions>
@@ -1215,6 +1226,12 @@
                                                     </MultiDataTrigger.Conditions>
                                                     <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
                                                 </MultiDataTrigger>
+                                                <!-- AppsBelow: drawer sits at the bottom of the cell, so
+                                                     the -2px overlap that tucks the grid into the device
+                                                     row moves from the bottom edge to the top edge. -->
+                                                <DataTrigger Binding="{Binding IsAppsBottomBand}" Value="True">
+                                                    <Setter Property="Margin" Value="0,-2,0,2"/>
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
@@ -1258,71 +1275,98 @@
              these properties on every live cell and the visuals restyle without a rebuild. -->
         <DataTemplate x:Key="CellTemplate" DataType="{x:Type wpf:VolumeFlyoutCell}">
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
                 <!-- Faux rounded-card fill. Drawn first so the cell's content paints on top of
                      it. Overflows the cell by 1px each side so the wrapper width matches the
                      flyout's full outer width; ClipToBounds on the parent clips the overflow. -->
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        Background="{DynamicResource ThemeFooterBackground}"
+                <Border Background="{DynamicResource ThemeFooterBackground}"
                         CornerRadius="{DynamicResource CornerRadiusFlyout}"
                         Margin="-1,0,-1,0"
                         IsHitTestVisible="False"/>
 
-                <!-- Apps band slot. Internal style pivots between slider list and icon grid; row
-                     position pivots between top (AppsAbove) and bottom (AppsBelow) via the cell. -->
-                <ContentControl Grid.Row="{Binding AppsRowIndex}"
-                                Style="{StaticResource AppsBandStyle}"/>
-
-                <!-- Device-row slot. Hosts the named DeviceRowTemplate inside a footer-band Border
-                     that picks up rounded-bottom corners when this is the last cell AND there's no
-                     apps band below it (AppsAbove layout, or AppsBelow with no visible groups). -->
-                <Border Grid.Row="{Binding DeviceRowIndex}"
-                        Background="{DynamicResource ThemeFooterBackground}">
+                <!-- Edge breathing room: when this is the topmost or bottommost cell, push the
+                     row-bound content inward by 6px and let the cell's fill / outline grow with
+                     the wrapper so the rounded card stretches over the new blank space. The
+                     MultiDataTrigger handles the single-cell case (IsFirst AND IsLast); it sits
+                     last so it wins in WPF's last-matching-trigger order. The wrapper itself has
+                     no background, so the padded region shows the fill Border behind it. -->
+                <Border>
                     <Border.Style>
                         <Style TargetType="Border">
-                            <Setter Property="CornerRadius" Value="0"/>
-                            <Setter Property="Padding" Value="17,4,12,12"/>
                             <Style.Triggers>
-                                <!-- AppsBelow + last cell + apps band collapsed: this device row is
-                                     visually the bottom band, so it rounds its bottom corners. The
-                                     padding shifts to match the AppsAbove cell's bottom band so the
-                                     content sits at the same offset regardless of layout. -->
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsAppsBottomBand}" Value="True"/>
-                                        <Condition Binding="{Binding HasVisibleGroups}" Value="False"/>
-                                        <Condition Binding="{Binding IsLast}" Value="True"/>
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
-                                </MultiDataTrigger>
-                                <!-- AppsAbove + last cell: device row sits at the flyout's bottom edge. -->
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsAppsBottomBand}" Value="False"/>
-                                        <Condition Binding="{Binding IsLast}" Value="True"/>
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
-                                </MultiDataTrigger>
-                                <!-- AppsBelow non-last cell: extra bottom padding so the device row
-                                     hugs the apps band above instead of leaving a gap. -->
-                                <DataTrigger Binding="{Binding IsAppsBottomBand}" Value="True">
-                                    <Setter Property="Padding" Value="14,12,12,0"/>
+                                <DataTrigger Binding="{Binding IsFirst}" Value="True">
+                                    <Setter Property="Padding" Value="0,8,0,0"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding IsLast}" Value="True">
+                                    <Setter Property="Padding" Value="0,0,0,4"/>
+                                </DataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsFirst}" Value="True"/>
+                                        <Condition Binding="{Binding IsLast}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Padding" Value="0,4,0,4"/>
+                                </MultiDataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
-                    <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Apps band slot. Internal style pivots between slider list and icon grid; row
+                             position pivots between top (AppsAbove) and bottom (AppsBelow) via the cell. -->
+                        <ContentControl Grid.Row="{Binding AppsRowIndex}"
+                                        Style="{StaticResource AppsBandStyle}"/>
+
+                        <!-- Device-row slot. Hosts the named DeviceRowTemplate inside a footer-band Border
+                             that picks up rounded-bottom corners when this is the last cell AND there's no
+                             apps band below it (AppsAbove layout, or AppsBelow with no visible groups). -->
+                        <Border Grid.Row="{Binding DeviceRowIndex}"
+                                Background="{DynamicResource ThemeFooterBackground}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="0"/>
+                                    <Setter Property="Padding" Value="17,4,12,12"/>
+                                    <Style.Triggers>
+                                        <!-- AppsBelow + last cell + apps band collapsed: this device row is
+                                             visually the bottom band, so it rounds its bottom corners. The
+                                             padding shifts to match the AppsAbove cell's bottom band so the
+                                             content sits at the same offset regardless of layout. -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsAppsBottomBand}" Value="True"/>
+                                                <Condition Binding="{Binding HasVisibleGroups}" Value="False"/>
+                                                <Condition Binding="{Binding IsLast}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                                        </MultiDataTrigger>
+                                        <!-- AppsAbove + last cell: device row sits at the flyout's bottom edge. -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsAppsBottomBand}" Value="False"/>
+                                                <Condition Binding="{Binding IsLast}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusFooterBottom}"/>
+                                        </MultiDataTrigger>
+                                        <!-- AppsBelow non-last cell: extra bottom padding so the device row
+                                             hugs the apps band above instead of leaving a gap. -->
+                                        <DataTrigger Binding="{Binding IsAppsBottomBand}" Value="True">
+                                            <Setter Property="Padding" Value="14,12,12,0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <ContentControl Template="{StaticResource DeviceRowTemplate}"/>
+                        </Border>
+                    </Grid>
                 </Border>
 
                 <!-- Faux rounded-card outline. Same shape and overflow as the fill above; sits
                      last so the stroke paints on top of everything. No children, so Opacity
                      dims the BorderBrush only. -->
-                <Border Grid.Row="0" Grid.RowSpan="2"
-                        BorderBrush="{DynamicResource ThemeSliderTrack}"
+                <Border BorderBrush="{DynamicResource ThemeSliderTrack}"
                         BorderThickness="1"
                         CornerRadius="{DynamicResource CornerRadiusFlyout}"
                         Margin="-1,0,-1,0"

@@ -9,8 +9,10 @@ namespace VolumeTrayAppWPF.WPF;
 /// <summary>
 /// Plays the per-device / per-app volume-change feedback ding. Loads a single wav template at
 /// construction, clones + PCM-scales it per app play, and routes through SoundPlayer / winmm.
-/// Trailing-edge throttler dwells <see cref="TimeConstants.VolumeFeedbackDingDelayMs"/> after the
-/// most recent event before firing, so a rapid drag only fires once at the user's settled value.
+/// Scroll-wheel callers use the trailing-edge dwell of <see cref="TimeConstants.VolumeFeedbackDingDelayMs"/>
+/// so a burst of wheel ticks collapses into one ding; drag-release callers pass immediate=true
+/// to fire on mouse-up without dwelling. Both paths share the throttler so an immediate play
+/// preempts any in-progress wheel dwell on the same key.
 /// </summary>
 internal sealed class AppVolumeFeedbackPlayer : IDisposable
 {
@@ -60,8 +62,10 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
     /// Routes the volume-change ding through the specific render endpoint the user just adjusted
     /// so the sound comes out of that device rather than the system default. Capture endpoints are
     /// skipped outright - microphones don't render audio.
+    /// immediate=true skips the trailing-edge dwell; the throttler still serialises, so an immediate
+    /// play preempts a pending wheel-dwell via the standard replacement signal.
     /// </summary>
-    public void PlayForDevice(AudioDevice device)
+    public void PlayForDevice(AudioDevice device, bool immediate = false)
     {
         if (_settings?.PlayDeviceVolumeChangeSound != true) return;
         if (device.IsCaptureDevice) return;
@@ -74,7 +78,11 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
         byte[] wavBytes = wav.Bytes;
         _ = _feedbackThrottler.RunAsync(throttleKey, async ctx =>
         {
-            if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+            if (!immediate)
+            {
+                if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+            }
+            else if (ctx.HasReplacement) return;
             try { device.PlayChangeFeedback(wavBytes); }
             catch { /* feedback is best-effort */ }
         });
@@ -83,8 +91,10 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
     /// <summary>
     /// Per-app slider feedback. Clones the wav template, scales PCM samples to the app's current
     /// volume, and plays through SoundPlayer on the UI dispatcher.
+    /// immediate=true fires on the caller's tick (drag-release) instead of waiting out the trailing
+    /// dwell that scroll-wheel callers rely on.
     /// </summary>
-    public void PlayForApp(float scalarVolume)
+    public void PlayForApp(float scalarVolume, bool immediate = false)
     {
         if (_settings?.PlayAppVolumeChangeSound != true) return;
 
@@ -96,7 +106,11 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
         // latest position rather than whatever it was when the gesture started.
         _ = _feedbackThrottler.RunAsync(AppDingThrottleKey, async ctx =>
         {
-            if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+            if (!immediate)
+            {
+                if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+            }
+            else if (ctx.HasReplacement) return;
             try { await _uiDispatcher.InvokeAsync(() => PlayAppFeedbackNow(scalarVolume)); }
             catch { /* dispatcher torn down */ }
         });
