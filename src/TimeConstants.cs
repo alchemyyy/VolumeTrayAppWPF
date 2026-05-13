@@ -60,6 +60,23 @@ public static class TimeConstants
     public const int LogFlushIntervalMs = 2_000;
     public const int LogShutdownTimerWaitMs = 1_000;
 
+    // Stuck peak-meter watchdog dwell. Windows occasionally latches IAudioMeterInformation on
+    // idle render endpoints (Bluetooth A2DP offload is the common offender) so the COM call keeps
+    // returning the exact same non-zero peak pair forever. Each fresh pair re-arms this one-shot
+    // timer; if no different pair arrives within the window, the callback marks the meter latched
+    // and subsequent same-value samples force the lerp to silence so the bar decays instead of
+    // freezing on the latched value. 1s is well past any sustained audio frame's bit-level wiggle
+    // and short enough that a real freeze visibly resolves within "blink and you'll miss it".
+    public const int MeterStaleWatchdogMs = 1_000;
+
+    // Bluetooth battery active-poll interval. The PnP watcher emits Updated events on
+    // Connected-state changes but not on battery deltas, so without an explicit re-query via
+    // CM_Get_DevNode_Property the bound UI would freeze on the value read at Added time. The
+    // timer is only running while the flyout is open (no point polling the OS when nothing is
+    // bound). 30s is well under typical headset reporting cadence and matches what Windows
+    // Settings itself polls at.
+    public const int BluetoothBatteryPollIntervalMs = 30_000;
+
     // Endpoint-render drain poll slice.
     // Used by Audio/EndpointSoundPlayback for the post-write padding-poll loop inside Play().
     public const int EndpointSoundPlaybackPollSliceMs = 30;

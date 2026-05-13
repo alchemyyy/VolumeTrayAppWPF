@@ -46,38 +46,7 @@ public partial class GeneralPage : UserControl
             RunOnStartupToggle.IsChecked = StartupManager.GetRunOnStartup();
             UpdateRunOnStartupDescription();
             LogarithmicVolumeScaleToggle.IsChecked = settings.UseLogarithmicVolumeScale;
-            PlayDeviceVolumeChangeSoundToggle.IsChecked = settings.PlayDeviceVolumeChangeSound;
             PlayAppVolumeChangeSoundToggle.IsChecked = settings.PlayAppVolumeChangeSound;
-
-            UnifiedPeakMeterToggle.IsChecked = settings.UnifiedPeakMeter;
-
-            SettingsBindings.BindSpinner(
-                UnifiedMeterBiasBox,
-                () => settings.UnifiedMeterLowChannelBiasMultiplier,
-                v => settings.UnifiedMeterLowChannelBiasMultiplier = v,
-                () => _suppressChangeEvents,
-                SaveAndNotify);
-
-            SettingsBindings.BindSpinner(
-                MeterPeakFpsBox,
-                () => settings.MeterPeakFps,
-                v => settings.MeterPeakFps = v,
-                () => _suppressChangeEvents,
-                SaveAndNotify);
-
-            SettingsBindings.BindSpinner(
-                MeterPeakSampleRateBox,
-                () => settings.MeterPeakSampleRate,
-                v => settings.MeterPeakSampleRate = v,
-                () => _suppressChangeEvents,
-                SaveAndNotify);
-
-            SettingsBindings.BindSpinner(
-                MeterPeakChangeCeilingBox,
-                () => settings.MeterPeakChangeCeiling,
-                v => settings.MeterPeakChangeCeiling = v,
-                () => _suppressChangeEvents,
-                SaveAndNotify);
 
             SettingsBindings.BindSpinner(
                 IconRetryIntervalBox,
@@ -124,7 +93,7 @@ public partial class GeneralPage : UserControl
     }
 
     // Tag-based bool toggle dispatcher for every non-side-effecting checkbox on this page:
-    // PlayDeviceVolumeChangeSound, PlayAppVolumeChangeSound, UseLogarithmicVolumeScale, UnifiedPeakMeter.
+    // PlayAppVolumeChangeSound, UseLogarithmicVolumeScale.
     // The shared BoolToggleSetters table in SettingsBindings carries the property writer for each Tag.
     private void BoolToggle_Changed(object sender, RoutedEventArgs e)
     {

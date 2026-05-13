@@ -1147,13 +1147,14 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     /// <summary>
     /// Right-click on the device name OR the compact format label opens a picker of every
-    /// (bit depth, sample rate) combination this endpoint accepts in shared mode. Mirrors
+    /// (channels, bit depth, sample rate) combination this endpoint natively supports. Mirrors
     /// mmsys.cpl's Advanced > Default Format dropdown but inline - the user doesn't have to
     /// leave the flyout. Wired to both labels so the gesture works on the bigger, easier-to-hit
     /// name target as well as the small format readout.
     /// </summary>
     private void DeviceFormatMenu_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        WPFLog.Log($"DeviceFormatMenu_PreviewMouseRightButtonUp: senderType={sender?.GetType().Name ?? "<null>"} tagType={(sender as FrameworkElement)?.Tag?.GetType().Name ?? "<null>"}");
         if (sender is not FrameworkElement fe || fe.Tag is not AudioDevice device) return;
         OpenDefaultFormatMenu(fe, device);
         e.Handled = true;
@@ -1174,23 +1175,27 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     private void OpenDefaultFormatMenu(FrameworkElement anchor, AudioDevice device)
     {
-        List<(int Bits, int SampleRate)> formats = device.EnumerateSupportedFormats();
+        List<(int Channels, int Bits, int SampleRate)> formats = device.EnumerateSupportedFormats();
+        WPFLog.Log($"OpenDefaultFormatMenu({device.FriendlyName}): EnumerateSupportedFormats returned {formats.Count} entries");
         if (formats.Count == 0) return;
 
         (int Channels, int Bits, int SampleRate)? current = device.GetCurrentFormat();
-        int channels = current?.Channels ?? 0;
 
         List<FormatMenuItem> items = new(formats.Count);
-        foreach ((int bits, int rate) in formats)
+        foreach ((int channels, int bits, int rate) in formats)
         {
+            int capturedChannels = channels;
             int capturedBits = bits;
             int capturedRate = rate;
             string label = $"{channels} channel, {bits} bit, {rate} Hz";
-            bool isCurrent = current.HasValue && current.Value.Bits == bits && current.Value.SampleRate == rate;
+            bool isCurrent = current.HasValue
+                && current.Value.Channels == channels
+                && current.Value.Bits == bits
+                && current.Value.SampleRate == rate;
             items.Add(new FormatMenuItem(
                 label,
                 isCurrent,
-                new MenuRelayCommand(() => device.SetDeviceFormat(capturedBits, capturedRate))));
+                new MenuRelayCommand(() => device.SetDeviceFormat(capturedChannels, capturedBits, capturedRate))));
         }
 
         ContextMenu menu = (ContextMenu)FindResource("DefaultFormatContextMenu");

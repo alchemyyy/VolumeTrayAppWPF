@@ -33,6 +33,7 @@
         <wpf:DeviceFormatLineVisibilityConverter x:Key="DeviceFormatLineVisibility"/>
         <wpf:BatteryGlyphConverter x:Key="BatteryGlyph"/>
         <wpf:BatteryButtonVisibilityConverter x:Key="BatteryButtonVisibility"/>
+        <wpf:BatteryLevelTooltipConverter x:Key="BatteryLevelTooltip"/>
         <utils:DeviceButtonVisibilityConverter x:Key="DeviceButtonVisibility"/>
 
         <!-- Per-cell slot size for the icon grid drawer. Lifted into the resource dictionary as a
@@ -636,7 +637,8 @@
                             Margin="0,3,0,-3"
                             Tag="{Binding}"
                             IsHitTestVisible="True"
-                            Focusable="False">
+                            Focusable="False"
+                            ToolTipService.InitialShowDelay="250">
                         <Button.Visibility>
                             <MultiBinding Converter="{StaticResource BatteryButtonVisibility}">
                                 <Binding Path="BatteryLevel"/>
@@ -646,7 +648,11 @@
                             </MultiBinding>
                         </Button.Visibility>
                         <Button.ToolTip>
-                            <Binding Path="BatteryLevel" StringFormat="{loc:Loc Flyout_BatteryButton_Tooltip_Format}"/>
+                            <MultiBinding Converter="{StaticResource BatteryLevelTooltip}">
+                                <Binding Path="BatteryLevel"/>
+                                <Binding Source="{x:Static loc:LocalizationManager.Instance}"
+                                         Path="[Flyout_BatteryButton_Tooltip_Format]"/>
+                            </MultiBinding>
                         </Button.ToolTip>
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}"/>

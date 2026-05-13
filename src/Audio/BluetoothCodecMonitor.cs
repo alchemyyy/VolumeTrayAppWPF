@@ -92,7 +92,10 @@ internal sealed class BluetoothCodecMonitor : INotifyPropertyChanged, IDisposabl
         get => _currentCodec;
         private set
         {
-            if (_currentCodec == value) return;
+            // No equality short-circuit: every ETW emit is treated as the authoritative latest
+            // value. Re-firing CodecChanged with the same codec re-runs the fan-out into every
+            // BT render device, which is how a newly-promoted or freshly-Active endpoint catches
+            // up to the cached codec without waiting for an A2DP renegotiation it may never get.
             _currentCodec = value;
             OnPropertyChanged();
             CodecChanged?.Invoke(value);

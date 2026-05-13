@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:loc="clr-namespace:VolumeTrayAppWPF.Localization"
+    xmlns:local="clr-namespace:VolumeTrayAppWPF.WPF"
     xmlns:models="clr-namespace:VolumeTrayAppWPF.Models"
     xmlns:utils="clr-namespace:VolumeTrayAppWPF.WPF.Settings.Utils"
     xmlns:utils1="clr-namespace:VolumeTrayAppWPF.WPF.Utils"
@@ -162,6 +163,59 @@
                           Tag="ShowDeviceCodecText"
                           Checked="BoolToggle_Changed"
                           Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <TextBlock Text="{loc:Loc Settings_General_PeakMeter_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_UnifiedPeakMeter_Title}"
+                            Description="{loc:Loc Settings_Theme_UnifiedPeakMeter_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="UnifiedPeakMeterToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="UnifiedPeakMeter" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <!-- Bias multiplier card. Only meaningful while UnifiedPeakMeter is on, so visibility is
+             gated on the toggle's IsChecked - hidden when off so the off-state UI stays uncluttered. -->
+        <utils:SettingsCard x:Name="UnifiedMeterBiasCard"
+                            Title="{loc:Loc Settings_Theme_UnifiedMeterBias_Title}"
+                            Description="{loc:Loc Settings_Theme_UnifiedMeterBias_Description}"
+                            Visibility="{Binding IsChecked, ElementName=UnifiedPeakMeterToggle, Converter={StaticResource BoolToVisibility}}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner x:Name="UnifiedMeterBiasBox"
+                                      Minimum="{x:Static models:AppSettings.UnifiedMeterLowChannelBiasMultiplierMin}"
+                                      Maximum="{x:Static models:AppSettings.UnifiedMeterLowChannelBiasMultiplierMax}"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakFps_Title}"
+                            Description="{loc:Loc Settings_Theme_MeterPeakFps_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner x:Name="MeterPeakFpsBox"
+                                      Minimum="{x:Static models:AppSettings.MeterPeakFpsMin}"
+                                      Maximum="{x:Static models:AppSettings.MeterPeakFpsMax}"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakSampleRate_Title}"
+                            Description="{loc:Loc Settings_Theme_MeterPeakSampleRate_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner x:Name="MeterPeakSampleRateBox"
+                                      Minimum="{x:Static models:AppSettings.MeterPeakSampleRateMin}"
+                                      Maximum="{x:Static models:AppSettings.MeterPeakSampleRateMax}"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Theme_MeterPeakChangeCeiling_Title}"
+                            Description="{loc:Loc Settings_Theme_MeterPeakChangeCeiling_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner x:Name="MeterPeakChangeCeilingBox"
+                                      Minimum="{x:Static models:AppSettings.MeterPeakChangeCeilingMin}"
+                                      Maximum="{x:Static models:AppSettings.MeterPeakChangeCeilingMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 

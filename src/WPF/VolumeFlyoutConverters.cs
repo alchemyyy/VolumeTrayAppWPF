@@ -246,6 +246,33 @@ internal sealed class BatteryGlyphConverter : IValueConverter
 }
 
 /// <summary>
+/// Formats the per-row battery button tooltip. Combines a localized format string (resolved via the
+/// LocalizationManager indexer so a culture flip re-fires the binding) with the BatteryLevel int.
+/// XAML can't put a {loc:Loc} on Binding.StringFormat because that's a plain CLR property and the
+/// loc extension always hands back a Binding, so the MultiBinding + converter shape is the way to
+/// keep the format string in the .resx instead of hardcoding it in markup.
+///
+/// MultiBinding inputs (in declared order):
+///   [0]=BatteryLevel (int?)  [1]=Format string (string)
+/// Returns empty when either input is missing - the host button's Visibility binding already
+/// collapses the whole control in that case, so a stale tooltip never gets a chance to show.
+/// </summary>
+internal sealed class BatteryLevelTooltipConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length < 2) return string.Empty;
+        if (values[0] is not int level) return string.Empty;
+        if (values[1] is not string format || format.Length == 0) return string.Empty;
+
+        return string.Format(culture, format, level);
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// Visibility for the per-row battery button. Extends the standard device-button visibility rule
 /// (capture rows read the recording flag, render rows read the playback flag) with a fourth input:
 /// the battery level must be known. A null level collapses the button so non-BT devices and BT

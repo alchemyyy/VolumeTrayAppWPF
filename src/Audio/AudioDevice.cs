@@ -2,10 +2,13 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
+using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.Utils;
+using Timer = System.Threading.Timer;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -79,6 +82,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private DeviceState _state;
     private BluetoothCodec? _currentCodec;
     private int? _batteryLevel;
+    private bool _isBluetooth;
     private bool _disposed;
 
     // Single-flight gate for IPolicyConfig calls on this device. SetEnabled / SetAsDefault /
@@ -98,6 +102,18 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // which is what gives the meter its smoothness.
     private MeterLerp _meterLerp;
 
+    // Watchdog for the Windows IAudioMeterInformation latch on idle render endpoints (A2DP
+    // offload makes BT especially prone). UpdatePeakValueBackground re-arms this one-shot timer
+    // every time the COM read returns a different (min, max) pair from the previous sample.
+    // After MeterStaleWatchdogMs of bit-exact same-value reads the callback flips _meterIsLatched,
+    // and subsequent same-value samples force the lerp to silence instead of writing the stale
+    // value through. The next genuinely different read clears the flag. volatile so the bg
+    // sample thread sees the callback's flip without a fence.
+    private readonly Timer _stuckMeterWatchdog;
+    private float _lastRawPeakMin;
+    private float _lastRawPeakMax;
+    private volatile bool _meterIsLatched;
+
     // Throttled COM-write driver for endpoint volume. Shape shared with AudioSession via the
     // VolumeThrottle composition - the only difference is the COM call (SetMasterVolumeLevelScalar
     // vs SetMasterVolume).
@@ -116,15 +132,28 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     public ReadOnlyObservableCollection<AudioAppGroup> Groups { get; }
 
     /// <summary>
-    /// True when this endpoint is backed by a Bluetooth radio. Primary signal is the audio
-    /// endpoint's <c>PKEY_Device_EnumeratorName</c> reading "BTHENUM" - the PnP bus enumerator
-    /// every Bluetooth Classic A2DP / HFP endpoint inherits, regardless of how the driver names
-    /// the device (Win11 strips the "Bluetooth" prefix from many drivers, so substring checks on
-    /// the friendly names alone miss e.g. "Headphones (WH-1000XM4)"). Name-substring tokens are
-    /// kept as a fallback for the rare driver that doesn't surface EnumeratorName through the
-    /// endpoint property store. Stable for the lifetime of the wrapper.
+    /// True when this endpoint is backed by a Bluetooth radio. Seeded at construction from the
+    /// audio endpoint's <c>PKEY_Device_EnumeratorName</c> (reads "BTHENUM" on most BT endpoints)
+    /// with a name-substring fallback, but those signals aren't universal - some Win11 drivers
+    /// don't propagate the enumerator key to the audio endpoint and strip the "Bluetooth" prefix
+    /// from friendly names, so a real BT headset can read as plain "Headphones (WH-1000XM4)" with
+    /// no protocol hint. <see cref="AudioDeviceManager"/> promotes the flag to true after
+    /// <see cref="BluetoothBatteryMonitor"/> observes a matching <see cref="ContainerId"/> on
+    /// the BT Devices class - that match is definitive since the audio endpoint inherits its
+    /// container id from the same physical device the BT watcher enumerates. Setter is internal
+    /// so only the manager can flip it; the property raises INPC so codec / battery bindings
+    /// re-evaluate when the flag is promoted post-construction.
     /// </summary>
-    public bool IsBluetooth { get; }
+    public bool IsBluetooth
+    {
+        get => _isBluetooth;
+        internal set
+        {
+            if (_isBluetooth == value) return;
+            _isBluetooth = value;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>
     /// PnP container id this endpoint belongs to, read from PKEY_Device_ContainerId. Every
@@ -138,6 +167,18 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     public Guid? ContainerId { get; }
 
     /// <summary>
+    /// Raw PnP bus enumerator the endpoint sits on, read from <c>PKEY_Device_EnumeratorName</c>
+    /// at construction (e.g. <c>"BTHENUM"</c>, <c>"BTHHFENUM"</c>, <c>"BTHLE"</c>,
+    /// <c>"HDAUDIO"</c>, <c>"USB"</c>, <c>"TUSBAUDIO_ENUM"</c>, <c>"ROOT"</c>). Empty string
+    /// when the property store doesn't carry the key. Used by the
+    /// <see cref="AudioDeviceManager"/> promotion path to refuse marking an endpoint as
+    /// Bluetooth when its own bus identity contradicts - a Realtek HDAUDIO endpoint that
+    /// happens to share a container id with a Bluetooth devnode is still not Bluetooth.
+    /// Stable for the lifetime of the wrapper.
+    /// </summary>
+    public string EnumeratorName { get; }
+
+    /// <summary>
     /// Last A2DP codec the Bluetooth stack negotiated for this endpoint, pushed in by
     /// <see cref="AudioDeviceManager"/> from <see cref="BluetoothCodecMonitor"/>. Always null on
     /// non-Bluetooth endpoints. The Microsoft.Windows.Bluetooth.BthA2dp ETW event the monitor
@@ -149,7 +190,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         get => _currentCodec;
         internal set
         {
-            if (_currentCodec == value) return;
+            // No equality short-circuit: every push from the monitor's CodecChanged fan-out is
+            // treated as the authoritative latest value. Re-asserting the same codec on a
+            // freshly-promoted or freshly-Active endpoint is how it catches up to the cached
+            // codec without waiting for an A2DP renegotiation that may never arrive.
             _currentCodec = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CurrentCodecName));
@@ -845,7 +889,8 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         (_friendlyName, _deviceDescription, _interfaceFriendlyName) = ResolveDeviceNames(device);
         _defaultFormat = ResolveDefaultFormat(device);
-        IsBluetooth = DetectIsBluetooth(device, _friendlyName, _deviceDescription, _interfaceFriendlyName);
+        EnumeratorName = ReadEnumeratorName(device) ?? string.Empty;
+        IsBluetooth = DetectIsBluetooth(EnumeratorName, _friendlyName, _deviceDescription, _interfaceFriendlyName);
         ContainerId = ReadContainerId(device);
 
         device.GetState(out uint stateRaw);
@@ -863,6 +908,11 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // the Advanced > Exclusive Mode checkbox for either). Seed direct, then refresh runs on
         // mmsys.cpl writes via the manager's OnPropertyValueChanged hook.
         _isExclusiveModeAllowed = ReadAllowExclusiveControlFromStore(_device);
+
+        // One-shot stuck-meter watchdog. Stays disarmed until the first different peak pair lands;
+        // every fresh pair after that re-arms it via Timer.Change. Initialized before
+        // TryActivateProxies so a fast first sample can't race the field.
+        _stuckMeterWatchdog = new Timer(OnStuckMeterWatchdog, null, Timeout.Infinite, Timeout.Infinite);
 
         // Endpoint volume / meter / session manager are only addressable on Active devices.
         // For Disabled / NotPresent / Unplugged endpoints we keep a thin wrapper alive so the
@@ -1224,7 +1274,26 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             try
             {
                 MeterReader.ReadStereoPeaks(meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
-                _meterLerp.WriteRawPeaks(minPeak, maxPeak);
+
+                if (minPeak != _lastRawPeakMin || maxPeak != _lastRawPeakMax)
+                {
+                    // Fresh value - clear any latched-stale state, cache, write through, re-arm.
+                    _lastRawPeakMin = minPeak;
+                    _lastRawPeakMax = maxPeak;
+                    _meterIsLatched = false;
+                    _meterLerp.WriteRawPeaks(minPeak, maxPeak);
+                    _stuckMeterWatchdog.Change(TimeConstants.MeterStaleWatchdogMs, Timeout.Infinite);
+                }
+                else if (_meterIsLatched)
+                {
+                    // Windows-confirmed latch - ignore the stale COM value and force silence so
+                    // the lerp decays. Stays in this branch until a genuinely different pair lands.
+                    _meterLerp.PinRawPeaksToSilence();
+                }
+                else
+                {
+                    _meterLerp.WriteRawPeaks(minPeak, maxPeak);
+                }
             }
             catch
             {
@@ -1256,6 +1325,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         _meterLerp.OnNewSample(interpolationSteps);
 
         for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnNewSample(interpolationSteps);
+    }
+
+    // Stuck-meter watchdog callback. Fires on a threadpool worker after MeterStaleWatchdogMs of
+    // bit-exact same-value reads. Just flips the latched flag - the next bg sample sees it and
+    // routes through PinRawPeaksToSilence instead of writing the stale value back to the lerp.
+    private void OnStuckMeterWatchdog(object? _)
+    {
+        if (_disposed) return;
+        _meterIsLatched = true;
     }
 
     /// <summary>
@@ -1517,73 +1595,285 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Probes which (bit depth, sample rate) combinations the audio engine accepts on this
-    /// endpoint in shared mode. Channel count and channel mask come from the endpoint's current
-    /// default format - we vary only bits and rate, matching mmsys.cpl's Default Format dropdown.
-    /// Returns an empty list (not null) when the endpoint can't be activated or has no readable
-    /// current format, so callers can branch on Count alone.
+    /// Returns the (channels, bit depth, sample rate) combinations to show in the default-format
+    /// picker. Source is the audio device's advertised KS pin data ranges - the same list
+    /// mmsys.cpl's Advanced > Default Format dropdown reads from. Returns an empty list when
+    /// the device has no queryable KS topology (rare; pure virtual / software-only endpoints).
     /// </summary>
-    internal List<(int Bits, int SampleRate)> EnumerateSupportedFormats()
+    internal List<(int Channels, int Bits, int SampleRate)> EnumerateSupportedFormats()
     {
-        List<(int, int)> empty = new();
+        WPFLog.Log($"AudioDevice.EnumerateSupportedFormats({FriendlyName}): entry, _disposed={_disposed} IsActive={IsActive} State={State}");
+        List<(int, int, int)> empty = new();
         if (_disposed || !IsActive) return empty;
-
-        byte[]? template = ReadCurrentFormatBlob();
-        if (template == null || template.Length < 18) return empty;
-
-        // No Initialize required - IsFormatSupported is a pre-init query.
-        int hr = _device.Activate(typeof(IAudioClient).GUID, ClsCtx.ALL, IntPtr.Zero, out object? clientObj);
-        if (hr < 0 || clientObj == null) return empty;
-        IAudioClient client = (IAudioClient)clientObj;
 
         try
         {
-            ushort channels = BitConverter.ToUInt16(template, 2);
-            // Sort: channel count, then bit depth, then sample rate. Channel count is locked to
-            // the current format here, so the iteration is bit-depth-grouped with rate ascending
-            // inside each group - the menu reads "all 16-bit options, then all 24-bit, then 32".
-            int[] bitDepths = { 16, 24, 32 };
-            int[] sampleRates = { 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
+            ushort currentChannels = 2;
+            byte[]? currentBlob = ReadCurrentFormatBlob();
+            if (currentBlob != null && currentBlob.Length >= 18)
+                currentChannels = BitConverter.ToUInt16(currentBlob, 2);
 
-            List<(int, int)> accepted = new();
-            foreach (int bits in bitDepths)
-            {
-                foreach (int rate in sampleRates)
-                {
-                    byte[] candidate = BuildFormatBlob(channels, (ushort)bits, (uint)rate);
-                    IntPtr p = Marshal.AllocHGlobal(candidate.Length);
-                    IntPtr closest = IntPtr.Zero;
-                    try
-                    {
-                        Marshal.Copy(candidate, 0, p, candidate.Length);
-                        // Shared-mode probe with the "structurally valid?" predicate. The HRESULTs:
-                        //   S_OK     - format equals the engine's current mix format
-                        //   S_FALSE  - format valid; engine would resample to it (closest in ppClosest)
-                        //   AUDCLNT_E_UNSUPPORTED_FORMAT - structurally invalid
-                        // mmsys.cpl's Default Format list is the S_OK-or-S_FALSE set: anything the
-                        // engine accepts via shared-mode resampling. Filtering to just S_OK collapses
-                        // the menu to a single row (the current format).
-                        int probeHr = client.IsFormatSupported(AudioClientShareMode.Shared, p, out closest);
-                        if (probeHr == AudioHResults.S_OK || probeHr == AudioHResults.S_FALSE)
-                            accepted.Add((bits, rate));
-                    }
-                    finally
-                    {
-                        if (closest != IntPtr.Zero) Marshal.FreeCoTaskMem(closest);
-                        Marshal.FreeHGlobal(p);
-                    }
-                }
-            }
-            return accepted;
+            // Channel-set candidates: the canonical mmsys.cpl layouts (mono / stereo / quad /
+            // 5.1 / 7.1) unioned with whatever the endpoint currently reports, so a 3ch / 5ch
+            // device still surfaces its current format as a selectable row.
+            SortedSet<int> channelSet = new() { 1, 2, 4, 6, 8, currentChannels };
+
+            // mmsys.cpl never offers 32-bit as a user-selectable bit depth (the audio engine's
+            // 32-bit-float internal format doesn't surface in the picker), so 32-bit is omitted.
+            // 24-bit is restricted to >= 44100 Hz - mmsys.cpl never shows 24-bit at
+            // telephone/radio rates either.
+            int[] rates16 = { 8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
+            int[] rates24 = { 44100, 48000, 88200, 96000, 176400, 192000 };
+
+            List<(int, int, int)>? fromKs = QueryKsAudioDataRanges(channelSet, rates16, rates24);
+            return fromKs ?? empty;
         }
         catch (Exception ex)
         {
             WPFLog.Log($"AudioDevice.EnumerateSupportedFormats({FriendlyName}): {ex.Message}");
             return empty;
         }
+    }
+
+    // Replicates the algorithm mmsys.cpl uses for its Advanced > Default Format dropdown
+    // (verified from a decompile of mmsys.cpl's CEndpointFormatChanger::IsPCMFormatSupported
+    // and CPageFormat::AddStdFormatsToFormatCombo):
+    //
+    //   1. IMMDevice -> IDeviceTopology -> IConnector(0) -> QI(IPart)
+    //   2. IPart::Activate(CLSCTX_INPROC_SERVER, IID_IKsFormatSupport, ...) -> IKsFormatSupport
+    //   3. For each candidate (channels, validBits, containerBits, rate):
+    //        a. Build WAVEFORMATEXTENSIBLE (40 bytes)
+    //        b. Wrap in KSDATAFORMAT_WAVEFORMATEX (64 KSDATAFORMAT header + 40 WFX = 104 bytes)
+    //           with MajorFormat=KSDATAFORMAT_TYPE_AUDIO, SubFormat=KSDATAFORMAT_SUBTYPE_PCM,
+    //           Specifier=KSDATAFORMAT_SPECIFIER_WAVEFORMATEX
+    //        c. IKsFormatSupport::IsFormatSupported(pKsFormat, 104, &supported)
+    //        d. If supported, add (channels, validBits, rate) to the result set
+    //
+    // The probe set comes from rates16 / rates24 and channelCandidates. mmsys.cpl uses 39
+    // hardcoded entries; ours is a tighter list curated to match what the dropdown surfaces.
+    //
+    // IKsControl and KSPROPERTY_PIN_DATARANGES were tried earlier and abandoned: every audio
+    // driver we tested returns E_NOINTERFACE for IID_IKsControl on every IPart in its topology,
+    // and mmsys.cpl confirmedly doesn't use that path.
+    //
+    // All COM-pointer outputs go through out IntPtr + explicit Marshal.QueryInterface / Release,
+    // matching NAudio's pattern - the .NET classic-RCW marshaller mis-handles QI for interfaces
+    // returned across topology boundaries.
+    private List<(int, int, int)>? QueryKsAudioDataRanges(
+        SortedSet<int> channelCandidates, int[] rates16, int[] rates24)
+    {
+        IDeviceTopology? endpointTopology = null;
+        IDeviceTopology? deviceTopology = null;
+        IntPtr endpointConnectorPtr = IntPtr.Zero;
+        IntPtr deviceSideConnectorPtr = IntPtr.Zero;
+        IntPtr devicePartPtr = IntPtr.Zero;
+        IntPtr deviceTopologyPtr = IntPtr.Zero;
+        IntPtr formatSupportPtr = IntPtr.Zero;
+
+        try
+        {
+            int hr = _device.Activate(typeof(IDeviceTopology).GUID, ClsCtx.ALL, IntPtr.Zero, out object? topoObj);
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): Activate(IDeviceTopology) hr=0x{hr:X8}");
+            if (hr < 0 || topoObj == null) return null;
+            endpointTopology = (IDeviceTopology)topoObj;
+
+            hr = endpointTopology.GetConnector(0, out endpointConnectorPtr);
+            if (hr < 0 || endpointConnectorPtr == IntPtr.Zero) return null;
+            IConnector endpointConnector = (IConnector)Marshal.GetObjectForIUnknown(endpointConnectorPtr);
+
+            // Jump to the audio adapter side. The endpoint-side connector's IPart never exposes
+            // IKsFormatSupport - mmsys.cpl works against the adapter topology, which is on the
+            // OTHER side of GetConnectedTo.
+            hr = endpointConnector.GetConnectedTo(out deviceSideConnectorPtr);
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): GetConnectedTo hr=0x{hr:X8}");
+            if (hr < 0 || deviceSideConnectorPtr == IntPtr.Zero) return null;
+
+            Guid iidPart = typeof(IPart).GUID;
+            hr = Marshal.QueryInterface(deviceSideConnectorPtr, in iidPart, out devicePartPtr);
+            if (hr < 0 || devicePartPtr == IntPtr.Zero) return null;
+            IPart deviceSidePart = (IPart)Marshal.GetObjectForIUnknown(devicePartPtr);
+
+            hr = deviceSidePart.GetTopologyObject(out deviceTopologyPtr);
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): GetTopologyObject hr=0x{hr:X8}");
+            if (hr < 0 || deviceTopologyPtr == IntPtr.Zero) return null;
+            deviceTopology = (IDeviceTopology)Marshal.GetObjectForIUnknown(deviceTopologyPtr);
+
+            // Walk every Connector and Subunit in the adapter topology, trying
+            // IPart::Activate(IKsFormatSupport). First non-null pointer wins. Different drivers
+            // put IKsFormatSupport on different parts (Realtek HD Audio on a connector,
+            // USBAUDIO.SYS on internal subunits); iterating is the only way to find it without
+            // driver-specific guesses.
+            formatSupportPtr = FindFormatSupport(deviceTopology, deviceSidePart, out int partsProbed);
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): partsProbed={partsProbed} formatSupportPtr=0x{formatSupportPtr.ToInt64():X}");
+            if (formatSupportPtr == IntPtr.Zero) return null;
+            IKsFormatSupport formatSupport = (IKsFormatSupport)Marshal.GetObjectForIUnknown(formatSupportPtr);
+
+            SortedSet<(int, int, int)> accepted = new();
+            int probed = 0;
+            int supported = 0;
+
+            // Each candidate: probe with PCM subformat. 24-bit is probed as 24-in-32 container
+            // (the form mmsys.cpl emits and the form every modern driver advertises). 16-bit is
+            // container == valid.
+            foreach (int channels in channelCandidates)
+            {
+                if (channels < 1) continue;
+
+                foreach (int rate in rates16)
+                {
+                    probed++;
+                    if (ProbeFormat(formatSupport, (ushort)channels, validBits: 16, containerBits: 16, (uint)rate))
+                    {
+                        supported++;
+                        accepted.Add((channels, 16, rate));
+                    }
+                }
+                foreach (int rate in rates24)
+                {
+                    probed++;
+                    if (ProbeFormat(formatSupport, (ushort)channels, validBits: 24, containerBits: 32, (uint)rate))
+                    {
+                        supported++;
+                        accepted.Add((channels, 24, rate));
+                    }
+                }
+            }
+
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): probed={probed} supported={supported} accepted={accepted.Count}");
+            return new List<(int, int, int)>(accepted);
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): exception {ex.GetType().Name} {ex.Message}");
+            return null;
+        }
         finally
         {
-            Safe.Release(client);
+            if (formatSupportPtr != IntPtr.Zero) Marshal.Release(formatSupportPtr);
+            if (deviceTopologyPtr != IntPtr.Zero) Marshal.Release(deviceTopologyPtr);
+            if (devicePartPtr != IntPtr.Zero) Marshal.Release(devicePartPtr);
+            if (deviceSideConnectorPtr != IntPtr.Zero) Marshal.Release(deviceSideConnectorPtr);
+            if (endpointConnectorPtr != IntPtr.Zero) Marshal.Release(endpointConnectorPtr);
+            Safe.Release(deviceTopology);
+            Safe.Release(endpointTopology);
+        }
+    }
+
+    // Walks deviceTopology's connectors and subunits, plus the device-side connector itself,
+    // trying IPart::Activate(IKsFormatSupport) on each. Returns the first non-null IKsFormatSupport
+    // pointer (caller takes ownership) or IntPtr.Zero if none exposed it. Logs each part's hr
+    // so we can see which one is the audio filter on a given driver.
+    private static IntPtr FindFormatSupport(
+        IDeviceTopology deviceTopology, IPart deviceSidePart, out int partsProbed)
+    {
+        partsProbed = 0;
+        Guid iidFormatSupport = typeof(IKsFormatSupport).GUID;
+
+        // Try the device-side connector's own IPart first - it IS the first part of the
+        // adapter topology and on many drivers it's the one carrying IKsFormatSupport.
+        int hr = deviceSidePart.Activate(ClsCtx.INPROC_SERVER, ref iidFormatSupport, out IntPtr ptr);
+        partsProbed++;
+        WPFLog.Log($"  part[device-side connector] Activate(IKsFormatSupport) hr=0x{hr:X8}");
+        if (hr >= 0 && ptr != IntPtr.Zero) return ptr;
+
+        // Then walk every other Connector / Subunit in the topology.
+        if (deviceTopology.GetConnectorCount(out uint connectorCount) >= 0)
+        {
+            for (uint i = 0; i < connectorCount; i++)
+            {
+                if (deviceTopology.GetConnector(i, out IntPtr connectorPtr) < 0 || connectorPtr == IntPtr.Zero) continue;
+                try
+                {
+                    ptr = TryActivateFormatSupport(connectorPtr, ref iidFormatSupport, out int subHr);
+                    partsProbed++;
+                    WPFLog.Log($"  part[connector {i}] Activate(IKsFormatSupport) hr=0x{subHr:X8}");
+                    if (ptr != IntPtr.Zero) return ptr;
+                }
+                finally { Marshal.Release(connectorPtr); }
+            }
+        }
+
+        if (deviceTopology.GetSubunitCount(out uint subunitCount) >= 0)
+        {
+            for (uint i = 0; i < subunitCount; i++)
+            {
+                if (deviceTopology.GetSubunit(i, out IntPtr subunitPtr) < 0 || subunitPtr == IntPtr.Zero) continue;
+                try
+                {
+                    ptr = TryActivateFormatSupport(subunitPtr, ref iidFormatSupport, out int subHr);
+                    partsProbed++;
+                    WPFLog.Log($"  part[subunit {i}] Activate(IKsFormatSupport) hr=0x{subHr:X8}");
+                    if (ptr != IntPtr.Zero) return ptr;
+                }
+                finally { Marshal.Release(subunitPtr); }
+            }
+        }
+
+        return IntPtr.Zero;
+    }
+
+    // QIs the raw part pointer to IPart and calls Activate(IKsFormatSupport). Returns the
+    // resulting interface pointer or IntPtr.Zero on failure; the part's own IPart RCW is
+    // released before return so the caller only owns the format-support pointer.
+    private static IntPtr TryActivateFormatSupport(IntPtr partRawPtr, ref Guid iidFormatSupport, out int hr)
+    {
+        Guid iidPart = typeof(IPart).GUID;
+        hr = Marshal.QueryInterface(partRawPtr, in iidPart, out IntPtr ipartPtr);
+        if (hr < 0 || ipartPtr == IntPtr.Zero) return IntPtr.Zero;
+        try
+        {
+            IPart part = (IPart)Marshal.GetObjectForIUnknown(ipartPtr);
+            hr = part.Activate(ClsCtx.INPROC_SERVER, ref iidFormatSupport, out IntPtr fsPtr);
+            if (hr < 0 || fsPtr == IntPtr.Zero) return IntPtr.Zero;
+            return fsPtr;
+        }
+        finally { Marshal.Release(ipartPtr); }
+    }
+
+    // Builds a 104-byte KSDATAFORMAT_WAVEFORMATEX (64-byte header + 40-byte WAVEFORMATEXTENSIBLE)
+    // and calls IKsFormatSupport::IsFormatSupported. Layout:
+    //   [0..3]   FormatSize         = 104
+    //   [4..7]   Flags              = 0
+    //   [8..11]  SampleSize         = 0
+    //   [12..15] Reserved           = 0
+    //   [16..31] MajorFormat        = KSDATAFORMAT_TYPE_AUDIO
+    //   [32..47] SubFormat          = KSDATAFORMAT_SUBTYPE_PCM
+    //   [48..63] Specifier          = KSDATAFORMAT_SPECIFIER_WAVEFORMATEX
+    //   [64..103] WAVEFORMATEXTENSIBLE blob (BuildFormatBlob output, 40 bytes)
+    private static bool ProbeFormat(
+        IKsFormatSupport formatSupport,
+        ushort channels, ushort validBits, ushort containerBits, uint sampleRate)
+    {
+        const int KsDataFormatHeaderSize = 64;
+        const int WfxBlobSize = 40;
+        const int TotalSize = KsDataFormatHeaderSize + WfxBlobSize; // 104
+
+        byte[] wfxBlob = BuildFormatBlob(channels, validBits, containerBits, sampleRate);
+        if (wfxBlob.Length != WfxBlobSize) return false;
+
+        IntPtr p = Marshal.AllocHGlobal(TotalSize);
+        try
+        {
+            // Zero the header so SampleSize/Reserved/Flags are clean.
+            for (int i = 0; i < TotalSize; i++) Marshal.WriteByte(p, i, 0);
+
+            Marshal.WriteInt32(p, 0, TotalSize);                  // FormatSize
+            // Flags / SampleSize / Reserved already zero from the wipe above.
+
+            byte[] majorFormat = KsConstants.KSDATAFORMAT_TYPE_AUDIO.ToByteArray();
+            byte[] subFormat = PropertyKeys.KSDATAFORMAT_SUBTYPE_PCM.ToByteArray();
+            byte[] specifier = KsConstants.KSDATAFORMAT_SPECIFIER_WAVEFORMATEX.ToByteArray();
+            Marshal.Copy(majorFormat, 0, IntPtr.Add(p, 16), 16);
+            Marshal.Copy(subFormat, 0, IntPtr.Add(p, 32), 16);
+            Marshal.Copy(specifier, 0, IntPtr.Add(p, 48), 16);
+            Marshal.Copy(wfxBlob, 0, IntPtr.Add(p, KsDataFormatHeaderSize), WfxBlobSize);
+
+            int hr = formatSupport.IsFormatSupported(p, TotalSize, out bool supported);
+            return hr >= 0 && supported;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(p);
         }
     }
 
@@ -1595,14 +1885,14 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// down and back up at the new rate. The DefaultFormat property updates when the resulting
     /// OnPropertyValueChanged callback fires for the format pid.
     /// </summary>
-    internal void SetDeviceFormat(int bits, int sampleRate)
+    internal void SetDeviceFormat(int channels, int bits, int sampleRate)
     {
         if (_disposed || string.IsNullOrEmpty(Id)) return;
 
-        byte[]? template = ReadCurrentFormatBlob();
-        if (template == null || template.Length < 18) return;
-        ushort channels = BitConverter.ToUInt16(template, 2);
-        byte[] blob = BuildFormatBlob(channels, (ushort)bits, (uint)sampleRate);
+        // 24-bit is written as 24-in-32 (containerBits=32, validBits=24) - the form every modern
+        // driver expects. 16-bit and any other size are written container == valid.
+        ushort containerBits = bits == 24 ? (ushort)32 : (ushort)bits;
+        byte[] blob = BuildFormatBlob((ushort)channels, (ushort)bits, containerBits, (uint)sampleRate);
 
         string id = Id;
         string friendlyName = FriendlyName;
@@ -1614,10 +1904,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             {
                 Marshal.Copy(blob, 0, pBlob, blob.Length);
                 int hr = client.SetDeviceFormat(id, pBlob, pBlob);
-                if (hr < 0) WPFLog.Log($"AudioDevice.SetDeviceFormat({friendlyName}, {bits}-bit/{sampleRate}Hz): hr=0x{hr:X8}");
+                if (hr < 0) WPFLog.Log($"AudioDevice.SetDeviceFormat({friendlyName}, {channels}ch/{bits}-bit/{sampleRate}Hz): hr=0x{hr:X8}");
             }
             finally { Marshal.FreeHGlobal(pBlob); }
-        }, $"SetDeviceFormat({friendlyName}, {bits}-bit/{sampleRate}Hz)");
+        }, $"SetDeviceFormat({friendlyName}, {channels}ch/{bits}-bit/{sampleRate}Hz)");
     }
 
     // Reads the trio of name properties off the endpoint property store in one pass:
@@ -1657,11 +1947,12 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // through the endpoint property store.
     private static readonly string[] BluetoothNameTokens = ["Bluetooth", "Hands-Free", "A2DP"];
 
-    private static bool DetectIsBluetooth(IMMDevice device, string friendlyName,
+    private static bool DetectIsBluetooth(string enumerator, string friendlyName,
         string deviceDescription, string interfaceFriendlyName)
     {
-        string? enumerator = ReadEnumeratorName(device);
-        if (enumerator != null && enumerator.StartsWith("BTH", StringComparison.OrdinalIgnoreCase))
+        WPFLog.Log($"AudioDevice.DetectIsBluetooth: friendly='{friendlyName}' enumerator='{(enumerator.Length == 0 ? "<empty>" : enumerator)}'");
+
+        if (enumerator.StartsWith("BTH", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -1755,15 +2046,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // and ParseFormatBlob below.
     private const ushort WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
 
-    // Synthesizes a 40-byte WAVEFORMATEXTENSIBLE byte image for the given (channels, bits, rate).
-    // SubFormat is always KSDATAFORMAT_SUBTYPE_PCM and the channel mask is the standard
-    // KSAUDIO_SPEAKER_* layout for the channel count - no carry-over from the device's current
-    // format. Mirrors the integer-PCM-only set mmsys.cpl's Default Format dropdown emits.
-    private static byte[] BuildFormatBlob(ushort channels, ushort bits, uint sampleRate)
+    // Synthesizes a 40-byte WAVEFORMATEXTENSIBLE byte image for the given (channels, valid bits,
+    // container bits, rate). SubFormat is KSDATAFORMAT_SUBTYPE_PCM; mask is the standard
+    // KSAUDIO_SPEAKER_* layout for the channel count. 24-bit is conventionally encoded as
+    // 24-in-32 (containerBits=32, validBits=24).
+    private static byte[] BuildFormatBlob(ushort channels, ushort validBits, ushort containerBits, uint sampleRate)
     {
         const ushort EXTENSIBLE_CB_SIZE = 22;
 
-        ushort blockAlign = (ushort)(channels * (bits / 8));
+        ushort blockAlign = (ushort)(channels * (containerBits / 8));
         uint avgBytesPerSec = sampleRate * blockAlign;
         uint mask = channels switch
         {
@@ -1781,9 +2072,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         BitConverter.GetBytes(sampleRate).CopyTo(ext, 4);
         BitConverter.GetBytes(avgBytesPerSec).CopyTo(ext, 8);
         BitConverter.GetBytes(blockAlign).CopyTo(ext, 12);
-        BitConverter.GetBytes(bits).CopyTo(ext, 14);
+        BitConverter.GetBytes(containerBits).CopyTo(ext, 14);
         BitConverter.GetBytes(EXTENSIBLE_CB_SIZE).CopyTo(ext, 16);
-        BitConverter.GetBytes(bits).CopyTo(ext, 18);
+        BitConverter.GetBytes(validBits).CopyTo(ext, 18);
         BitConverter.GetBytes(mask).CopyTo(ext, 20);
         PropertyKeys.KSDATAFORMAT_SUBTYPE_PCM.ToByteArray().CopyTo(ext, 24);
         return ext;

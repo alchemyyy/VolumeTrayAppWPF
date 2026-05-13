@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Utils;
 using Windows.Devices.Enumeration;
+using Windows.Devices.Enumeration.Pnp;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -32,16 +34,19 @@ namespace VolumeTrayAppWPF.Audio;
 /// </summary>
 internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposable
 {
-    // AQS filter: PnP devnodes on the Bluetooth Devices class. The Bluetooth radio devnode
-    // (parent of audio / HID / etc. interfaces) is where Windows surfaces the aggregated battery
-    // property; it shares its container id with every interface the physical headset exposes.
+    // AQS filter: PnP devnodes registered in the Bluetooth device class. The aggregated battery
+    // property (DEVPKEY_Bluetooth_Battery) is set on these devnodes by the BT stack - it does not
+    // surface through the modern Windows.Devices.Enumeration.DeviceInformation API at AEP or
+    // AEP-Container scope (we confirmed this empirically; the key was recognized but the value
+    // came back null). Falling back to the legacy PnP layer via PnpObject is what Windows
+    // Settings itself does, and what Get-PnpDeviceProperty surfaces in PowerShell.
     private const string BluetoothClassGuid = "{e0cbf06c-cd8b-4647-bb8a-263b43f0f974}";
     private static readonly string Selector =
         $"System.Devices.ClassGuid:=\"{BluetoothClassGuid}\"";
 
-    // Canonical names recognized by the WinRT DeviceInformation projection. The battery key
-    // uses PnP "{fmtid} pid" form; container id and connection state use their system-defined
-    // PROPERTYDESCRIPTION names.
+    // Property names recognised by the PnP property store. Battery uses the PnP "{fmtid} pid"
+    // form (DEVPKEY_Bluetooth_Battery, byte 0-100); container id and connection state use their
+    // system-defined canonical names.
     private const string PropertyBattery = "{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2";
     private const string PropertyContainerId = "System.Devices.ContainerId";
     private const string PropertyConnected = "System.Devices.Connected";
@@ -57,7 +62,26 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
     private readonly Dictionary<string, Guid> _idToContainer = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, int> _batteries = new();
 
-    private DeviceWatcher? _watcher;
+    // Every container the watcher has ever reported under the BT Devices class. Independent of
+    // battery state - a paired headset with no battery reporting still belongs to a BT container.
+    // Grow-only: a device that's been BT stays BT for the rest of the process's lifetime, so we
+    // never need to drop entries on Removed. Consumed by IsBluetoothContainer / the
+    // BluetoothContainerSeen event to upgrade endpoint IsBluetooth flags that the audio property
+    // store couldn't classify on its own.
+    private readonly HashSet<Guid> _bluetoothContainers = new();
+
+    // Windows assigns this GUID to any PnP devnode that doesn't belong to a real physical-device
+    // container - Microsoft virtual BT stack devnodes get it, and so do many built-in audio
+    // endpoints (Realtek HDA, NVIDIA HDMI, etc.) that have no meaningful container. We MUST NOT
+    // treat it as a Bluetooth container: doing so promoted every non-BT audio endpoint sharing
+    // the sentinel to IsBluetooth=true and propagated the A2DP codec onto them ("AAC" appearing
+    // on a Realtek optical output, etc.).
+    private static readonly Guid NoContainerSentinel = new("00000000-0000-0000-FFFF-FFFFFFFFFFFF");
+
+    private static bool IsRealContainer(Guid g) => g != Guid.Empty && g != NoContainerSentinel;
+
+    private PnpObjectWatcher? _watcher;
+    private DispatcherTimer? _pollTimer;
     private bool _isRunning;
     private bool _disposed;
 
@@ -69,6 +93,15 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
     /// Dispatcher hop of their own.
     /// </summary>
     public event Action<Guid, int?>? BatteryChanged;
+
+    /// <summary>
+    /// Fires on the dispatcher the first time a given BT container surfaces through the watcher.
+    /// Audio code uses this as the definitive "this container is Bluetooth" signal - the audio
+    /// endpoint property store's enumerator key isn't reliably populated on all Win11 drivers,
+    /// so endpoints that share a container id with a known BT devnode get promoted to IsBluetooth
+    /// after the watcher reports the container.
+    /// </summary>
+    public event Action<Guid>? BluetoothContainerSeen;
 
     public BluetoothBatteryMonitor(Dispatcher dispatcher) { _dispatcher = dispatcher; }
 
@@ -90,6 +123,16 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
     }
 
     /// <summary>
+    /// True if <paramref name="containerId"/> has been observed under the BT Devices class AQS
+    /// filter at any point since <see cref="Start"/>. Independent of battery state - a paired
+    /// device with no battery reporting still trips this. Safe to call from any thread; the
+    /// set is mutated only on the dispatcher and HashSet reads are race-tolerant for the
+    /// "have we ever seen this guid" question (false negatives during enumeration are fine
+    /// since BluetoothContainerSeen fires on the same dispatcher pass).
+    /// </summary>
+    public bool IsBluetoothContainer(Guid containerId) => _bluetoothContainers.Contains(containerId);
+
+    /// <summary>
     /// Creates the DeviceWatcher and starts pumping events. Idempotent; failures (rare - AQS
     /// rejection or COM apartment misconfiguration) are logged and leave the monitor inert with
     /// <see cref="IsRunning"/> = false rather than throwing into the caller.
@@ -99,14 +142,13 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         if (_disposed || _isRunning) return;
         try
         {
-            _watcher = DeviceInformation.CreateWatcher(Selector, RequestedProperties,
-                DeviceInformationKind.Device);
+            _watcher = PnpObject.CreateWatcher(PnpObjectType.Device, RequestedProperties, Selector);
             _watcher.Added += OnDeviceAdded;
             _watcher.Updated += OnDeviceUpdated;
             _watcher.Removed += OnDeviceRemoved;
             _watcher.Start();
             IsRunning = true;
-            WPFLog.Log("BluetoothBatteryMonitor.Start: watcher started.");
+            WPFLog.Log("BluetoothBatteryMonitor.Start: PnpObject watcher started.");
         }
         catch (Exception ex)
         {
@@ -115,30 +157,191 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         }
     }
 
-    private void OnDeviceAdded(DeviceWatcher sender, DeviceInformation info)
+    /// <summary>
+    /// Begins periodic active polls of every tracked BT devnode's battery via
+    /// <c>CM_Get_DevNode_Property</c>. The watcher doesn't push battery deltas (Windows only sends
+    /// Updated events for Connected-state changes), so an explicit poll is what surfaces a
+    /// changing percentage to the UI. Scoped to flyout visibility by the caller - no point hitting
+    /// the OS when nothing is bound. Idempotent; calls while already polling are no-ops.
+    /// </summary>
+    public void StartPolling()
+    {
+        if (_disposed || _pollTimer != null) return;
+        WPFLog.Log($"BluetoothBatteryMonitor.StartPolling: tracking {_idToContainer.Count} devnodes");
+        _pollTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(TimeConstants.BluetoothBatteryPollIntervalMs),
+        };
+        _pollTimer.Tick += OnPollTick;
+        _pollTimer.Start();
+        // Fire one synchronous poll immediately so the flyout opens with a fresh value rather
+        // than the last-known cached one (or none, on first open).
+        OnPollTick(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Stops and discards the poll timer. The watcher keeps running so container-seen events
+    /// and the cached battery values stay current for the next StartPolling. Idempotent.
+    /// </summary>
+    public void StopPolling()
+    {
+        if (_pollTimer == null) return;
+        _pollTimer.Stop();
+        _pollTimer.Tick -= OnPollTick;
+        _pollTimer = null;
+    }
+
+    // Dispatcher-thread tick. Scans every present PnP devnode (the property is set on a devnode
+    // we can't predict by class - HFP service, HID, audio endpoint, depends on device), reads
+    // DEVPKEY_Bluetooth_Battery, and on any hit also reads DEVPKEY_Device_ContainerId so the
+    // value can be attributed back to the audio endpoint sharing that container. Logs a single
+    // scanned / matched summary per tick.
+    private void OnPollTick(object? sender, EventArgs e)
+    {
+        if (_disposed) return;
+
+        List<string> ids = EnumeratePresentDevnodeIds();
+        int matched = 0;
+
+        for (int i = 0; i < ids.Count; i++)
+        {
+            string deviceId = ids[i];
+            int cr = CfgMgr32.CM_Locate_DevNodeW(out uint devInst, deviceId, CfgMgr32.CM_LOCATE_DEVNODE_NORMAL);
+            if (cr != CfgMgr32.CR_SUCCESS) continue;
+
+            int? battery = TryReadByteProperty(devInst, CfgMgr32.DEVPKEY_Bluetooth_Battery);
+            if (!battery.HasValue) continue;
+
+            Guid? container = TryReadGuidProperty(devInst, CfgMgr32.DEVPKEY_Device_ContainerId);
+            if (!container.HasValue || !IsRealContainer(container.Value)) continue;
+
+            matched++;
+            WPFLog.Log($"BluetoothBatteryMonitor.Poll: hit id='{deviceId}' container={container.Value} battery={battery.Value}");
+
+            // Side-effect: mark the container as BT (the watcher's class-filtered view may miss
+            // it) and fire BluetoothContainerSeen so AudioDevice.IsBluetooth flips for matching
+            // endpoints. Same path Apply takes for watcher-discovered containers.
+            _idToContainer[deviceId] = container.Value;
+            if (_bluetoothContainers.Add(container.Value))
+            {
+                try { BluetoothContainerSeen?.Invoke(container.Value); }
+                catch (Exception ex) { WPFLog.Log($"BluetoothBatteryMonitor: container-seen subscriber threw: {ex.Message}"); }
+            }
+            ApplyBattery(container.Value, battery);
+        }
+
+        WPFLog.Log($"BluetoothBatteryMonitor.Poll: scanned={ids.Count} matched={matched}");
+    }
+
+    private void OnDeviceAdded(PnpObjectWatcher sender, PnpObject info)
     {
         string id = info.Id;
+        // Watcher payload's battery / connected keys are always null on this surface (confirmed
+        // empirically) - only the container id is useful here. The actual battery read happens
+        // out of OnPollTick via a system-wide CM_Get_Device_ID_List scan.
         Guid? container = ReadGuidProperty(info.Properties, PropertyContainerId);
-        int? battery = ReadByteProperty(info.Properties, PropertyBattery);
-        bool? connected = ReadBoolProperty(info.Properties, PropertyConnected);
-        try { _dispatcher.BeginInvoke(() => Apply(id, container, battery, connected)); }
+        try { _dispatcher.BeginInvoke(() => Apply(id, container, null, null)); }
         catch (Exception ex) { WPFLog.Log($"BluetoothBatteryMonitor.OnDeviceAdded dispatch: {ex.Message}"); }
     }
 
-    private void OnDeviceUpdated(DeviceWatcher sender, DeviceInformationUpdate update)
+    private void OnDeviceUpdated(PnpObjectWatcher sender, PnpObjectUpdate update)
     {
         string id = update.Id;
-        // Update.Properties contains only the keys whose value changed since the last event.
-        // Any of the three may be absent on a given update; absent container id falls back to
-        // the cached mapping in Apply.
         Guid? container = ReadGuidProperty(update.Properties, PropertyContainerId);
-        int? battery = ReadByteProperty(update.Properties, PropertyBattery);
-        bool? connected = ReadBoolProperty(update.Properties, PropertyConnected);
-        try { _dispatcher.BeginInvoke(() => Apply(id, container, battery, connected)); }
+        try { _dispatcher.BeginInvoke(() => Apply(id, container, null, null)); }
         catch (Exception ex) { WPFLog.Log($"BluetoothBatteryMonitor.OnDeviceUpdated dispatch: {ex.Message}"); }
     }
 
-    private void OnDeviceRemoved(DeviceWatcher sender, DeviceInformationUpdate update)
+    // CM_Get_DevNode_Property: read a single byte property (DEVPROP_TYPE_BYTE) off a located
+    // devnode handle. Returns null on any CR_* failure / type mismatch / out-of-range value.
+    private static int? TryReadByteProperty(uint devInst, CfgMgr32.DEVPROPKEY key)
+    {
+        uint size = 0;
+        int cr = CfgMgr32.CM_Get_DevNode_PropertyW(devInst, ref key, out uint propType, null, ref size, 0);
+        if (cr != CfgMgr32.CR_BUFFER_SMALL && cr != CfgMgr32.CR_SUCCESS) return null;
+        if (propType != CfgMgr32.DEVPROP_TYPE_BYTE || size < 1) return null;
+
+        byte[] buf = new byte[size];
+        cr = CfgMgr32.CM_Get_DevNode_PropertyW(devInst, ref key, out propType, buf, ref size, 0);
+        if (cr != CfgMgr32.CR_SUCCESS) return null;
+
+        int level = buf[0];
+        return (level >= 0 && level <= 100) ? level : null;
+    }
+
+    // CM_Get_DevNode_Property: read a 16-byte GUID property (DEVPROP_TYPE_GUID). Used to get
+    // DEVPKEY_Device_ContainerId off the same devnode that carries the battery, for attribution
+    // back to the audio endpoint's wrapper.
+    private static Guid? TryReadGuidProperty(uint devInst, CfgMgr32.DEVPROPKEY key)
+    {
+        uint size = 0;
+        int cr = CfgMgr32.CM_Get_DevNode_PropertyW(devInst, ref key, out uint propType, null, ref size, 0);
+        if (cr != CfgMgr32.CR_BUFFER_SMALL && cr != CfgMgr32.CR_SUCCESS) return null;
+        if (propType != CfgMgr32.DEVPROP_TYPE_GUID || size != 16) return null;
+
+        byte[] buf = new byte[16];
+        cr = CfgMgr32.CM_Get_DevNode_PropertyW(devInst, ref key, out propType, buf, ref size, 0);
+        if (cr != CfgMgr32.CR_SUCCESS) return null;
+
+        return new Guid(buf);
+    }
+
+    // CM_Get_Device_ID_List(null, PRESENT): every PnP devnode currently present on the system,
+    // as a double-null-terminated multi-string. The Bluetooth battery property is set on a
+    // devnode whose class is *not* the Bluetooth Devices class (the PnpObject watcher's filter
+    // hides it), so we scan the whole list and let the property-presence check pick the right
+    // one. The PowerShell reference (Get-PnpDevice -FriendlyName '*WH-1000XM4*') and the Rust
+    // reference both take the same "scan everything, no class filter" approach.
+    private static List<string> EnumeratePresentDevnodeIds()
+    {
+        List<string> ids = new(capacity: 512);
+
+        int cr = CfgMgr32.CM_Get_Device_ID_List_SizeW(out uint size, null, CfgMgr32.CM_GETIDLIST_FILTER_PRESENT);
+        if (cr != CfgMgr32.CR_SUCCESS || size == 0) return ids;
+
+        char[] buffer = new char[size];
+        cr = CfgMgr32.CM_Get_Device_ID_ListW(null, buffer, size, CfgMgr32.CM_GETIDLIST_FILTER_PRESENT);
+        if (cr != CfgMgr32.CR_SUCCESS) return ids;
+
+        // Multi-string: null-terminated entries, double-null at end. An empty string (immediate
+        // null) marks the terminator - bail out so we don't append zero-length entries.
+        int start = 0;
+        for (int i = 0; i < buffer.Length; i++)
+        {
+            if (buffer[i] != '\0') continue;
+            if (i == start) break;
+            ids.Add(new string(buffer, start, i - start));
+            start = i + 1;
+        }
+        return ids;
+    }
+
+    // Diagnostic: one-line summary of the watcher's property bag for a single event. Lists each
+    // key with the projected CLR type and a short value preview so we can see whether the battery
+    // key is arriving and how it's typed. Best-effort - any exception falls back to "<error>".
+    private static string FormatProps(IReadOnlyDictionary<string, object> props)
+    {
+        try
+        {
+            if (props.Count == 0) return "{}";
+            System.Text.StringBuilder sb = new();
+            sb.Append('{');
+            bool first = true;
+            foreach (KeyValuePair<string, object> kv in props)
+            {
+                if (!first) sb.Append(", ");
+                first = false;
+                sb.Append(kv.Key).Append('=');
+                if (kv.Value == null) sb.Append("<null>");
+                else sb.Append('(').Append(kv.Value.GetType().Name).Append(')').Append(kv.Value);
+            }
+            sb.Append('}');
+            return sb.ToString();
+        }
+        catch { return "<error>"; }
+    }
+
+    private void OnDeviceRemoved(PnpObjectWatcher sender, PnpObjectUpdate update)
     {
         string id = update.Id;
         try { _dispatcher.BeginInvoke(() => ApplyRemoved(id)); }
@@ -165,6 +368,18 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
             return;
         }
 
+        // Record the container in the BT set the first time we see it, regardless of whether
+        // battery / connection state changed in this event. Audio code relies on this to upgrade
+        // IsBluetooth on endpoints whose property store didn't surface BTHENUM. Sentinel /
+        // empty containers are PnP "no real container" placeholders and would falsely match
+        // any other endpoint that also has no container (built-in Realtek HDA etc).
+        if (IsRealContainer(containerId) && _bluetoothContainers.Add(containerId))
+        {
+            WPFLog.Log($"BluetoothBatteryMonitor: new BT container={containerId}");
+            try { BluetoothContainerSeen?.Invoke(containerId); }
+            catch (Exception ex) { WPFLog.Log($"BluetoothBatteryMonitor: container-seen subscriber threw: {ex.Message}"); }
+        }
+
         // A disconnected device's last battery reading is stale; treat as unknown. We don't
         // unilaterally clear the cache on a connect=true with no battery field though - that's
         // a "no change to battery" notification, not a "battery just became unknown" one.
@@ -173,6 +388,10 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         else if (battery.HasValue) effective = battery;
         else return; // neither connection nor battery field updated meaningfully
 
+        // Sentinel containers would fan a battery value to every unrelated endpoint that also
+        // lacks a real container; skip the cache write so OnBluetoothBatteryChanged never fires
+        // against the sentinel.
+        if (!IsRealContainer(containerId)) return;
         ApplyBattery(containerId, effective);
     }
 
@@ -272,8 +491,88 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         if (_disposed) return;
         _disposed = true;
         IsRunning = false;
+        _pollTimer?.Stop();
+        _pollTimer = null;
         DetachWatcher();
         _idToContainer.Clear();
         _batteries.Clear();
+        _bluetoothContainers.Clear();
     }
+}
+
+/// <summary>
+/// Minimal cfgmgr32 P/Invoke surface for reading DEVPKEY_Bluetooth_Battery directly off a PnP
+/// instance id. The modern WinRT enumeration APIs (DeviceInformation, PnpObject) project the
+/// property key but always return null for its value; the Configuration Manager layer is where
+/// the value actually lives, and it's what Get-PnpDeviceProperty + Settings read through.
+/// </summary>
+internal static class CfgMgr32
+{
+    // CR_* return codes used by the readers above. The full set is much larger; we only need
+    // SUCCESS (the value was read), BUFFER_SMALL (size-probe call - expected on the first
+    // CM_Get_DevNode_Property), and the two "no value" codes the OS returns when a devnode
+    // exists but doesn't carry the property.
+    public const int CR_SUCCESS = 0x00000000;
+    public const int CR_BUFFER_SMALL = 0x0000001A;
+    public const int CR_NO_SUCH_VALUE = 0x00000025;
+
+    public const int CM_LOCATE_DEVNODE_NORMAL = 0;
+    public const uint CM_GETIDLIST_FILTER_PRESENT = 0x00000100;
+    public const uint DEVPROP_TYPE_BYTE = 0x00000003;
+    public const uint DEVPROP_TYPE_GUID = 0x0000000D;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DEVPROPKEY
+    {
+        public Guid fmtid;
+        public uint pid;
+    }
+
+    // DEVPKEY_Bluetooth_Battery: {104EA319-6EE2-4701-BD47-8DDBF425BBE5} pid 2. Byte 0-100.
+    public static readonly DEVPROPKEY DEVPKEY_Bluetooth_Battery = new()
+    {
+        fmtid = new Guid(0x104EA319, 0x6EE2, 0x4701, 0xBD, 0x47, 0x8D, 0xDB, 0xF4, 0x25, 0xBB, 0xE5),
+        pid = 2,
+    };
+
+    // DEVPKEY_Device_ContainerId: {8C7ED206-3F8A-4827-B3AB-AE9E1FAEFC6C} pid 2. 16-byte GUID.
+    // Set on every interface a single physical device exposes, so an audio endpoint's container
+    // id matches the BT-protocol devnode (BTHENUM, BTHHFENUM, etc.) that carries the battery.
+    public static readonly DEVPROPKEY DEVPKEY_Device_ContainerId = new()
+    {
+        fmtid = new Guid(0x8C7ED206, 0x3F8A, 0x4827, 0xB3, 0xAB, 0xAE, 0x9E, 0x1F, 0xAE, 0xFC, 0x6C),
+        pid = 2,
+    };
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int CM_Locate_DevNodeW(
+        out uint pdnDevInst,
+        [In] string pDeviceID,
+        uint ulFlags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int CM_Get_DevNode_PropertyW(
+        uint dnDevInst,
+        ref DEVPROPKEY PropertyKey,
+        out uint PropertyType,
+        [Out] byte[]? PropertyBuffer,
+        ref uint PropertyBufferSize,
+        uint ulFlags);
+
+    // System-wide devnode enumeration. pszFilter=null retrieves every present PnP devnode (with
+    // CM_GETIDLIST_FILTER_PRESENT) as a double-null-terminated multi-string. Size is in chars,
+    // not bytes; the size-probe call returns the count of UTF-16 chars including the trailing
+    // pair of nulls.
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int CM_Get_Device_ID_List_SizeW(
+        out uint pulLen,
+        [In] string? pszFilter,
+        uint ulFlags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int CM_Get_Device_ID_ListW(
+        [In] string? pszFilter,
+        [Out] char[] buffer,
+        uint bufferLen,
+        uint ulFlags);
 }

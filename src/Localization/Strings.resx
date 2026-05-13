@@ -155,7 +155,7 @@
     <value>About</value>
   </data>
   <data name="Settings_Common_Tab_DeviceAppDrawers" xml:space="preserve">
-    <value>Device App Drawers</value>
+    <value>App Drawers</value>
   </data>
   <data name="Settings_Common_Tab_Flyout" xml:space="preserve">
     <value>Flyout</value>
@@ -359,10 +359,10 @@
     <value>Auto</value>
   </data>
   <data name="Settings_Flyout_PlaybackDrawer_Header" xml:space="preserve">
-    <value>Playback drawer</value>
+    <value>Playback drawers</value>
   </data>
   <data name="Settings_Flyout_RecordingDrawer_Header" xml:space="preserve">
-    <value>Recording drawer</value>
+    <value>Recording drawers</value>
   </data>
   <data name="Settings_Flyout_AppDrawerMaxApps_Sliders_Title" xml:space="preserve">
     <value>Max apps before scrolling - Full sliders</value>
@@ -431,19 +431,13 @@
     <value>Not installed. Will be placed at "{0}".{1}</value>
   </data>
   <data name="Settings_General_Notifications_Header" xml:space="preserve">
-    <value>Notifications</value>
+    <value>Volume changed ping</value>
   </data>
   <data name="Settings_General_PlayAppVolumeChangeSound_Description" xml:space="preserve">
     <value>Play a Windows notification sound when you change a per-app slider, scaled to the app's mixed volume so quieter apps preview quieter.</value>
   </data>
   <data name="Settings_General_PlayAppVolumeChangeSound_Title" xml:space="preserve">
     <value>Play a sound when changing app volume</value>
-  </data>
-  <data name="Settings_General_PlayDeviceVolumeChangeSound_Description" xml:space="preserve">
-    <value>Play a beep through the playback device whose slider you adjust. Recording devices and per-app sliders stay silent.</value>
-  </data>
-  <data name="Settings_General_PlayDeviceVolumeChangeSound_Title" xml:space="preserve">
-    <value>Play a sound when changing playback device volume</value>
   </data>
   <data name="Settings_General_RequiresAdmin_Suffix" xml:space="preserve">
     <value> (requires admin)</value>
@@ -846,13 +840,19 @@ Target: {1}</value>
     <value>Bluetooth</value>
   </data>
   <data name="Settings_DeviceAppDrawers_SectionHeader" xml:space="preserve">
-    <value>Device app drawers</value>
+    <value>App drawers</value>
   </data>
   <data name="Settings_Devices_SectionHeader" xml:space="preserve">
     <value>Devices</value>
   </data>
-  <data name="Settings_Devices_Defaulting_Header" xml:space="preserve">
-    <value>Defaulting</value>
+  <data name="Settings_Devices_Playback_Header" xml:space="preserve">
+    <value>Playback</value>
+  </data>
+  <data name="Settings_Devices_PlayDeviceVolumeChangeSound_Title" xml:space="preserve">
+    <value>Play a sound when changing playback device volume</value>
+  </data>
+  <data name="Settings_Devices_PlayDeviceVolumeChangeSound_Description" xml:space="preserve">
+    <value>Play a beep through the playback device whose slider you adjust. Recording devices and per-app sliders stay silent.</value>
   </data>
   <data name="Settings_Devices_SetDefaultCommsToDefault_Title" xml:space="preserve">
     <value>Tie default comms device to default device</value>

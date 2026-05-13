@@ -218,6 +218,7 @@ internal static class PropertyKeys
     // KSDATAFORMAT_SUBTYPE_PCM. The SubFormat GUID inside a WAVEFORMATEXTENSIBLE that says "this
     // is integer PCM" (vs IEEE float, AC-3, etc). Synthesized into format blobs we hand to
     // IPolicyConfig::SetDeviceFormat when the existing format wasn't already EXTENSIBLE so we
+
     // have nothing to copy from.
     public static readonly Guid KSDATAFORMAT_SUBTYPE_PCM = new(
         0x00000001, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71);

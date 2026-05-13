@@ -57,6 +57,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     // render device on each change. Non-admin runs leave the monitor inert and CurrentCodec
     // stays null on every device.
     private readonly BluetoothCodecMonitor _codecMonitor;
+    private readonly HfpCodecMonitor _hfpSpike;
 
     // Event-driven battery monitor keyed by PnP container id. Reads Windows' aggregated
     // DEVPKEY_Bluetooth_Battery (covers BLE GATT, HFP IPHONEACCEV, HID battery reports) and
@@ -182,12 +183,24 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         _codecMonitor.Start();
         PropagateCodecToBluetoothDevices(_codecMonitor.CurrentCodec);
 
+        // HFP codec discovery spike. Subscribes to two undocumented TraceLogging providers
+        // (HfAud + HfEnum) extracted from the HFP driver binaries and logs every event so we
+        // can identify which event / field carries the negotiated CVSD vs mSBC codec. No UI
+        // wiring - this is logging-only until the right event is identified.
+        // Currently OFF: uncomment the Start() to resume the discovery spike. The instance is
+        // still constructed so Dispose stays a no-op when never started.
+        _hfpSpike = new HfpCodecMonitor(dispatcher);
+        //_hfpSpike.Start();
+
         // Bluetooth battery monitor. No elevation requirement; DeviceWatcher events fan in
         // through OnBluetoothBatteryChanged on the dispatcher. The first burst of Added events
         // after Start() will retroactively seed BatteryLevel on any wrapper whose container id
-        // matches a paired BT device that already had a cached battery reading.
+        // matches a paired BT device that already had a cached battery reading. The same burst
+        // also fires BluetoothContainerSeen for each BT container - we use that to definitively
+        // mark an audio endpoint as Bluetooth when its property-store enumerator didn't say so.
         _batteryMonitor = new BluetoothBatteryMonitor(dispatcher);
         _batteryMonitor.BatteryChanged += OnBluetoothBatteryChanged;
+        _batteryMonitor.BluetoothContainerSeen += OnBluetoothContainerSeen;
         _batteryMonitor.Start();
     }
 
@@ -223,18 +236,22 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
     private void OnMeterPeakSampleRateChanged() => _peakSampleTimer.Interval = ResolveSampleIntervalMs();
 
-    /// <summary>Starts the peak-meter polling + render timers. Called when the flyout becomes visible.</summary>
+    /// <summary>Starts the peak-meter polling + render timers, and the Bluetooth battery active-poll
+    /// timer. Called when the flyout becomes visible.</summary>
     public void StartMetering()
     {
         _peakSampleTimer.Start();
         _peakRenderTimer.Start();
+        _batteryMonitor.StartPolling();
     }
 
-    /// <summary>Stops both timers. Called when the flyout hides so the app stays idle.</summary>
+    /// <summary>Stops the peak-meter timers and the BT battery active-poll timer. Called when the
+    /// flyout hides so the app stays idle.</summary>
     public void StopMetering()
     {
         _peakSampleTimer.Stop();
         _peakRenderTimer.Stop();
+        _batteryMonitor.StopPolling();
     }
 
     /// <summary>
@@ -372,6 +389,18 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             {
                 _devices.Add(wrapped);
                 ScheduleUpdateAllDefaults();
+                // Promote IsBluetooth synchronously if the watcher already classified this
+                // container - covers the common case where a runtime device-add lands after the
+                // initial BT enumeration burst completed. The property-store EnumeratorName check
+                // at construction misses some Win11 drivers, so without this promotion the codec
+                // strip and battery row would stay collapsed on the new row. CanPromoteToBluetooth
+                // refuses when the endpoint's own bus identity contradicts (HDAUDIO / USB / etc.).
+                if (wrapped.ContainerId is Guid container
+                    && _batteryMonitor.IsBluetoothContainer(container)
+                    && CanPromoteToBluetooth(wrapped))
+                {
+                    wrapped.IsBluetooth = true;
+                }
                 // Newly-added BT render endpoint inherits whatever codec the monitor last saw
                 // so it doesn't paint blank until the next ETW event fires.
                 if (wrapped.IsBluetooth && wrapped.DataFlow == EDataFlow.eRender)
@@ -381,9 +410,9 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
                 // Seed cached battery for either flow - capture (HFP) and render (A2DP) on the
                 // same headset share a container id, so both should pick up whatever level the
                 // monitor has recorded without waiting for the next DeviceWatcher tick.
-                if (wrapped.IsBluetooth && wrapped.ContainerId is Guid container)
+                if (wrapped.IsBluetooth && wrapped.ContainerId is Guid container2)
                 {
-                    wrapped.BatteryLevel = _batteryMonitor.TryGet(container);
+                    wrapped.BatteryLevel = _batteryMonitor.TryGet(container2);
                 }
             }
         }
@@ -437,16 +466,24 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         ScheduleUpdateAllDefaults();
         // Any render endpoint going active / inactive can change the dim state of every capture
         // row's listen button (target-active is a cross-device derived flag), so recompute here.
+
         UpdateListenTargetActiveness();
 
-        // BT state transition: if the last Active BT render endpoint just went away, reset the
-        // codec monitor so stale codec readouts collapse. If a BT endpoint just came back to
-        // Active and the monitor has a cached codec, re-push it so the newly-Active device
-        // doesn't paint as "unknown" until the next ETW event.
-        if (match.IsBluetooth && match.DataFlow == EDataFlow.eRender)
+        // BT state transition: in-memory codec cache survives the active <-> inactive flicker
+        // a paired headset goes through on power-off, range loss, sleep / resume, etc. The ETW
+        // provider only emits on AVDTP renegotiation, so wiping the cached codec on every
+        // disconnect leaves the strip blank for the rest of the session until audio plays
+        // again. We trust that if the codec actually changes mid-session (the stack picked a
+        // different one due to link quality) the next ETW event overwrites the cache; until
+        // then the last-observed value is the best display we have. RemoveDeviceByID still
+        // calls Reset() when the wrapper is actually disposed (true unpair / Windows-level
+        // removal), so the cache doesn't survive a real disconnect-for-good.
+        if (match.IsBluetooth && match.DataFlow == EDataFlow.eRender && HasActiveBluetoothRenderDevice())
         {
-            if (!HasActiveBluetoothRenderDevice()) _codecMonitor.Reset();
-            else PropagateCodecToBluetoothDevices(_codecMonitor.CurrentCodec);
+            // Newly-Active BT render endpoint inherits the cached codec so it doesn't paint
+            // blank until the next ETW event - including the case where this transition was
+            // Inactive -> Active for the only BT render device on the system.
+            PropagateCodecToBluetoothDevices(_codecMonitor.CurrentCodec);
         }
     }
 
@@ -721,15 +758,49 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     // BatteryMonitor fires this on the dispatcher whenever a tracked container's battery
     // transitions. Fan out to every wrapper (render and capture - a single BT headset typically
     // exposes both an A2DP render endpoint and a HFP capture endpoint that share the same
-    // container, and both rows should show the same level).
+    // container, and both rows should show the same level). Matching on ContainerId alone is
+    // sufficient: the monitor only fires for containers it observed via the BT Devices class
+    // filter, so any endpoint sharing that container is by definition Bluetooth-backed.
     private void OnBluetoothBatteryChanged(Guid containerId, int? batteryPercent)
     {
         foreach (AudioDevice d in _devices)
         {
-            if (!d.IsBluetooth) continue;
             if (d.ContainerId != containerId) continue;
             d.BatteryLevel = batteryPercent;
         }
+    }
+
+    // BatteryMonitor fires this the first time a BT container surfaces through the watcher.
+    // Promote IsBluetooth on every wrapped endpoint sharing that container - the property-store
+    // EnumeratorName check at construction misses devices where the audio endpoint doesn't
+    // inherit BTHENUM (common on Win11 with some drivers), so the codec strip and battery row
+    // both stay collapsed until we upgrade the flag here. Once promoted, fan in the cached
+    // codec (render endpoints only) and cached battery so the UI catches up immediately without
+    // waiting for the next ETW / DeviceWatcher event.
+    private void OnBluetoothContainerSeen(Guid containerId)
+    {
+        foreach (AudioDevice d in _devices)
+        {
+            if (d.ContainerId != containerId) continue;
+            if (!CanPromoteToBluetooth(d)) continue;
+            if (!d.IsBluetooth) d.IsBluetooth = true;
+            if (d.DataFlow == EDataFlow.eRender) d.CurrentCodec = _codecMonitor.CurrentCodec;
+            d.BatteryLevel = _batteryMonitor.TryGet(containerId);
+        }
+    }
+
+    // Defense in depth against a non-BT endpoint getting promoted via a stray container match.
+    // The promotion path was designed for endpoints whose property store didn't surface the BT
+    // bus enumerator at construction time - empty / unknown enumerator. If the endpoint's own
+    // PnP bus identity is something else (HDAUDIO, USB, ROOT, ...) the container match is
+    // suspect and we refuse to override the original IsBluetooth=false. Bluetooth bus names all
+    // start with "BTH"; an empty enumerator means we genuinely don't know, in which case the
+    // container claim is the better signal.
+    private static bool CanPromoteToBluetooth(AudioDevice d)
+    {
+        string enumerator = d.EnumeratorName;
+        if (enumerator.Length == 0) return true;
+        return enumerator.StartsWith("BTH", StringComparison.OrdinalIgnoreCase);
     }
 
     // True when at least one Bluetooth render endpoint is currently Active. Drives the codec
@@ -768,7 +839,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         _codecMonitor.CodecChanged -= OnBluetoothCodecChanged;
         Safe.Dispose(_codecMonitor);
 
+        Safe.Dispose(_hfpSpike);
+
         _batteryMonitor.BatteryChanged -= OnBluetoothBatteryChanged;
+        _batteryMonitor.BluetoothContainerSeen -= OnBluetoothContainerSeen;
         Safe.Dispose(_batteryMonitor);
 
         try { _enumerator.UnregisterEndpointNotificationCallback(_bridge); } catch { }

@@ -7,8 +7,9 @@ using UserControl = System.Windows.Controls.UserControl;
 namespace VolumeTrayAppWPF.WPF.Settings.Pages;
 
 /// <summary>
-/// Flyout settings page. Owns the volume-flyout undock toggles plus the device-list layout, sort,
-/// and recording-visibility controls. Drawer-shaped settings (playback / recording caps + icon-mode
+/// Flyout settings page. Owns the volume-flyout undock toggles, the device-list layout / sort /
+/// recording-visibility controls, and the peak-meter rendering knobs (unified toggle, bias, FPS,
+/// sample rate, change ceiling). Drawer-shaped settings (playback / recording caps + icon-mode
 /// knobs) live on <see cref="DeviceAppDrawersPage"/>. The shell calls <see cref="LoadFromSettings"/>
 /// after construction to inject AppSettings and seed control values. Tag-based mutations route
 /// through <see cref="SettingsBindings"/>. Child-card visibility is XAML-bound via BoolToVisibility
@@ -46,6 +47,36 @@ public partial class FlyoutPage : UserControl
             IntermixRecordingWithPlaybackInFlyoutToggle.IsChecked = settings.IntermixRecordingWithPlaybackInFlyout;
             ShowDeviceFormatTextToggle.IsChecked = settings.ShowDeviceFormatText;
             ShowDeviceCodecTextToggle.IsChecked = settings.ShowDeviceCodecText;
+
+            UnifiedPeakMeterToggle.IsChecked = settings.UnifiedPeakMeter;
+
+            SettingsBindings.BindSpinner(
+                UnifiedMeterBiasBox,
+                () => settings.UnifiedMeterLowChannelBiasMultiplier,
+                v => settings.UnifiedMeterLowChannelBiasMultiplier = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
+
+            SettingsBindings.BindSpinner(
+                MeterPeakFpsBox,
+                () => settings.MeterPeakFps,
+                v => settings.MeterPeakFps = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
+
+            SettingsBindings.BindSpinner(
+                MeterPeakSampleRateBox,
+                () => settings.MeterPeakSampleRate,
+                v => settings.MeterPeakSampleRate = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
+
+            SettingsBindings.BindSpinner(
+                MeterPeakChangeCeilingBox,
+                () => settings.MeterPeakChangeCeiling,
+                v => settings.MeterPeakChangeCeiling = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
         }
         finally
         {
