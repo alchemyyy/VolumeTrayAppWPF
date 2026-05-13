@@ -174,8 +174,25 @@ internal struct KSDATARANGE_AUDIO
 
 internal static class KsConstants
 {
-    // KSPROPSETID_Pin: the pin-property GUID set. KSPROPERTY_PIN_DATARANGES enumerates the
-    // data ranges (format envelopes) the driver pin natively advertises.
+    // Microsoft-private IID used by mmsys.cpl's Default Format dropdown population. Confirmed
+    // from a Hex-Rays decompile of mmsys.cpl: the dropdown is populated via this chain (the
+    // entry point for the audio engine's internal topology, where IKsFormatSupport lives -
+    // the public IDeviceTopology never exposes it).
+    //
+    //   ifilter = IMMDevice::Activate(IID_AudioEnginePartFilter, CLSCTX_INPROC_SERVER, NULL)
+    //   enum    = ifilter->vtable[3](&ksDataFormat=64B, 64, NULL)
+    //   count   = enum->vtable[3]()
+    //   part    = enum->vtable[4](i)
+    //   fs      = part->Activate(CLSCTX_INPROC_SERVER, IID_IKsFormatSupport)
+    //   supported = fs->IsFormatSupported(KSDATAFORMAT_WAVEFORMATEX, 104)  // per candidate
+    //
+    // The KSDATAFORMAT passed to vtable[3] tells the filter what data range to enumerate parts
+    // for - we pass {TYPE_AUDIO, SUBTYPE_PCM, SPECIFIER_WAVEFORMATEX} to get audio PCM parts.
+    public static readonly Guid IID_AudioEnginePartFilter = new(
+        0x2B0711DE, 0xDAB7, 0x4610, 0xA1, 0x6F, 0xD3, 0x38, 0x37, 0x49, 0xB2, 0x20);
+
+    // KSPROPSETID_Pin: legacy direct-pin property set. Kept for reference; not used now that
+    // the IKsFormatSupport probe path is wired up.
     public static readonly Guid KSPROPSETID_Pin = new(
         0x8C134960, 0x51AD, 0x11CF, 0x87, 0x8A, 0x94, 0xF8, 0x01, 0xC1, 0x00, 0x00);
 

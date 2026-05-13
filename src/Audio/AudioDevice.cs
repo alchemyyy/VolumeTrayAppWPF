@@ -1659,88 +1659,139 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // All COM-pointer outputs go through out IntPtr + explicit Marshal.QueryInterface / Release,
     // matching NAudio's pattern - the .NET classic-RCW marshaller mis-handles QI for interfaces
     // returned across topology boundaries.
+    // Replicates the algorithm mmsys.cpl uses for its Advanced > Default Format dropdown.
+    // The decompile of mmsys.cpl shows this exact chain, and a self-contained test harness
+    // confirmed it produces the expected format list against the Realtek Digital Output
+    // endpoint where every public-topology approach (IKsControl, IKsFormatSupport on public
+    // IPart, KSPROPERTY_PIN_DATARANGES via DeviceIoControl) returned E_NOINTERFACE / empty.
+    //
+    //   1. IMMDevice::Activate(IID_AudioEnginePartFilter, CLSCTX_INPROC_SERVER, NULL, &filter)
+    //      Private Microsoft IID 2b0711de-dab7-4610-a16f-d3383749b220. Returns a filter that
+    //      can hand back IPart objects from the audio engine's internal topology (which the
+    //      public IDeviceTopology::GetConnector never exposes).
+    //
+    //   2. filter->vtable[3](&ksDataFormat=64B, 64, NULL, &enumerator)
+    //      Pass a 64-byte KSDATAFORMAT header (TYPE_AUDIO / SUBTYPE_PCM / SPECIFIER_WAVEFORMATEX,
+    //      no payload). Get back an IPart enumerator scoped to that data range.
+    //
+    //   3. enumerator->vtable[3](&count) / vtable[4](i, &part)
+    //      Iterate the enumerator. Each part is a regular IPart in the engine's audio topology.
+    //
+    //   4. part->Activate(CLSCTX_INPROC_SERVER, IID_IKsFormatSupport, &fs)
+    //      Activate IKsFormatSupport on the part. This SUCCEEDS here even when it returns
+    //      E_NOINTERFACE on every part of the public topology - the engine topology's parts
+    //      carry it.
+    //
+    //   5. fs->IsFormatSupported(KSDATAFORMAT_WAVEFORMATEX{104}, 104, &supported)
+    //      Per-candidate probe, exactly what mmsys.cpl does in
+    //      CEndpointFormatChanger::IsPCMFormatSupported.
     private List<(int, int, int)>? QueryKsAudioDataRanges(
         SortedSet<int> channelCandidates, int[] rates16, int[] rates24)
     {
-        IDeviceTopology? endpointTopology = null;
-        IDeviceTopology? deviceTopology = null;
-        IntPtr endpointConnectorPtr = IntPtr.Zero;
-        IntPtr deviceSideConnectorPtr = IntPtr.Zero;
-        IntPtr devicePartPtr = IntPtr.Zero;
-        IntPtr deviceTopologyPtr = IntPtr.Zero;
-        IntPtr formatSupportPtr = IntPtr.Zero;
+        IntPtr filterPtr = IntPtr.Zero;
+        IntPtr enumeratorPtr = IntPtr.Zero;
+        IntPtr ksDataPtr = IntPtr.Zero;
 
         try
         {
-            int hr = _device.Activate(typeof(IDeviceTopology).GUID, ClsCtx.ALL, IntPtr.Zero, out object? topoObj);
-            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): Activate(IDeviceTopology) hr=0x{hr:X8}");
-            if (hr < 0 || topoObj == null) return null;
-            endpointTopology = (IDeviceTopology)topoObj;
+            int hr = _device.Activate(KsConstants.IID_AudioEnginePartFilter,
+                ClsCtx.INPROC_SERVER, IntPtr.Zero, out object? filterObj);
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): Activate(IID_AudioEnginePartFilter) hr=0x{hr:X8}");
+            if (hr < 0 || filterObj == null) return null;
 
-            hr = endpointTopology.GetConnector(0, out endpointConnectorPtr);
-            if (hr < 0 || endpointConnectorPtr == IntPtr.Zero) return null;
-            IConnector endpointConnector = (IConnector)Marshal.GetObjectForIUnknown(endpointConnectorPtr);
+            filterPtr = Marshal.GetIUnknownForObject(filterObj);
+            Marshal.FinalReleaseComObject(filterObj);  // release the temporary RCW; filterPtr keeps the COM ref
 
-            // Jump to the audio adapter side. The endpoint-side connector's IPart never exposes
-            // IKsFormatSupport - mmsys.cpl works against the adapter topology, which is on the
-            // OTHER side of GetConnectedTo.
-            hr = endpointConnector.GetConnectedTo(out deviceSideConnectorPtr);
-            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): GetConnectedTo hr=0x{hr:X8}");
-            if (hr < 0 || deviceSideConnectorPtr == IntPtr.Zero) return null;
+            // Build the 64-byte KSDATAFORMAT header (audio PCM via WAVEFORMATEX specifier).
+            ksDataPtr = Marshal.AllocHGlobal(64);
+            for (int i = 0; i < 64; i++) Marshal.WriteByte(ksDataPtr, i, 0);
+            Marshal.WriteInt32(ksDataPtr, 0, 64);   // FormatSize
+            Marshal.Copy(KsConstants.KSDATAFORMAT_TYPE_AUDIO.ToByteArray(), 0, IntPtr.Add(ksDataPtr, 16), 16);
+            Marshal.Copy(PropertyKeys.KSDATAFORMAT_SUBTYPE_PCM.ToByteArray(), 0, IntPtr.Add(ksDataPtr, 32), 16);
+            Marshal.Copy(KsConstants.KSDATAFORMAT_SPECIFIER_WAVEFORMATEX.ToByteArray(), 0, IntPtr.Add(ksDataPtr, 48), 16);
 
-            Guid iidPart = typeof(IPart).GUID;
-            hr = Marshal.QueryInterface(deviceSideConnectorPtr, in iidPart, out devicePartPtr);
-            if (hr < 0 || devicePartPtr == IntPtr.Zero) return null;
-            IPart deviceSidePart = (IPart)Marshal.GetObjectForIUnknown(devicePartPtr);
+            // Call filter->vtable[3] (the "filter parts by KSDATAFORMAT" method).
+            int fhr = CallVtable3_Filter(filterPtr, ksDataPtr, 64, out enumeratorPtr);
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): filter->vtable[3] hr=0x{fhr:X8} enum=0x{enumeratorPtr.ToInt64():X}");
+            if (fhr < 0 || enumeratorPtr == IntPtr.Zero) return null;
 
-            hr = deviceSidePart.GetTopologyObject(out deviceTopologyPtr);
-            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): GetTopologyObject hr=0x{hr:X8}");
-            if (hr < 0 || deviceTopologyPtr == IntPtr.Zero) return null;
-            deviceTopology = (IDeviceTopology)Marshal.GetObjectForIUnknown(deviceTopologyPtr);
+            int chr = CallVtable3_GetCount(enumeratorPtr, out uint count);
+            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): enum->GetCount hr=0x{chr:X8} count={count}");
+            if (chr < 0 || count == 0) return null;
 
-            // Walk every Connector and Subunit in the adapter topology, trying
-            // IPart::Activate(IKsFormatSupport). First non-null pointer wins. Different drivers
-            // put IKsFormatSupport on different parts (Realtek HD Audio on a connector,
-            // USBAUDIO.SYS on internal subunits); iterating is the only way to find it without
-            // driver-specific guesses.
-            formatSupportPtr = FindFormatSupport(deviceTopology, deviceSidePart, out int partsProbed);
-            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): partsProbed={partsProbed} formatSupportPtr=0x{formatSupportPtr.ToInt64():X}");
-            if (formatSupportPtr == IntPtr.Zero) return null;
-            IKsFormatSupport formatSupport = (IKsFormatSupport)Marshal.GetObjectForIUnknown(formatSupportPtr);
-
-            SortedSet<(int, int, int)> accepted = new();
-            int probed = 0;
-            int supported = 0;
-
-            // Each candidate: probe with PCM subformat. 24-bit is probed as 24-in-32 container
-            // (the form mmsys.cpl emits and the form every modern driver advertises). 16-bit is
-            // container == valid.
-            foreach (int channels in channelCandidates)
+            IKsFormatSupport? formatSupport = null;
+            IntPtr formatSupportPtr = IntPtr.Zero;
+            try
             {
-                if (channels < 1) continue;
+                for (uint i = 0; i < count && formatSupport == null; i++)
+                {
+                    int ihr = CallVtable4_GetItem(enumeratorPtr, i, out IntPtr itemPtr);
+                    if (ihr < 0 || itemPtr == IntPtr.Zero) continue;
+                    try
+                    {
+                        Guid iidPart = typeof(IPart).GUID;
+                        int qhr = Marshal.QueryInterface(itemPtr, in iidPart, out IntPtr partPtr);
+                        if (qhr < 0 || partPtr == IntPtr.Zero) continue;
+                        try
+                        {
+                            IPart part = (IPart)Marshal.GetObjectForIUnknown(partPtr);
+                            Guid iidFs = typeof(IKsFormatSupport).GUID;
+                            int ahr = part.Activate(ClsCtx.INPROC_SERVER, ref iidFs, out IntPtr fsPtr);
+                            if (ahr >= 0 && fsPtr != IntPtr.Zero)
+                            {
+                                WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): part[{i}] -> IKsFormatSupport");
+                                formatSupportPtr = fsPtr;
+                                formatSupport = (IKsFormatSupport)Marshal.GetObjectForIUnknown(fsPtr);
+                                break;
+                            }
+                        }
+                        finally { Marshal.Release(partPtr); }
+                    }
+                    finally { Marshal.Release(itemPtr); }
+                }
 
-                foreach (int rate in rates16)
+                if (formatSupport == null) return null;
+
+                SortedSet<(int, int, int)> accepted = new();
+                int probed = 0;
+                int supported = 0;
+
+                foreach (int channels in channelCandidates)
                 {
-                    probed++;
-                    if (ProbeFormat(formatSupport, (ushort)channels, validBits: 16, containerBits: 16, (uint)rate))
+                    if (channels < 1) continue;
+                    foreach (int rate in rates16)
                     {
-                        supported++;
-                        accepted.Add((channels, 16, rate));
+                        probed++;
+                        if (ProbeFormat(formatSupport, (ushort)channels, 16, 16, (uint)rate))
+                        {
+                            supported++;
+                            accepted.Add((channels, 16, rate));
+                        }
+                    }
+                    foreach (int rate in rates24)
+                    {
+                        probed++;
+                        // 24-bit ships as 24-in-32 on most render endpoints (e.g. Realtek S/PDIF)
+                        // and as packed 24-in-24 on most USB audio drivers (e.g. AT2020USB-X mic).
+                        // Accept either - the union matches mmsys.cpl's behavior, verified against
+                        // both device types via the FormatProbe test harness.
+                        bool ok = ProbeFormat(formatSupport, (ushort)channels, 24, 32, (uint)rate)
+                               || ProbeFormat(formatSupport, (ushort)channels, 24, 24, (uint)rate);
+                        if (ok)
+                        {
+                            supported++;
+                            accepted.Add((channels, 24, rate));
+                        }
                     }
                 }
-                foreach (int rate in rates24)
-                {
-                    probed++;
-                    if (ProbeFormat(formatSupport, (ushort)channels, validBits: 24, containerBits: 32, (uint)rate))
-                    {
-                        supported++;
-                        accepted.Add((channels, 24, rate));
-                    }
-                }
+
+                WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): probed={probed} supported={supported} accepted={accepted.Count}");
+                return new List<(int, int, int)>(accepted);
             }
-
-            WPFLog.Log($"AudioDevice.QueryKsAudioDataRanges({FriendlyName}): probed={probed} supported={supported} accepted={accepted.Count}");
-            return new List<(int, int, int)>(accepted);
+            finally
+            {
+                if (formatSupportPtr != IntPtr.Zero) Marshal.Release(formatSupportPtr);
+            }
         }
         catch (Exception ex)
         {
@@ -1749,85 +1800,47 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            if (formatSupportPtr != IntPtr.Zero) Marshal.Release(formatSupportPtr);
-            if (deviceTopologyPtr != IntPtr.Zero) Marshal.Release(deviceTopologyPtr);
-            if (devicePartPtr != IntPtr.Zero) Marshal.Release(devicePartPtr);
-            if (deviceSideConnectorPtr != IntPtr.Zero) Marshal.Release(deviceSideConnectorPtr);
-            if (endpointConnectorPtr != IntPtr.Zero) Marshal.Release(endpointConnectorPtr);
-            Safe.Release(deviceTopology);
-            Safe.Release(endpointTopology);
+            if (ksDataPtr != IntPtr.Zero) Marshal.FreeHGlobal(ksDataPtr);
+            if (enumeratorPtr != IntPtr.Zero) Marshal.Release(enumeratorPtr);
+            if (filterPtr != IntPtr.Zero) Marshal.Release(filterPtr);
         }
     }
 
-    // Walks deviceTopology's connectors and subunits, plus the device-side connector itself,
-    // trying IPart::Activate(IKsFormatSupport) on each. Returns the first non-null IKsFormatSupport
-    // pointer (caller takes ownership) or IntPtr.Zero if none exposed it. Logs each part's hr
-    // so we can see which one is the audio filter on a given driver.
-    private static IntPtr FindFormatSupport(
-        IDeviceTopology deviceTopology, IPart deviceSidePart, out int partsProbed)
+    // Raw vtable dispatchers for the private IID_AudioEnginePartFilter chain. We don't have a
+    // type definition for these interfaces; the call signatures are reverse-engineered from the
+    // mmsys.cpl decompile and validated against the test harness.
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int FilterMethod3Fn(IntPtr thisPtr, IntPtr ksData, uint cbKsData, IntPtr unused, out IntPtr outEnumerator);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int EnumGetCountFn(IntPtr thisPtr, out uint count);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int EnumGetItemFn(IntPtr thisPtr, uint index, out IntPtr outItem);
+
+    private static int CallVtable3_Filter(IntPtr objPtr, IntPtr ksData, uint cbKsData, out IntPtr outEnumerator)
     {
-        partsProbed = 0;
-        Guid iidFormatSupport = typeof(IKsFormatSupport).GUID;
-
-        // Try the device-side connector's own IPart first - it IS the first part of the
-        // adapter topology and on many drivers it's the one carrying IKsFormatSupport.
-        int hr = deviceSidePart.Activate(ClsCtx.INPROC_SERVER, ref iidFormatSupport, out IntPtr ptr);
-        partsProbed++;
-        WPFLog.Log($"  part[device-side connector] Activate(IKsFormatSupport) hr=0x{hr:X8}");
-        if (hr >= 0 && ptr != IntPtr.Zero) return ptr;
-
-        // Then walk every other Connector / Subunit in the topology.
-        if (deviceTopology.GetConnectorCount(out uint connectorCount) >= 0)
-        {
-            for (uint i = 0; i < connectorCount; i++)
-            {
-                if (deviceTopology.GetConnector(i, out IntPtr connectorPtr) < 0 || connectorPtr == IntPtr.Zero) continue;
-                try
-                {
-                    ptr = TryActivateFormatSupport(connectorPtr, ref iidFormatSupport, out int subHr);
-                    partsProbed++;
-                    WPFLog.Log($"  part[connector {i}] Activate(IKsFormatSupport) hr=0x{subHr:X8}");
-                    if (ptr != IntPtr.Zero) return ptr;
-                }
-                finally { Marshal.Release(connectorPtr); }
-            }
-        }
-
-        if (deviceTopology.GetSubunitCount(out uint subunitCount) >= 0)
-        {
-            for (uint i = 0; i < subunitCount; i++)
-            {
-                if (deviceTopology.GetSubunit(i, out IntPtr subunitPtr) < 0 || subunitPtr == IntPtr.Zero) continue;
-                try
-                {
-                    ptr = TryActivateFormatSupport(subunitPtr, ref iidFormatSupport, out int subHr);
-                    partsProbed++;
-                    WPFLog.Log($"  part[subunit {i}] Activate(IKsFormatSupport) hr=0x{subHr:X8}");
-                    if (ptr != IntPtr.Zero) return ptr;
-                }
-                finally { Marshal.Release(subunitPtr); }
-            }
-        }
-
-        return IntPtr.Zero;
+        IntPtr vtable = Marshal.ReadIntPtr(objPtr);
+        IntPtr slot = Marshal.ReadIntPtr(vtable, 3 * IntPtr.Size);
+        FilterMethod3Fn fn = Marshal.GetDelegateForFunctionPointer<FilterMethod3Fn>(slot);
+        return fn(objPtr, ksData, cbKsData, IntPtr.Zero, out outEnumerator);
     }
 
-    // QIs the raw part pointer to IPart and calls Activate(IKsFormatSupport). Returns the
-    // resulting interface pointer or IntPtr.Zero on failure; the part's own IPart RCW is
-    // released before return so the caller only owns the format-support pointer.
-    private static IntPtr TryActivateFormatSupport(IntPtr partRawPtr, ref Guid iidFormatSupport, out int hr)
+    private static int CallVtable3_GetCount(IntPtr objPtr, out uint count)
     {
-        Guid iidPart = typeof(IPart).GUID;
-        hr = Marshal.QueryInterface(partRawPtr, in iidPart, out IntPtr ipartPtr);
-        if (hr < 0 || ipartPtr == IntPtr.Zero) return IntPtr.Zero;
-        try
-        {
-            IPart part = (IPart)Marshal.GetObjectForIUnknown(ipartPtr);
-            hr = part.Activate(ClsCtx.INPROC_SERVER, ref iidFormatSupport, out IntPtr fsPtr);
-            if (hr < 0 || fsPtr == IntPtr.Zero) return IntPtr.Zero;
-            return fsPtr;
-        }
-        finally { Marshal.Release(ipartPtr); }
+        IntPtr vtable = Marshal.ReadIntPtr(objPtr);
+        IntPtr slot = Marshal.ReadIntPtr(vtable, 3 * IntPtr.Size);
+        EnumGetCountFn fn = Marshal.GetDelegateForFunctionPointer<EnumGetCountFn>(slot);
+        return fn(objPtr, out count);
+    }
+
+    private static int CallVtable4_GetItem(IntPtr objPtr, uint index, out IntPtr outItem)
+    {
+        IntPtr vtable = Marshal.ReadIntPtr(objPtr);
+        IntPtr slot = Marshal.ReadIntPtr(vtable, 4 * IntPtr.Size);
+        EnumGetItemFn fn = Marshal.GetDelegateForFunctionPointer<EnumGetItemFn>(slot);
+        return fn(objPtr, index, out outItem);
     }
 
     // Builds a 104-byte KSDATAFORMAT_WAVEFORMATEX (64-byte header + 40-byte WAVEFORMATEXTENSIBLE)
