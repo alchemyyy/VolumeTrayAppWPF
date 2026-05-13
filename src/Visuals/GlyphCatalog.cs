@@ -22,8 +22,10 @@ internal static class GlyphCatalog
     public const string WARNING = "\uE7BA";  // Warning (used by hotkey-conflict status badge)
 
     // Window-chrome / spinner / combobox chevrons.
-    public const string CHEVRON_DOWN = "\uE70D";  // ChevronDown (combo dropdown arrow, spinner down)
-    public const string CHEVRON_UP = "\uE70E";    // ChevronUp (spinner up)
+    public const string CHEVRON_UP = "\uE96D";    // ChevronUp (spinner up)
+    public const string CHEVRON_DOWN = "\uE96E";  // ChevronDown (combo dropdown arrow, spinner down)
+
+    public const string COMMUNICATIONS_ACTIVITY = "\uE77E"; // Incoming Call
 
     // Flyout dock / undock toggle. DOCK / UNDOCK are the Fluent Icons names; the semantic
     // aliases FLYOUT_UNDOCK_ACTION / FLYOUT_REDOCK_ACTION read at call sites as the action a
@@ -107,6 +109,8 @@ internal static class GlyphCatalog
     // a real icon for an app session.
     public const string APP_MUTE_OVERLAY = "\uE653";  // BlockedSite / mute X overlay
     public const string APP_FALLBACK = "\uE7F4";      // StackedNetwork (fallback when no real icon)
+
+
 
     // ===========================================================================
     // Window-chrome caption glyphs

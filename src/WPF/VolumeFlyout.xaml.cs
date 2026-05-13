@@ -125,6 +125,25 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         }
     }
 
+    private bool _isCommunicationsDuckingActive = true;
+
+    /// <summary>
+    /// Mirror of the system-wide "When Windows detects communications activity" preference. True
+    /// for any active ducking mode (mute, reduce 80%, reduce 50%); false only when the user has
+    /// explicitly picked "Do nothing" in mmsys.cpl. Re-read on every Show so external changes flow
+    /// in on next open. Drives the titlebar communications button's glyph opacity.
+    /// </summary>
+    public bool IsCommunicationsDuckingActive
+    {
+        get => _isCommunicationsDuckingActive;
+        private set
+        {
+            if (_isCommunicationsDuckingActive == value) return;
+            _isCommunicationsDuckingActive = value;
+            OnPropertyChanged();
+        }
+    }
+
     /// <summary>
     /// Drives the undock-button visibility from settings. Toggling this off while the flyout is
     /// undocked force-redocks at the next OnSettingsChanged tick so the user is never stranded
@@ -340,8 +359,19 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
         if (_appSettings != null) _appSettings.Changed += OnAppSettingsChanged;
 
+        // Subscribe to the system-wide ducking preference and seed the initial value. The first
+        // call to IsActive() also wakes the watcher's background thread, so subsequent writes by
+        // mmsys.cpl / the Settings app raise Changed and we marshal back to the UI dispatcher.
+        CommunicationsDucking.Changed += OnCommunicationsDuckingChanged;
+        IsCommunicationsDuckingActive = CommunicationsDucking.IsActive();
+
         SourceInitialized += OnFlyoutSourceInitialized;
         Closed += OnFlyoutClosed;
+    }
+
+    private void OnCommunicationsDuckingChanged()
+    {
+        Dispatcher.BeginInvoke(() => IsCommunicationsDuckingActive = CommunicationsDucking.IsActive());
     }
 
     /// <summary>
@@ -419,6 +449,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         foreach (AudioDevice d in _subscribedDevices) d.PropertyChanged -= OnDevicePropertyChanged;
         _subscribedDevices.Clear();
         if (_appSettings != null) _appSettings.Changed -= OnAppSettingsChanged;
+        CommunicationsDucking.Changed -= OnCommunicationsDuckingChanged;
 
         ((INotifyCollectionChanged)_cells).CollectionChanged -= _onSliderListChanged;
         foreach (VolumeFlyoutCell cell in _cellsByDevice.Values)
@@ -890,8 +921,39 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         else device.SetAsDefault();
     }
 
+    /// <summary>
+    /// Rightmost chevron in the device row. Flips the cell's IsAppDrawerExpanded; the apps band
+    /// and the device row's bottom-corner trigger both pivot on the derived IsAppDrawerVisible.
+    /// Tag is rebound in XAML to the cell, so the click reaches the VolumeFlyoutCell directly.
+    /// </summary>
+    private void AppDrawerToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe || fe.Tag is not VolumeFlyoutCell cell) return;
+        cell.IsAppDrawerExpanded = !cell.IsAppDrawerExpanded;
+    }
+
     /// <summary>Footer Settings button. Hands off to the host; App.xaml.cs opens SettingsWindow.</summary>
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
+
+    /// <summary>
+    /// Titlebar communications-activity button. Plain click flips between "Do nothing" and "Mute
+    /// all" (any active mode rounds down to "Do nothing" first, so a single click always disables).
+    /// Ctrl+click sets "Reduce 80%"; Alt+click sets "Reduce 50%". Alt wins if both modifiers are
+    /// held. The watcher picks up the registry write and updates the glyph live.
+    /// </summary>
+    private void CommunicationsButton_Click(object sender, RoutedEventArgs e)
+    {
+        ModifierKeys mods = Keyboard.Modifiers;
+        bool ctrl = (mods & ModifierKeys.Control) != 0;
+        bool alt = (mods & ModifierKeys.Alt) != 0;
+
+        CommunicationsDuckingMode mode;
+        if (alt) mode = CommunicationsDuckingMode.Reduce50;
+        else if (ctrl) mode = CommunicationsDuckingMode.Reduce80;
+        else mode = CommunicationsDucking.IsActive() ? CommunicationsDuckingMode.DoNothing : CommunicationsDuckingMode.MuteAll;
+
+        CommunicationsDucking.SetMode(mode);
+    }
 
     /// <summary>
     /// Titlebar Sound-settings button. Opens the Windows surface picked by

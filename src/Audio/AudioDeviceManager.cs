@@ -93,6 +93,16 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>
+    /// Raw IMMNotificationClient::OnDefaultDeviceChanged pass-through, fired synchronously on the
+    /// COM worker thread BEFORE the dispatcher-side coalesced refresh. Subscribers that need to
+    /// synchronize against the audio service's async fanout - default-device preservation across
+    /// an endpoint cycle is the main use case - signal a wait primitive directly from the handler
+    /// without round-tripping through the UI dispatcher; that would deadlock a thread already
+    /// blocking on the wait. Handlers must filter by flow + role themselves.
+    /// </summary>
+    public static event Action<EDataFlow, ERole, string?>? DefaultDeviceChangedRaw;
+
     public AudioDeviceManager(Dispatcher dispatcher, AppSettings? settings = null)
     {
         _dispatcher = dispatcher;
@@ -702,6 +712,13 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             // succession - one per role transition) into a single UpdateAllDefaults pass; the throttler
             // payload itself dispatches onto the UI thread for the actual flag flips.
             WPFLog.Log($"AudioDeviceManager.OnDefaultDeviceChanged: flow={flow} role={role} id={pwstrDefaultDeviceId ?? "<null>"}");
+
+            // Fire the raw pass-through synchronously on this COM thread BEFORE the dispatcher
+            // refresh, so subscribers waiting for fanout completion (force-cycle preservation)
+            // unblock without a UI-thread hop.
+            try { DefaultDeviceChangedRaw?.Invoke(flow, role, pwstrDefaultDeviceId); }
+            catch (Exception ex) { WPFLog.Log($"AudioDeviceManager.DefaultDeviceChangedRaw subscriber threw: {ex.Message}"); }
+
             _owner.ScheduleUpdateAllDefaults();
             return 0;
         }

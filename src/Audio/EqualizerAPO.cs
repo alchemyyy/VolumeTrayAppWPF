@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.IO;
+using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -21,11 +23,10 @@ internal enum EqualizerAPOState
 }
 
 /// <summary>
-/// Live availability monitor for Equalizer APO. Watches the well-known install dir and the
-/// uninstall-registry hive so user-driven install / removal flips the per-device button state
-/// without a flyout reopen. Backend probing is stubbed for now - the monitor wires the
-/// FileSystemWatcher / registry watch so the UI re-evaluates when state changes, but
-/// <see cref="IsAvailable"/> always reads false until the detection logic lands.
+/// Live availability monitor for Equalizer APO. Tracks two signals: the EAPO install dir on disk
+/// (FileSystemWatcher) and the EAPO COM-server registration in HKCR (re-probed lazily on every
+/// read of <see cref="IsAvailable"/>). Either changing flips the per-device button state through
+/// <see cref="AvailabilityChanged"/> without requiring a flyout reopen.
 /// </summary>
 internal static class EqualizerAPOMonitor
 {
@@ -34,6 +35,9 @@ internal static class EqualizerAPOMonitor
     // lands) - until then the monitor only watches the default location.
     public const string DefaultInstallDir = @"C:\Program Files\EqualizerAPO";
     public const string ConfiguratorExeName = "Configurator.exe";
+    public const string DeviceSelectorExeName = "DeviceSelector.exe";
+    public const string EditorExeName = "Editor.exe";
+    public const string EqualizerAPODllName = "EqualizerAPO.dll";
 
     // Sourceforge mirror of the latest x64 installer. Surface in the not-available dialog so the
     // user can grab the EXE in one click. Pinned to a known-good version - chasing 'latest' here
@@ -51,22 +55,30 @@ internal static class EqualizerAPOMonitor
     private static FileSystemWatcher? _dirWatcher;
 
     /// <summary>
-    /// Whether Equalizer APO can be invoked on this system. STUB - in-progress feature: always
-    /// returns false today and the watcher only fires AvailabilityChanged from the filesystem.
-    /// The UI binding path is wired so flipping this to a real probe later lights up every device
-    /// row's button glyph without further wiring.
+    /// Whether Equalizer APO can be invoked on this system. True when the install dir holds an
+    /// EqualizerAPO.dll AND the EAPO COM server is registered in HKCR. The watcher fires
+    /// <see cref="AvailabilityChanged"/> on install-dir presence flips - the COM registration is
+    /// re-probed here on each call, so a regsvr32 /u while the app is running still de-trips this
+    /// property on the next read.
     /// </summary>
     public static bool IsAvailable
     {
         get
         {
             EnsureWatching();
-            // STUB: always returns false until the detection backend lands (File.Exists +
-            // Configurator.exe + APO COM-server registered check). UI surfaces the install /
-            // locate dialog while this returns false.
-            return false;
+            string installDir = ResolveInstallDir();
+            string dllPath = Path.Combine(installDir, EqualizerAPODllName);
+            if (!File.Exists(dllPath)) return false;
+            return EqualizerAPOInstaller.IsAPORegistered();
         }
     }
+
+    /// <summary>
+    /// Resolves the directory we look in for the EAPO binaries. Today this is always the default
+    /// install dir; once AppSettings gains a custom-path entry this method becomes the single
+    /// place to consult it.
+    /// </summary>
+    public static string ResolveInstallDir() => DefaultInstallDir;
 
     /// <summary>
     /// Idempotent watcher setup. First read of <see cref="IsAvailable"/> from any device triggers
@@ -113,13 +125,57 @@ internal static class EqualizerAPOMonitor
     }
 
     /// <summary>
-    /// Launches the Equalizer APO Configuration Editor scoped to <paramref name="device"/>. Stub -
-    /// the real path starts Editor.exe out of the install dir and passes a flag / argument that
-    /// pre-selects the endpoint by its IMMDevice id. Bound to ctrl+left-click and right-click on
-    /// the device-row equalizer button.
+    /// Pushes an AvailabilityChanged so every device row re-runs its probe. Called after our
+    /// install / uninstall path mutates the registry - the FileSystemWatcher only fires on
+    /// install-dir flips, so per-device toggles need an explicit poke to repaint the UI.
+    /// </summary>
+    public static void NotifyAvailabilityChanged()
+    {
+        try { AvailabilityChanged?.Invoke(); }
+        catch (Exception ex) { WPFLog.Log($"EqualizerAPOMonitor.NotifyAvailabilityChanged: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Launches the Equalizer APO Configuration Editor. Bound to ctrl+left-click and right-click
+    /// on the device-row equalizer button. EAPO's Editor scopes via a config-path argument that
+    /// points at the per-endpoint config.txt - when one exists for this device (only after
+    /// successful install), pass it; otherwise fall back to the default config.
     /// </summary>
     public static void OpenConfigurationEditor(AudioDevice device)
     {
-        WPFLog.Log($"EqualizerAPOMonitor.OpenConfigurationEditor({device.FriendlyName}): backend not implemented (stub)");
+        try
+        {
+            string installDir = ResolveInstallDir();
+            string editorPath = Path.Combine(installDir, EditorExeName);
+            if (!File.Exists(editorPath))
+            {
+                WPFLog.Log($"EqualizerAPOMonitor.OpenConfigurationEditor({device.FriendlyName}): {editorPath} not found");
+                return;
+            }
+
+            // Per-endpoint config lives under <InstallDir>\config\<deviceGuid>\config.txt after
+            // a successful install. Pass that as the editor argument when present so the editor
+            // opens scoped to this endpoint; fall through to default config.txt otherwise.
+            string? endpointGuid = AudioDevice.TryExtractEndpointGuid(device.Id);
+            string args = "";
+            if (endpointGuid != null)
+            {
+                string perDevice = Path.Combine(installDir, "config", endpointGuid, "config.txt");
+                if (File.Exists(perDevice)) args = $"\"{perDevice}\"";
+            }
+
+            ProcessStartInfo psi = new()
+            {
+                FileName = editorPath,
+                Arguments = args,
+                UseShellExecute = false,
+                WorkingDirectory = installDir,
+            };
+            Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"EqualizerAPOMonitor.OpenConfigurationEditor({device.FriendlyName}): {ex.Message}");
+        }
     }
 }

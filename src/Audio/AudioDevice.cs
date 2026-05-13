@@ -338,14 +338,121 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Two-state toggle on the equalizer-APO button. Running -> uninstall; anything else -> install
-    /// and enable enhancements. Stub - the install / uninstall paths are not implemented yet per
-    /// project plan (UI lands first; the integration goes in once the EAPO detection / install
-    /// scaffolding is filled in).
+    /// Click action on the equalizer-APO button. Running -> uninstall; EnhancementsOff -> reinstall
+    /// (which force-clears the disable-sysfx bit); NotInstalled -> install. NotAvailable is routed
+    /// to the install-EAPO dialog before we get here, so we no-op on it.
+    /// All registry writes happen synchronously on the caller's thread - they touch HKLM under
+    /// MMDevices\...\FxProperties which typically needs admin; without elevation the call raises
+    /// UnauthorizedAccessException and we surface that through WPFLog without crashing the UI.
     /// </summary>
     internal void ToggleEqualizerAPO()
     {
-        WPFLog.Log($"AudioDevice.ToggleEqualizerAPO({FriendlyName}, state={EqualizerAPOState}): backend not implemented (stub)");
+        if (_disposed) return;
+
+        string? endpointGuid = TryExtractEndpointGuid(Id);
+        if (endpointGuid == null)
+        {
+            WPFLog.Log($"AudioDevice.ToggleEqualizerAPO({FriendlyName}): no endpoint GUID in '{Id}'");
+            return;
+        }
+
+        bool isCapture = DataFlow == EDataFlow.eCapture;
+        EqualizerAPOState before = EqualizerAPOState;
+
+        try
+        {
+            switch (before)
+            {
+                case EqualizerAPOState.Running:
+                    EqualizerAPOInstaller.Uninstall(endpointGuid, isCapture);
+                    // Force the audio engine to reload FxProperties so the EAPO chain stops
+                    // processing immediately instead of lingering on every active stream until
+                    // each app reinitializes. Interrupts current playback on this endpoint -
+                    // intentional: user clicked Off, they want it Off now.
+                    ForceCycleEndpoint($"ForceCycleEndpoint({FriendlyName}, after EAPO uninstall)");
+                    break;
+                case EqualizerAPOState.EnhancementsOff:
+                    EqualizerAPOInstaller.Reinstall(endpointGuid, isCapture);
+                    break;
+                case EqualizerAPOState.NotInstalled:
+                    EqualizerAPOInstaller.Install(endpointGuid, isCapture);
+                    // Same rationale as the uninstall arm: make the chain audible now rather
+                    // than waiting for each app to reinitialize. Interrupts current playback.
+                    ForceCycleEndpoint($"ForceCycleEndpoint({FriendlyName}, after EAPO install)");
+                    break;
+                case EqualizerAPOState.NotAvailable:
+                    return;
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            WPFLog.Log($"AudioDevice.ToggleEqualizerAPO({FriendlyName}): admin required - {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"AudioDevice.ToggleEqualizerAPO({FriendlyName}, state={before}): {ex.Message}");
+        }
+
+        // Reprobe so the button glyph reflects the new state. Other devices on the same system
+        // are unaffected by a per-endpoint toggle, so don't broadcast availability changed here.
+        RefreshEqualizerAPOState();
+    }
+
+    /// <summary>
+    /// Re-probes EAPO state for this endpoint and updates <see cref="EqualizerAPOState"/>. Called
+    /// once at construction and again whenever <see cref="EqualizerAPOMonitor.AvailabilityChanged"/>
+    /// fires (system-wide install / uninstall) or after our own ToggleEqualizerAPO mutates state.
+    /// Probe is synchronous and registry-only, so this is cheap enough to run on the UI thread.
+    /// </summary>
+    internal void RefreshEqualizerAPOState()
+    {
+        if (_disposed) return;
+
+        if (!EqualizerAPOMonitor.IsAvailable)
+        {
+            EqualizerAPOState = EqualizerAPOState.NotAvailable;
+            return;
+        }
+
+        string? endpointGuid = TryExtractEndpointGuid(Id);
+        if (endpointGuid == null)
+        {
+            EqualizerAPOState = EqualizerAPOState.NotAvailable;
+            return;
+        }
+
+        DeviceAPOInfo? info = EqualizerAPOInstaller.Probe(endpointGuid, DataFlow == EDataFlow.eCapture);
+        if (info == null || !info.IsInstalled)
+        {
+            EqualizerAPOState = EqualizerAPOState.NotInstalled;
+            return;
+        }
+
+        EqualizerAPOState = info.EnhancementsDisabled
+            ? EqualizerAPOState.EnhancementsOff
+            : EqualizerAPOState.Running;
+    }
+
+    /// <summary>
+    /// Pulls the bare endpoint GUID out of an IMMDevice id of the form
+    /// '{0.0.0.00000000}.{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}'. Returns null when the id
+    /// doesn't follow that shape (synthetic / test devices).
+    /// </summary>
+    public static string? TryExtractEndpointGuid(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        int separator = id.IndexOf("}.{", StringComparison.Ordinal);
+        if (separator < 0) return null;
+        return id.Substring(separator + 2);
+    }
+
+    private void OnEqualizerAPOAvailabilityChanged()
+    {
+        // FileSystemWatcher callbacks land on a thread-pool thread; the property setter raises
+        // PropertyChanged which must touch WPF state on the dispatcher. BeginInvoke keeps the
+        // refresh asynchronous so a Dispose racing with the watcher can drop the call safely.
+        try { _dispatcher.BeginInvoke(RefreshEqualizerAPOState); }
+        catch (Exception ex) { WPFLog.Log($"AudioDevice.OnEqualizerAPOAvailabilityChanged({FriendlyName}): {ex.Message}"); }
     }
 
     // Registry-only ghost: the endpoint exists in the user's audio device registry but no driver
@@ -432,6 +539,127 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         RunPolicyConfigCall(client => client.SetEndpointVisibility(id, visibility),
             $"SetEnabled({friendlyName}, {enabled})");
+    }
+
+    /// <summary>
+    /// Disables and re-enables this endpoint via IPolicyConfig::SetEndpointVisibility, forcing
+    /// the audio engine to drop every active session and re-initialize against whatever
+    /// FxProperties chain is currently in the registry. Active audio is interrupted by design.
+    ///
+    /// Default-device preservation: when this endpoint holds eConsole/eMultimedia (IsDefault) or
+    /// eCommunications (IsDefaultCommunications), the cycle would normally demote us - Windows
+    /// promotes another endpoint when ours is disabled and does NOT restore on re-enable. We
+    /// preserve the original assignments by waiting on the audio service's async fanout via
+    /// <see cref="AudioDeviceManager.DefaultDeviceChangedRaw"/>: subscribe before disable, wait
+    /// for the OS to publish "no longer default for role R" on every role we held, re-enable,
+    /// then re-issue SetDefaultEndpoint and wait for the matching "now default for role R"
+    /// callbacks. Bounded 2s timeouts on each wait keep a stuck audio service from hanging the
+    /// task forever; on timeout we log and proceed.
+    ///
+    /// Routes through the same threadpool + single-flight gate as the other IPolicyConfig calls.
+    /// </summary>
+    internal void ForceCycleEndpoint(string callDescription)
+    {
+        if (_disposed || string.IsNullOrEmpty(Id)) return;
+
+        string id = Id;
+        EDataFlow flow = DataFlow;
+
+        if (Interlocked.CompareExchange(ref _policyConfigCallInFlight, 1, 0) != 0)
+        {
+            WPFLog.Log($"AudioDevice.{callDescription}: dropped (prior IPolicyConfig call still in flight)");
+            return;
+        }
+
+        // Snapshot role membership before any mutation. SetAsDefault writes both eConsole and
+        // eMultimedia together so IsDefault implies the device holds both render-side roles.
+        bool wasDefault = IsDefault;
+        bool wasDefaultComms = IsDefaultCommunications;
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                IPolicyConfig client = PolicyConfigClient.Value;
+
+                // Cheap path: device held no default-roles, so the audio service has no
+                // promotion fanout to wait on. Give apps a tick to release the device before
+                // re-enabling - heuristic, no signal to synchronize against here.
+                if (!wasDefault && !wasDefaultComms)
+                {
+                    client.SetEndpointVisibility(id, 0);
+                    Thread.Sleep(250);
+                    client.SetEndpointVisibility(id, 1);
+                    return;
+                }
+
+                // Roles we expect callbacks for: Console + Multimedia (from wasDefault) plus
+                // Communications (from wasDefaultComms). Each role transition emits one
+                // OnDefaultDeviceChanged on disable (demotion) and one more on restore (promotion
+                // back to us).
+                int expected = (wasDefault ? 2 : 0) + (wasDefaultComms ? 1 : 0);
+
+                // Phase 1: subscribe BEFORE disable so the demotion fanout can't slip past us.
+                // Predicate: "callback for our flow + a role we held, with a new id that isn't
+                // ours" - the audio service may publish empty/null for new id when no
+                // replacement exists, treat that as a valid demotion signal too.
+                int seenPromotions = 0;
+                ManualResetEventSlim promotionDone = new(false);
+                void OnPromotion(EDataFlow f, ERole r, string? newId)
+                {
+                    if (f != flow) return;
+                    if (string.Equals(newId, id, StringComparison.OrdinalIgnoreCase)) return;
+                    bool relevant = (wasDefault && (r == ERole.eConsole || r == ERole.eMultimedia))
+                        || (wasDefaultComms && r == ERole.eCommunications);
+                    if (!relevant) return;
+                    if (Interlocked.Increment(ref seenPromotions) >= expected) promotionDone.Set();
+                }
+                AudioDeviceManager.DefaultDeviceChangedRaw += OnPromotion;
+                try
+                {
+                    client.SetEndpointVisibility(id, 0);
+                    if (!promotionDone.Wait(2000))
+                        WPFLog.Log($"AudioDevice.{callDescription}: timed out waiting for default-promotion fanout");
+                }
+                finally { AudioDeviceManager.DefaultDeviceChangedRaw -= OnPromotion; }
+
+                // Phase 2: re-enable. The audio service serializes IPolicyConfig calls so this
+                // queues after the disable it just finished publishing - no inter-call sleep
+                // needed once the fanout above completes.
+                client.SetEndpointVisibility(id, 1);
+
+                // Phase 3: restore. Subscribe, issue SetDefaultEndpoint for each role we held,
+                // wait for the matching "now default for R" callbacks. Predicate flipped: we
+                // want callbacks where the new id IS ours.
+                int seenRestores = 0;
+                ManualResetEventSlim restoreDone = new(false);
+                void OnRestore(EDataFlow f, ERole r, string? newId)
+                {
+                    if (f != flow) return;
+                    if (!string.Equals(newId, id, StringComparison.OrdinalIgnoreCase)) return;
+                    bool relevant = (wasDefault && (r == ERole.eConsole || r == ERole.eMultimedia))
+                        || (wasDefaultComms && r == ERole.eCommunications);
+                    if (!relevant) return;
+                    if (Interlocked.Increment(ref seenRestores) >= expected) restoreDone.Set();
+                }
+                AudioDeviceManager.DefaultDeviceChangedRaw += OnRestore;
+                try
+                {
+                    if (wasDefault)
+                    {
+                        client.SetDefaultEndpoint(id, ERole.eConsole);
+                        client.SetDefaultEndpoint(id, ERole.eMultimedia);
+                    }
+                    if (wasDefaultComms) client.SetDefaultEndpoint(id, ERole.eCommunications);
+
+                    if (!restoreDone.Wait(2000))
+                        WPFLog.Log($"AudioDevice.{callDescription}: timed out waiting for default-restore confirmation");
+                }
+                finally { AudioDeviceManager.DefaultDeviceChangedRaw -= OnRestore; }
+            }
+            catch (Exception ex) { WPFLog.Log($"AudioDevice.{callDescription}: {ex.Message}"); }
+            finally { Interlocked.Exchange(ref _policyConfigCallInFlight, 0); }
+        });
     }
 
     /// <summary>
@@ -561,6 +789,12 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // tray menu and visibility filters can still reason about them; UpgradeFromActiveState
         // re-tries activation when the OS later reports the device active.
         if (IsActive) TryActivateProxies();
+
+        // EAPO state seed + live subscription. Probe is registry-only so it's safe on the ctor
+        // thread; AvailabilityChanged fires from a FileSystemWatcher worker, so the handler
+        // marshals back to the dispatcher.
+        EqualizerAPOMonitor.AvailabilityChanged += OnEqualizerAPOAvailabilityChanged;
+        RefreshEqualizerAPOState();
     }
 
     /// <summary>
@@ -1486,6 +1720,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        // Drop the EAPO availability subscription before any other teardown - the handler
+        // dispatches RefreshEqualizerAPOState which would otherwise race the field clears below.
+        try { EqualizerAPOMonitor.AvailabilityChanged -= OnEqualizerAPOAvailabilityChanged; } catch { }
 
         // Drop any queued endpoint-volume write so the throttler driver doesn't try to call
         // SetMasterVolumeLevelScalar on the about-to-be-released RCW.

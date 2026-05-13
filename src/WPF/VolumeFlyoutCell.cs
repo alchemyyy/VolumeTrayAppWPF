@@ -45,6 +45,7 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
     private bool _isFirst;
     private bool _isLast;
+    private bool _isAppDrawerExpanded = true;
     private bool _disposed;
 
 #if DEBUG_SPAWN_APP_DUMMY_ON_DEVICE_VOLUME_CHANGE
@@ -71,6 +72,31 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
     /// <summary>True when the cell currently has any session rows worth painting; drives the apps-section visibility.</summary>
     public bool HasVisibleGroups => _visibleGroups.Count > 0;
+
+    /// <summary>
+    /// Per-cell expand / collapse state for the apps band. Toggled by the chevron button in the
+    /// device row. Defaults true so newly built cells render the drawer; the state lives on the
+    /// cell instance and resets if the cell is rebuilt.
+    /// </summary>
+    public bool IsAppDrawerExpanded
+    {
+        get => _isAppDrawerExpanded;
+        set
+        {
+            if (_isAppDrawerExpanded == value) return;
+            _isAppDrawerExpanded = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsAppDrawerVisible));
+        }
+    }
+
+    /// <summary>
+    /// Combined gate for the apps band: drawer only paints when there's actual content AND the
+    /// user hasn't collapsed it. Drives both the AppsBandStyle Visibility and the device row's
+    /// footer-bottom rounded-corner trigger (the device row becomes the visual bottom whenever
+    /// the band is hidden, regardless of which gate hid it).
+    /// </summary>
+    public bool IsAppDrawerVisible => HasVisibleGroups && _isAppDrawerExpanded;
 
     /// <summary>True for capture-flow devices; XAML uses this to swap to the microphone glyph and label.</summary>
     public bool IsCapture => Device.DataFlow == EDataFlow.eCapture;
@@ -310,7 +336,11 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
             }
         }
 
-        if (changed) OnPropertyChanged(nameof(HasVisibleGroups));
+        if (changed)
+        {
+            OnPropertyChanged(nameof(HasVisibleGroups));
+            OnPropertyChanged(nameof(IsAppDrawerVisible));
+        }
     }
 
     private bool IsGroupVisible(AudioAppGroup g)
