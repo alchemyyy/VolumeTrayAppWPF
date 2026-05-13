@@ -65,34 +65,54 @@ internal struct MeterLerp
     }
 
     /// <summary>
-    /// UI-thread render-tick. Advances the shared step counter and writes the lerped values into
-    /// the display fields. <paramref name="minChanged"/> / <paramref name="maxChanged"/> are true
-    /// iff the corresponding display field actually moved, so the host can fire PropertyChanged
-    /// only when there's a real update to bind.
+    /// UI-thread render-tick. Computes the natural lerp value for this tick, then advances
+    /// <c>_displayPeak*</c> toward it by at most <paramref name="maxStep"/>. The rate limit
+    /// lives here (not in VolumeSlider) so it runs on every render frame whether or not the
+    /// display value changed - if it lived downstream of PropertyChanged it would only advance
+    /// when the lerp moved, which means once the lerp converged the rate-limited rendered value
+    /// could be stuck arbitrarily far from the real target. <paramref name="minChanged"/> /
+    /// <paramref name="maxChanged"/> are true iff the corresponding display field actually moved,
+    /// so the host can fire PropertyChanged only when there's a real update to bind.
+    /// <paramref name="maxStep"/> of 0 freezes the meter (matches the user-facing
+    /// MeterPeakChangeCeiling=0 setting).
     /// </summary>
-    public void OnRenderTick(out bool minChanged, out bool maxChanged)
+    public void OnRenderTick(float maxStep, out bool minChanged, out bool maxChanged)
     {
         _interpolationStep++;
 
-        float newMin, newMax;
+        float lerpedMin, lerpedMax;
         if (_interpolationStep >= _interpolationSteps)
         {
             // Reached or passed the targets - snap so a long render-only burst (e.g. paused
             // samples) can't drift past the most recent sample.
-            newMin = _targetPeakMin;
-            newMax = _targetPeakMax;
+            lerpedMin = _targetPeakMin;
+            lerpedMax = _targetPeakMax;
         }
         else
         {
             float t = (float)_interpolationStep / _interpolationSteps;
-            newMin = _prevPeakMin + (_targetPeakMin - _prevPeakMin) * t;
-            newMax = _prevPeakMax + (_targetPeakMax - _prevPeakMax) * t;
+            lerpedMin = _prevPeakMin + (_targetPeakMin - _prevPeakMin) * t;
+            lerpedMax = _prevPeakMax + (_targetPeakMax - _prevPeakMax) * t;
         }
+
+        float newMin = StepTowardTarget(_displayPeakMin, lerpedMin, maxStep);
+        float newMax = StepTowardTarget(_displayPeakMax, lerpedMax, maxStep);
 
         minChanged = newMin != _displayPeakMin;
         maxChanged = newMax != _displayPeakMax;
         _displayPeakMin = newMin;
         _displayPeakMax = newMax;
+    }
+
+    // Move current toward target by up to maxStep, snapping the final fractional step so the
+    // display lands exactly on target instead of oscillating around it. maxStep=0 returns
+    // current unchanged (meter frozen by user setting).
+    private static float StepTowardTarget(float current, float target, float maxStep)
+    {
+        float delta = target - current;
+        if (delta > maxStep) return current + maxStep;
+        if (delta < -maxStep) return current - maxStep;
+        return target;
     }
 
     /// <summary>

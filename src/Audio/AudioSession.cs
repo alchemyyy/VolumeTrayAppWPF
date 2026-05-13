@@ -509,12 +509,13 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Render-timer callback. Advances the lerp and fires PropertyChanged on every actual change
     /// so the AudioAppGroup aggregator and the bound slider both redraw smoothly. UI-thread.
+    /// <paramref name="maxStep"/> carries the user's MeterPeakChangeCeiling through to the lerp.
     /// </summary>
-    internal void OnRenderTick()
+    internal void OnRenderTick(float maxStep)
     {
         if (_disposed || _disconnected) return;
 
-        _meterLerp.OnRenderTick(out bool minChanged, out bool maxChanged);
+        _meterLerp.OnRenderTick(maxStep, out bool minChanged, out bool maxChanged);
         if (minChanged) OnPropertyChanged(nameof(PeakValueMin));
         if (maxChanged) OnPropertyChanged(nameof(PeakValueMax));
     }

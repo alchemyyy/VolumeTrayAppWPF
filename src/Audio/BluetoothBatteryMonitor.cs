@@ -167,7 +167,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
     public void StartPolling()
     {
         if (_disposed || _pollTimer != null) return;
-        WPFLog.Log($"BluetoothBatteryMonitor.StartPolling: tracking {_idToContainer.Count} devnodes");
+        WPFLog.LogDebug($"BluetoothBatteryMonitor.StartPolling: tracking {_idToContainer.Count} devnodes");
         _pollTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(TimeConstants.BluetoothBatteryPollIntervalMs),
@@ -216,7 +216,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
             if (!container.HasValue || !IsRealContainer(container.Value)) continue;
 
             matched++;
-            WPFLog.Log($"BluetoothBatteryMonitor.Poll: hit id='{deviceId}' container={container.Value} battery={battery.Value}");
+            WPFLog.LogDebug($"BluetoothBatteryMonitor.Poll: hit id='{deviceId}' container={container.Value} battery={battery.Value}");
 
             // Side-effect: mark the container as BT (the watcher's class-filtered view may miss
             // it) and fire BluetoothContainerSeen so AudioDevice.IsBluetooth flips for matching
@@ -230,7 +230,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
             ApplyBattery(container.Value, battery);
         }
 
-        WPFLog.Log($"BluetoothBatteryMonitor.Poll: scanned={ids.Count} matched={matched}");
+        WPFLog.LogDebug($"BluetoothBatteryMonitor.Poll: scanned={ids.Count} matched={matched}");
     }
 
     private void OnDeviceAdded(PnpObjectWatcher sender, PnpObject info)
@@ -316,31 +316,6 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         return ids;
     }
 
-    // Diagnostic: one-line summary of the watcher's property bag for a single event. Lists each
-    // key with the projected CLR type and a short value preview so we can see whether the battery
-    // key is arriving and how it's typed. Best-effort - any exception falls back to "<error>".
-    private static string FormatProps(IReadOnlyDictionary<string, object> props)
-    {
-        try
-        {
-            if (props.Count == 0) return "{}";
-            System.Text.StringBuilder sb = new();
-            sb.Append('{');
-            bool first = true;
-            foreach (KeyValuePair<string, object> kv in props)
-            {
-                if (!first) sb.Append(", ");
-                first = false;
-                sb.Append(kv.Key).Append('=');
-                if (kv.Value == null) sb.Append("<null>");
-                else sb.Append('(').Append(kv.Value.GetType().Name).Append(')').Append(kv.Value);
-            }
-            sb.Append('}');
-            return sb.ToString();
-        }
-        catch { return "<error>"; }
-    }
-
     private void OnDeviceRemoved(PnpObjectWatcher sender, PnpObjectUpdate update)
     {
         string id = update.Id;
@@ -375,7 +350,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         // any other endpoint that also has no container (built-in Realtek HDA etc).
         if (IsRealContainer(containerId) && _bluetoothContainers.Add(containerId))
         {
-            WPFLog.Log($"BluetoothBatteryMonitor: new BT container={containerId}");
+            WPFLog.LogDebug($"BluetoothBatteryMonitor: new BT container={containerId}");
             try { BluetoothContainerSeen?.Invoke(containerId); }
             catch (Exception ex) { WPFLog.Log($"BluetoothBatteryMonitor: container-seen subscriber threw: {ex.Message}"); }
         }
@@ -427,7 +402,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         }
         if (!changed) return;
 
-        WPFLog.Log($"BluetoothBatteryMonitor: container={containerId} battery={(newValue?.ToString() ?? "<null>")}");
+        WPFLog.LogDebug($"BluetoothBatteryMonitor: container={containerId} battery={(newValue?.ToString() ?? "<null>")}");
 
         try { BatteryChanged?.Invoke(containerId, newValue); }
         catch (Exception ex) { WPFLog.Log($"BluetoothBatteryMonitor: subscriber threw: {ex.Message}"); }

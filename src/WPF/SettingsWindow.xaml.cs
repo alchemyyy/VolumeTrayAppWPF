@@ -255,6 +255,7 @@ public partial class SettingsWindow : Window
         DevicesSection.LoadFromSettings(_settings);
         HotkeysSection.LoadFromSettings(_settings);
         ThemeSection.LoadFromSettings(_settings, this);
+        AboutSection.LoadFromSettings(_settings);
     }
 
     private void OpenSettingsFolder_Click(object sender, RoutedEventArgs e)

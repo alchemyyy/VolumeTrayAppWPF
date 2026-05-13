@@ -67,6 +67,11 @@ public sealed class TrayIconManager : IDisposable
     /// </summary>
     public event Action? TooltipPopup;
 
+    /// <summary>
+    /// Raised when the user clicks the body of a balloon notification raised via <see cref="ShowBalloon"/>.
+    /// </summary>
+    public event Action? BalloonClicked;
+
     /// <summary>Whether the tray icon is visible.</summary>
     public bool IsVisible
     {
@@ -100,6 +105,22 @@ public sealed class TrayIconManager : IDisposable
         _shellIcon.RefreshNeeded += () => RefreshNeeded?.Invoke();
         _shellIcon.Scrolled += delta => Scrolled?.Invoke(delta);
         _shellIcon.TooltipPopup += () => TooltipPopup?.Invoke();
+        _shellIcon.BalloonClicked += () => BalloonClicked?.Invoke();
+    }
+
+    /// <summary>
+    /// Pushes a balloon (toast) through the underlying tray icon. Marshals to the dispatcher because
+    /// Shell_NotifyIconW is thread-affine to the window the icon was registered against.
+    /// </summary>
+    public void ShowBalloon(string title, string message)
+    {
+        if (_disposed) return;
+        if (!_dispatcher.CheckAccess())
+        {
+            _ = _dispatcher.BeginInvoke(() => ShowBalloon(title, message));
+            return;
+        }
+        _shellIcon.ShowBalloon(title, message);
     }
 
     /// <summary>

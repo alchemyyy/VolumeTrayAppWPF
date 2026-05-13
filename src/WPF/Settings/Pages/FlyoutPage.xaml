@@ -43,12 +43,47 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_HeaderAtBottom_Title}"
-                            Description="{loc:Loc Settings_Flyout_HeaderAtBottom_Description}">
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_Title}"
+                            Description="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_Description}">
             <utils:SettingsCard.Control>
-                <CheckBox x:Name="FlyoutHeaderAtBottomToggle"
+                <ComboBox x:Name="FlyoutCommunicationsButtonVisibilityCombo"
+                          Style="{StaticResource SettingsComboBoxStyle}"
+                          Tag="FlyoutCommunicationsButtonVisibility" SelectionChanged="EnumCombo_Changed">
+                    <ComboBoxItem Tag="AlwaysShow" Content="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_AlwaysShow}"/>
+                    <ComboBoxItem Tag="WhenDuckingOn" Content="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_WhenDuckingOn}"/>
+                    <ComboBoxItem Tag="Hidden" Content="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_Hidden}"/>
+                </ComboBox>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowRecordingDevices_Title}"
+                            Description="{loc:Loc Settings_Flyout_ShowRecordingDevices_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowRecordingDevicesInFlyoutToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
-                          Tag="FlyoutHeaderAtBottom"
+                          Tag="ShowRecordingDevicesInFlyout"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowDeviceFormatText_Title}"
+                            Description="{loc:Loc Settings_Flyout_ShowDeviceFormatText_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowDeviceFormatTextToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowDeviceFormatText"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowDeviceCodecText_Title}"
+                            Description="{loc:Loc Settings_Flyout_ShowDeviceCodecText_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowDeviceCodecTextToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowDeviceCodecText"
                           Checked="BoolToggle_Changed"
                           Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
@@ -66,7 +101,7 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <TextBlock Text="{loc:Loc Settings_Flyout_DeviceList_Header}"
+        <TextBlock Text="{loc:Loc Settings_Flyout_Layout_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
 
         <utils:SettingsCard Title="{loc:Loc Settings_Flyout_DeviceLayout_Title}"
@@ -105,30 +140,6 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_Title}"
-                            Description="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_Description}">
-            <utils:SettingsCard.Control>
-                <ComboBox x:Name="FlyoutCommunicationsButtonVisibilityCombo"
-                          Style="{StaticResource SettingsComboBoxStyle}"
-                          Tag="FlyoutCommunicationsButtonVisibility" SelectionChanged="EnumCombo_Changed">
-                    <ComboBoxItem Tag="AlwaysShow" Content="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_AlwaysShow}"/>
-                    <ComboBoxItem Tag="WhenDuckingOn" Content="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_WhenDuckingOn}"/>
-                    <ComboBoxItem Tag="Hidden" Content="{loc:Loc Settings_Flyout_CommunicationsButtonVisibility_Hidden}"/>
-                </ComboBox>
-            </utils:SettingsCard.Control>
-        </utils:SettingsCard>
-
-        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowRecordingDevices_Title}"
-                            Description="{loc:Loc Settings_Flyout_ShowRecordingDevices_Description}">
-            <utils:SettingsCard.Control>
-                <CheckBox x:Name="ShowRecordingDevicesInFlyoutToggle"
-                          Style="{StaticResource ToggleSwitchStyle}"
-                          Tag="ShowRecordingDevicesInFlyout"
-                          Checked="BoolToggle_Changed"
-                          Unchecked="BoolToggle_Changed"/>
-            </utils:SettingsCard.Control>
-        </utils:SettingsCard>
-
         <!-- Visibility cascades off the master ShowRecordingDevicesInFlyoutToggle so the off-state UI
              doesn't dangle a dead child knob. Driven by XAML BoolToVisibility, no imperative refresh. -->
         <utils:SettingsCard x:Name="IntermixRecordingCard"
@@ -144,23 +155,12 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowDeviceFormatText_Title}"
-                            Description="{loc:Loc Settings_Flyout_ShowDeviceFormatText_Description}">
+        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_HeaderAtBottom_Title}"
+                            Description="{loc:Loc Settings_Flyout_HeaderAtBottom_Description}">
             <utils:SettingsCard.Control>
-                <CheckBox x:Name="ShowDeviceFormatTextToggle"
+                <CheckBox x:Name="FlyoutHeaderAtBottomToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
-                          Tag="ShowDeviceFormatText"
-                          Checked="BoolToggle_Changed"
-                          Unchecked="BoolToggle_Changed"/>
-            </utils:SettingsCard.Control>
-        </utils:SettingsCard>
-
-        <utils:SettingsCard Title="{loc:Loc Settings_Flyout_ShowDeviceCodecText_Title}"
-                            Description="{loc:Loc Settings_Flyout_ShowDeviceCodecText_Description}">
-            <utils:SettingsCard.Control>
-                <CheckBox x:Name="ShowDeviceCodecTextToggle"
-                          Style="{StaticResource ToggleSwitchStyle}"
-                          Tag="ShowDeviceCodecText"
+                          Tag="FlyoutHeaderAtBottom"
                           Checked="BoolToggle_Changed"
                           Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>

@@ -94,18 +94,7 @@ public static class HotkeyDefaults
     /// so a user-added secondary binding (BindingID &gt;= 1) for the same action does not block re-seeding
     /// the primary row.
     /// </summary>
-    public static IReadOnlyList<HotkeyBinding> Create() =>
-    [
-        new HotkeyBinding
-        {
-            Action = HotkeyAction.OpenSettings,
-            Parameter = string.Empty,
-            Modifiers = User32.MOD_CONTROL | User32.MOD_WIN | User32.MOD_ALT,
-            VirtualKey = 0x53, // VK_S
-            Enabled = true,
-            BindingID = 0,
-        },
-    ];
+    public static IReadOnlyList<HotkeyBinding> Create() => [];
 
     /// <summary>
     /// True if the binding occupies the same identity slot as one of the built-in defaults

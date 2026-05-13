@@ -26,6 +26,15 @@
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_DeviceAppDrawers_SectionHeader}"/>
 
+        <utils:SettingsCard Title="{loc:Loc Settings_General_IconRetryInterval_Title}"
+                            Description="{loc:Loc Settings_General_IconRetryInterval_Description}">
+            <utils:SettingsCard.Control>
+                <local:NumericSpinner x:Name="IconRetryIntervalBox"
+                                      Minimum="{x:Static models:AppSettings.IconRetryIntervalMsMin}"
+                                      Maximum="{x:Static models:AppSettings.IconRetryIntervalMsMax}"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
         <TextBlock Text="{loc:Loc Settings_Flyout_PlaybackDrawer_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
 

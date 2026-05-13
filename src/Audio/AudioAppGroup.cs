@@ -214,10 +214,10 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     /// shifts, which OnSessionPropertyChanged observes to recompute the group max - so this single
     /// pass is enough to keep both per-session and per-group meters smooth.
     /// </summary>
-    internal void OnRenderTick()
+    internal void OnRenderTick(float maxStep)
     {
         if (_disposed) return;
-        for (int i = _sessions.Count - 1; i >= 0; i--) _sessions[i].OnRenderTick();
+        for (int i = _sessions.Count - 1; i >= 0; i--) _sessions[i].OnRenderTick(maxStep);
     }
 
     private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)

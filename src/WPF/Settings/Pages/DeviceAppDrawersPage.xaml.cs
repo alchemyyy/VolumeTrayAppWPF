@@ -42,6 +42,12 @@ public partial class DeviceAppDrawersPage : UserControl
                 settings.CaptureActivityIndicator.ToString());
 
             SettingsBindings.BindSpinner(
+                IconRetryIntervalBox,
+                () => settings.IconRetryIntervalMs,
+                v => settings.IconRetryIntervalMs = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
+            SettingsBindings.BindSpinner(
                 AppDrawerIconsCenterSoftMaxBox,
                 () => settings.AppDrawerIconsCenterSoftMax,
                 v => settings.AppDrawerIconsCenterSoftMax = v,

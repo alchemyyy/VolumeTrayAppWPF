@@ -1607,6 +1607,59 @@
                     <Button Style="{StaticResource HeaderIconButtonStyle}" IsEnabled="False"/>
                 </StackPanel>
 
+                <!-- Floating "Update!" affordance.
+                     Right-anchored in the title-bar Grid alongside the undock button, but sits at
+                     ZIndex above any neighboring chrome so the solid pill never reads through to a
+                     hover state on the buttons underneath. Visibility is driven by code-behind
+                     (NotifyUpdateStateChanged updates IsUpdateButtonVisible). The right margin is
+                     wider than UndockButton's so the pill sits to the left of the undock glyph
+                     instead of overlapping it. -->
+                <Button x:Name="UpdateButton"
+                        Panel.ZIndex="2"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Width="80"
+                        Height="28"
+                        Margin="0,5,50,0"
+                        Content="{loc:Loc Flyout_Update_ButtonText}"
+                        ToolTip="{loc:Loc Flyout_Update_Tooltip}"
+                        Click="UpdateButton_Click"
+                        Visibility="{Binding IsUpdateButtonVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                    <Button.Style>
+                        <!-- Bottom-edge margin variant when the title bar docks at the bottom of the flyout. -->
+                        <Style TargetType="Button">
+                            <Setter Property="Margin" Value="0,5,42,0"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FlyoutHeaderDock, RelativeSource={RelativeSource AncestorType=Window}}" Value="Bottom">
+                                    <Setter Property="Margin" Value="0,0,50,5"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="UpdateButtonBorder"
+                                    Background="{DynamicResource ThemeControlBackground}"
+                                    BorderBrush="{DynamicResource ThemeBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource CornerRadiusMedium}">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  TextElement.FontWeight="SemiBold"
+                                                  TextElement.Foreground="{DynamicResource ThemeForeground}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="UpdateButtonBorder" Property="Background" Value="{DynamicResource ThemeButtonHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="UpdateButtonBorder" Property="Background" Value="{DynamicResource ThemeButtonPressed}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
                 <Button x:Name="UndockButton"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"

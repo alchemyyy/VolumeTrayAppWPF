@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows.Threading;
@@ -203,7 +204,9 @@ internal sealed class HfpCodecMonitor : INotifyPropertyChanged, IDisposable
     // Dumps the event's full payload (name + value pairs) as one log line. The first occurrence
     // is tagged FIRST so the user can grep for the schema-discovery moments; subsequent fires
     // are tagged TICK and share the same shape so deltas (e.g. SampleRate flipping 8000 -> 16000
-    // when WBS toggles) are easy to eyeball in the log.
+    // when WBS toggles) are easy to eyeball in the log. Debug-only: this spike is for development
+    // diagnosis, stripped in Release so production logs aren't drowned in per-event payload dumps.
+    [Conditional("DEBUG")]
     private static void LogEvent(TraceEvent evt, string providerName, string eventName, string tag)
     {
         try
@@ -229,11 +232,11 @@ internal sealed class HfpCodecMonitor : INotifyPropertyChanged, IDisposable
                   .Append(value ?? "<null>");
             }
             sb.Append('}');
-            WPFLog.Log(sb.ToString());
+            WPFLog.LogDebug(sb.ToString());
         }
         catch (Exception ex)
         {
-            WPFLog.Log($"HfpSpike: LogEvent failed: {ex.Message}");
+            WPFLog.LogDebug($"HfpSpike: LogEvent failed: {ex.Message}");
         }
     }
 

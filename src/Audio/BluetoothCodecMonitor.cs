@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows.Threading;
@@ -252,7 +253,9 @@ internal sealed class BluetoothCodecMonitor : INotifyPropertyChanged, IDisposabl
 
     // First-event diagnostic. Dumps every payload field name + value so a user reporting
     // "codec didn't show up" can paste a single log line that tells us whether the schema
-    // shifted on their build.
+    // shifted on their build. Debug-only: stripped in Release so the schema dump never
+    // bloats production logs.
+    [Conditional("DEBUG")]
     private void LogSchemaOnce(TraceEvent evt)
     {
         if (_schemaLogged) return;
@@ -267,7 +270,7 @@ internal sealed class BluetoothCodecMonitor : INotifyPropertyChanged, IDisposabl
                 try { value = evt.PayloadValue(i); } catch { value = "<unreadable>"; }
                 sb.Append(' ').Append('[').Append(i).Append(']').Append(names[i] ?? "?").Append('=').Append(value);
             }
-            WPFLog.Log(sb.ToString());
+            WPFLog.LogDebug(sb.ToString());
         }
         catch { /* diagnostic only - never block the codec extraction on this */ }
     }

@@ -88,11 +88,64 @@
 
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
-    <!-- TraceEvent powers the realtime ETW session in BluetoothCodecMonitor.
+    <!-- TraceEvent powers the realtime ETW session in BluetoothCodecMonitor + HfpCodecMonitor.
          Same library PerfView uses; reflection-heavy, so the partial-trim mode (assemblies opt
          in via IsTrimmable) keeps this package preserved on Release publish. -->
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.16" />
   </ItemGroup>
+
+  <!-- TraceEvent's package graph brings in nine DLLs that the realtime ETW path never touches:
+         Dia2Lib, TraceReloggerLib            - PDB symbol resolution + ETW trace re-logging.
+                                                Injected as <None> CopyToOutput by TraceEvent's
+                                                build/*.props, so they ride the content pipeline.
+         Microsoft.Diagnostics.NETCore.Client - cross-platform EventPipe IPC (we use Win32 ETW only)
+         Microsoft.Extensions.{DependencyInjection,DependencyInjection.Abstractions,
+                               Logging,Logging.Abstractions,Options,Primitives}
+                                              - transitive chain reached only via NETCore.Client
+       None of these types appear in our source, so the JIT never loads them. The deps.json will
+       still list the runtime assemblies, but the host probes lazily so phantom entries are harmless. -->
+
+  <!-- Strip the two COM interop wrappers before AssignTargetPaths turns them into
+       _NoneWithTargetPath. Filter inside a Target since evaluation-phase ItemGroups can't
+       reference %(metadata) in conditions; the props file injects them with Link metadata
+       set to the bare filename, which is what we match on. -->
+  <Target Name="StripUnusedTraceEventNoneItems" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <None Remove="@(None->WithMetadataValue('Link', 'Dia2Lib.dll'))" />
+      <None Remove="@(None->WithMetadataValue('Link', 'TraceReloggerLib.dll'))" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The seven managed-reference DLLs travel through ReferenceCopyLocalPaths; filter them there
+       for plain builds and out of ResolvedFileToPublish for the single-file bundle. -->
+  <Target Name="StripUnusedTraceEventDeps"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="GenerateBuildDependencyFile;CopyFilesToOutputDirectory">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="
+        '%(FileName)' == 'Microsoft.Diagnostics.NETCore.Client' Or
+        '%(FileName)' == 'Microsoft.Extensions.DependencyInjection' Or
+        '%(FileName)' == 'Microsoft.Extensions.DependencyInjection.Abstractions' Or
+        '%(FileName)' == 'Microsoft.Extensions.Logging' Or
+        '%(FileName)' == 'Microsoft.Extensions.Logging.Abstractions' Or
+        '%(FileName)' == 'Microsoft.Extensions.Options' Or
+        '%(FileName)' == 'Microsoft.Extensions.Primitives'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="StripUnusedTraceEventDepsFromPublish"
+          AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="
+        '%(FileName)' == 'Microsoft.Diagnostics.NETCore.Client' Or
+        '%(FileName)' == 'Microsoft.Extensions.DependencyInjection' Or
+        '%(FileName)' == 'Microsoft.Extensions.DependencyInjection.Abstractions' Or
+        '%(FileName)' == 'Microsoft.Extensions.Logging' Or
+        '%(FileName)' == 'Microsoft.Extensions.Logging.Abstractions' Or
+        '%(FileName)' == 'Microsoft.Extensions.Options' Or
+        '%(FileName)' == 'Microsoft.Extensions.Primitives'" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <ApplicationDefinition Include="WPF\App.xaml" />

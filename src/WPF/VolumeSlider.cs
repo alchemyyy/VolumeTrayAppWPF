@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using VolumeTrayAppWPF.Models;
 
 namespace VolumeTrayAppWPF.WPF;
 
@@ -13,14 +12,12 @@ namespace VolumeTrayAppWPF.WPF;
 /// are recomputed here from the corresponding peak value, the slider's Value, the thumb's actual
 /// width, and the bar's corner radius. PeakValue* are in [0, 1]; at peak=1 the bar's right edge
 /// extends one corner-radius past the thumb's left edge so the rounded cap's apex aligns with it.
+/// Rate-limiting (the user-facing MeterPeakChangeCeiling) lives in MeterLerp's render-tick, not
+/// here - a downstream rate limiter would only advance when PropertyChanged fired and would get
+/// stuck arbitrarily far from target once the lerp converged.
 /// </summary>
 internal sealed class VolumeSlider : Slider
 {
-    // Fallback used only when AppServices.Settings hasn't been wired yet (test harness or
-    // pre-startup designer view); the live value comes from AppSettings.MeterPeakChangeCeiling.
-    // Read fresh on every step so the settings spinner takes effect without rebinding the slider.
-    private const int MaxPeakStepPerRedrawFallbackPercent = AppSettings.MeterPeakChangeCeilingDefault;
-
     public static readonly DependencyProperty PeakValueMinProperty = DependencyProperty.Register(
         nameof(PeakValueMin),
         typeof(float),
@@ -44,13 +41,6 @@ internal sealed class VolumeSlider : Slider
         get => (float)GetValue(PeakValueMaxProperty);
         set => SetValue(PeakValueMaxProperty, value);
     }
-
-    // Rate-limited peak values actually painted into the meter. The DPs above receive the raw
-    // smoothed peak from the audio pipeline; these track them at no more than MaxPeakStepPerRedraw
-    // per DP change. Value / size redraws read these unchanged, so non-peak redraws don't disturb
-    // the rendered position.
-    private float _renderedPeakMin;
-    private float _renderedPeakMax;
 
     private Border? _meterPeak;
     private Border? _meterPeakStereo;
@@ -78,27 +68,7 @@ internal sealed class VolumeSlider : Slider
     }
 
     private static void OnPeakValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        VolumeSlider s = (VolumeSlider)d;
-        float target = (float)e.NewValue;
-        if (e.Property == PeakValueMinProperty)
-            s._renderedPeakMin = StepRenderedTowardTarget(s._renderedPeakMin, target);
-        else
-            s._renderedPeakMax = StepRenderedTowardTarget(s._renderedPeakMax, target);
-        s.UpdateMeterPeakWidths();
-    }
-
-    // Move current toward target by up to the configured ceiling, snapping the last fractional
-    // step so the rendered value lands exactly on target instead of oscillating around it.
-    private static float StepRenderedTowardTarget(float current, float target)
-    {
-        int percent = AppServices.Settings?.MeterPeakChangeCeiling ?? MaxPeakStepPerRedrawFallbackPercent;
-        float maxStep = percent / 100f;
-        float delta = target - current;
-        if (delta > maxStep) return current + maxStep;
-        if (delta < -maxStep) return current - maxStep;
-        return target;
-    }
+        => ((VolumeSlider)d).UpdateMeterPeakWidths();
 
     private void UpdateMeterPeakWidths()
     {
@@ -127,7 +97,7 @@ internal sealed class VolumeSlider : Slider
         // fades to 0 at silence and the bar still collapses cleanly to width 0.
         if (_meterPeak != null)
         {
-            float peak = _renderedPeakMin;
+            float peak = PeakValueMin;
             if (peak < 0f) peak = 0f;
             else if (peak > 1f) peak = 1f;
             double radius = _meterPeak.CornerRadius.TopLeft;
@@ -136,7 +106,7 @@ internal sealed class VolumeSlider : Slider
 
         if (_meterPeakStereo != null)
         {
-            float peak = _renderedPeakMax;
+            float peak = PeakValueMax;
             if (peak < 0f) peak = 0f;
             else if (peak > 1f) peak = 1f;
             double radius = _meterPeakStereo.CornerRadius.TopLeft;

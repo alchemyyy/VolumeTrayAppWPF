@@ -138,17 +138,8 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <TextBlock Text="{loc:Loc Settings_General_AppIcons_Header}"
+        <TextBlock Text="{loc:Loc Settings_General_Other_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
-
-        <utils:SettingsCard Title="{loc:Loc Settings_General_IconRetryInterval_Title}"
-                               Description="{loc:Loc Settings_General_IconRetryInterval_Description}">
-            <utils:SettingsCard.Control>
-                <local:NumericSpinner x:Name="IconRetryIntervalBox"
-                                      Minimum="{x:Static models:AppSettings.IconRetryIntervalMsMin}"
-                                      Maximum="{x:Static models:AppSettings.IconRetryIntervalMsMax}"/>
-            </utils:SettingsCard.Control>
-        </utils:SettingsCard>
 
         <utils:SettingsCard x:Name="LogarithmicVolumeScaleCard"
                                Title="{loc:Loc Settings_General_LogarithmicVolumeScale_Title}"

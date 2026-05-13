@@ -303,11 +303,19 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// </summary>
     private void OnPeakRenderElapsed(object? sender, ElapsedEventArgs e)
     {
+        // Snapshot the user's MeterPeakChangeCeiling once per tick so every device/session this
+        // frame paints sees a coherent value even if the user flips the spinner mid-tick. The
+        // ceiling lives in the lerp's render-tick (not in VolumeSlider) because a rate limit
+        // needs a periodic clock - PropertyChanged is event-driven and stops once display
+        // converges, so a downstream rate limiter would get stuck arbitrarily far from target.
+        int percent = _settings?.MeterPeakChangeCeiling ?? AppSettings.MeterPeakChangeCeilingDefault;
+        float maxStep = percent / 100f;
+
         _dispatcher.BeginInvoke(() =>
         {
             for (int i = _devices.Count - 1; i >= 0; i--)
             {
-                try { _devices[i].OnRenderTick(); }
+                try { _devices[i].OnRenderTick(maxStep); }
                 catch { /* device may have died between callbacks */ }
             }
         });

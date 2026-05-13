@@ -29,6 +29,13 @@ public partial class App
     private AudioDeviceManager? _audioManager;
     private VolumeFlyout? _volumeFlyout;
     private WatcherMonitor? _watcherMonitor;
+    private UpdateCheckService? _updateCheckService;
+
+    // Highest version number we've already raised a tray balloon for. The poll loop runs at the
+    // configured cadence so a long-running session would otherwise nag once per tick for the same
+    // update; recording the version per process lifetime gates the balloon to "fire once per new
+    // version detected" instead.
+    private int _lastNotifiedUpdateVersion;
 
     // Suppresses the LeftClick that follows a LeftMouseDown that auto-hid the flyout,
     // so clicking the tray icon while the flyout is open closes it without immediately reopening.
@@ -95,6 +102,64 @@ public partial class App
             _watcherMonitor.Start();
         }
         catch (Exception ex) { WPFLog.Log($"App.OnStartup: WatcherMonitor start failed: {ex.Message}"); }
+
+        // Auto-update poller. The service ignores its periodic tick when CheckForUpdatesEnabled is
+        // off, so it's safe to always Start() it - the user can flip the toggle from the About page
+        // without restarting the app.
+        if (_appSettings != null)
+        {
+            try
+            {
+                _updateCheckService = new UpdateCheckService(_appSettings);
+                _updateCheckService.StateChanged += OnUpdateStateChanged;
+                _updateCheckService.Start();
+                AppServices.UpdateCheckService = _updateCheckService;
+            }
+            catch (Exception ex) { WPFLog.Log($"App.OnStartup: UpdateCheckService init failed: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>
+    /// Bridges UpdateCheckService into the visible UI:
+    /// pings the flyout so its bound IsUpdateButtonVisible flips live, and shows a tray balloon
+    /// when a new update becomes available while the flyout isn't on screen.
+    /// One balloon per detected version per process lifetime so a long-running session that polls
+    /// hourly doesn't repeatedly nag.
+    /// </summary>
+    private void OnUpdateStateChanged()
+    {
+        _volumeFlyout?.NotifyUpdateStateChanged();
+
+        UpdateCheckService? svc = _updateCheckService;
+        UpdateInfo? info = svc?.AvailableUpdate;
+        if (info == null) return;
+
+        if (_appSettings?.ShowUpdateNotificationsEnabled != true) return;
+
+        if (info.Version <= _lastNotifiedUpdateVersion) return;
+
+        bool flyoutVisible = _volumeFlyout != null && _volumeFlyout.IsVisible
+            && _volumeFlyout.Left > -1000;
+        if (flyoutVisible) return;
+
+        _lastNotifiedUpdateVersion = info.Version;
+
+        string title = LocalizationManager.Instance["UpdateNotification_Title"];
+        string body = string.Format(
+            LocalizationManager.Instance["UpdateNotification_BodyFormat"], info.ReleaseName);
+        _trayShell?.ShowBalloon(title, body);
+    }
+
+    /// <summary>
+    /// Tray balloon click: behave exactly like clicking the in-flyout "Update!" affordance -
+    /// open the flyout (so the user lands somewhere recognizable) and surface the update prompt.
+    /// </summary>
+    private void OnUpdateBalloonClicked()
+    {
+        if (_updateCheckService?.AvailableUpdate == null) return;
+
+        ShowVolumeFlyout();
+        _volumeFlyout?.RequestUpdatePrompt();
     }
 
     private void WireCrashHandlers()
@@ -191,6 +256,7 @@ public partial class App
         _trayShell.LeftDoubleClick += OnTrayLeftDoubleClick;
         _trayShell.RightClick += OnTrayRightClick;
         _trayShell.Scrolled += OnTrayScrolled;
+        _trayShell.BalloonClicked += OnUpdateBalloonClicked;
 
         _trayShell.Show();
     }
@@ -348,6 +414,10 @@ public partial class App
 
             // Rebuild the cached context menu so the next right-click reflects fresh device names / order.
             _contextMenu = TrayContextMenu.Build(_audioManager, _appSettings, OpenSettings, ExitApplication);
+
+            // Pick up live changes to ShowUpdateButtonInFlyout (its visibility binding doesn't refresh
+            // on its own because the property's value depends on a setting field that isn't INPC-tracked).
+            _volumeFlyout?.NotifyUpdateStateChanged();
         });
     }
 
@@ -394,6 +464,13 @@ public partial class App
 
         Safe.Dispose(_watcherMonitor);
         _watcherMonitor = null;
+
+        if (_updateCheckService != null)
+        {
+            _updateCheckService.StateChanged -= OnUpdateStateChanged;
+            Safe.Dispose(_updateCheckService);
+            _updateCheckService = null;
+        }
 
         if (_appSettings != null) _appSettings.Changed -= OnSettingsChanged;
 

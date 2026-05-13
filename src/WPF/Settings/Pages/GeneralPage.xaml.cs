@@ -51,13 +51,6 @@ public partial class GeneralPage : UserControl
             PlayAppVolumeChangeSoundToggle.IsChecked = settings.PlayAppVolumeChangeSound;
 
             SettingsBindings.BindSpinner(
-                IconRetryIntervalBox,
-                () => settings.IconRetryIntervalMs,
-                v => settings.IconRetryIntervalMs = v,
-                () => _suppressChangeEvents,
-                SaveAndNotify);
-
-            SettingsBindings.BindSpinner(
                 DingSuppressionPeakThresholdBox,
                 () => settings.DingSuppressionPeakThresholdPercent,
                 v => settings.DingSuppressionPeakThresholdPercent = v,
@@ -68,6 +61,12 @@ public partial class GeneralPage : UserControl
         {
             _suppressChangeEvents = false;
         }
+
+        // Populate the install card descriptions on initial load. NavItem_Checked drives
+        // RefreshOnShow on every later nav-to-General, but the XAML-driven IsChecked="True" on
+        // NavGeneral sets the property before its Checked handler is attached, so that path
+        // doesn't fire on the first show.
+        RefreshInstallationSection();
     }
 
     /// <summary>

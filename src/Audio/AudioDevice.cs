@@ -1339,16 +1339,19 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Render-timer callback. Advances the lerp step counter and fires PropertyChanged on actual
     /// change so both bound meter borders redraw every frame. UI-thread.
+    /// <paramref name="maxStep"/> is the user-configurable rate-limit ceiling sourced from
+    /// AppSettings.MeterPeakChangeCeiling, snapshotted once per render tick by the manager and
+    /// applied inside the lerp so it advances on every frame regardless of binding state.
     /// </summary>
-    internal void OnRenderTick()
+    internal void OnRenderTick(float maxStep)
     {
         if (_disposed) return;
 
-        _meterLerp.OnRenderTick(out bool minChanged, out bool maxChanged);
+        _meterLerp.OnRenderTick(maxStep, out bool minChanged, out bool maxChanged);
         if (minChanged) OnPropertyChanged(nameof(PeakValueMin));
         if (maxChanged) OnPropertyChanged(nameof(PeakValueMax));
 
-        for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnRenderTick();
+        for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnRenderTick(maxStep);
     }
 
     private void EnumerateExistingSessions()
@@ -1963,7 +1966,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private static bool DetectIsBluetooth(string enumerator, string friendlyName,
         string deviceDescription, string interfaceFriendlyName)
     {
-        WPFLog.Log($"AudioDevice.DetectIsBluetooth: friendly='{friendlyName}' enumerator='{(enumerator.Length == 0 ? "<empty>" : enumerator)}'");
+        WPFLog.LogDebug($"AudioDevice.DetectIsBluetooth: friendly='{friendlyName}' enumerator='{(enumerator.Length == 0 ? "<empty>" : enumerator)}'");
 
         if (enumerator.StartsWith("BTH", StringComparison.OrdinalIgnoreCase))
         {

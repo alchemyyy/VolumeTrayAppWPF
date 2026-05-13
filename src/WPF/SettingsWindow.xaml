@@ -112,6 +112,12 @@
                                      Checked="NavItem_Checked"
                                      Tag="Flyout"
                                      GroupName="SettingsNav"/>
+                        <RadioButton x:Name="NavDevices"
+                                     Style="{StaticResource NavItemStyle}"
+                                     Content="{loc:Loc Settings_Common_Tab_Devices}"
+                                     Checked="NavItem_Checked"
+                                     Tag="Devices"
+                                     GroupName="SettingsNav"/>
                         <RadioButton x:Name="NavDeviceAppDrawers"
                                      Style="{StaticResource NavItemStyle}"
                                      Content="{loc:Loc Settings_Common_Tab_DeviceAppDrawers}"
@@ -123,12 +129,6 @@
                                      Content="{loc:Loc Settings_Common_Tab_TrayIcon}"
                                      Checked="NavItem_Checked"
                                      Tag="TrayIcon"
-                                     GroupName="SettingsNav"/>
-                        <RadioButton x:Name="NavDevices"
-                                     Style="{StaticResource NavItemStyle}"
-                                     Content="{loc:Loc Settings_Common_Tab_Devices}"
-                                     Checked="NavItem_Checked"
-                                     Tag="Devices"
                                      GroupName="SettingsNav"/>
                         <RadioButton x:Name="NavHotkeys"
                                      Style="{StaticResource NavItemStyle}"

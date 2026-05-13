@@ -58,6 +58,9 @@ public static class SettingsBindings
         ["ShowBatteryButtonForRecording"] = (s, v) => s.ShowBatteryButtonForRecording = v,
         ["ShowDeviceFormatText"] = (s, v) => s.ShowDeviceFormatText = v,
         ["ShowDeviceCodecText"] = (s, v) => s.ShowDeviceCodecText = v,
+        ["CheckForUpdatesEnabled"] = (s, v) => s.CheckForUpdatesEnabled = v,
+        ["ShowUpdateNotificationsEnabled"] = (s, v) => s.ShowUpdateNotificationsEnabled = v,
+        ["ShowUpdateButtonInFlyout"] = (s, v) => s.ShowUpdateButtonInFlyout = v,
     };
 
     /// <summary>Setter + parser pair for an enum-bound ComboBox.</summary>

@@ -91,6 +91,15 @@ internal static class WPFLog
     }
 
     /// <summary>
+    /// Debug-only logging. Calls are erased at compile time in Release via <c>[Conditional("DEBUG")]</c>,
+    /// so even the argument's format-string allocation disappears. Use for chatty diagnostics that
+    /// are only useful during development - per-device classification dumps, per-poll watcher hits,
+    /// per-event ETW payload schemas, etc.
+    /// </summary>
+    [Conditional("DEBUG")]
+    public static void LogDebug(string? message) => Log(message);
+
+    /// <summary>
     /// Synchronously drains the in-memory buffer to disk without tearing down the logger.
     /// Use at intermediate exit points (crash handlers, SessionEnding, ExitApplication)
     /// where more code may still want to log before the process actually dies. Non-throwing.

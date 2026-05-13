@@ -23,6 +23,11 @@ internal sealed class ShellNotifyIcon : IDisposable
     /// </summary>
     public event Action? TooltipPopup;
     /// <summary>
+    /// Raised when the user clicks the body of a shown balloon notification (NIN_BALLOONUSERCLICK).
+    /// Dismissing the balloon via its close button instead fires NIN_BALLOONHIDE which we do not surface.
+    /// </summary>
+    public event Action? BalloonClicked;
+    /// <summary>
     /// Mouse-wheel rotation while the cursor is over the tray icon.
     /// Positive = scroll up.
     /// Delivered via Raw Input (WM_INPUT), only registered while the cursor is in the icon's bounds.
@@ -260,6 +265,41 @@ internal sealed class ShellNotifyIcon : IDisposable
             case (short)Shell32.NotifyIconNotification.NIN_POPUPOPEN:
                 TooltipPopup?.Invoke();
                 break;
+
+            case (short)Shell32.NotifyIconNotification.NIN_BALLOONUSERCLICK:
+                BalloonClicked?.Invoke();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Pushes a balloon (toast) notification through the same NOTIFYICONDATA channel the icon already uses.
+    /// On Windows 10/11 the shell promotes balloons into the modern toast surface, with the same lifecycle
+    /// and click semantics (NIN_BALLOONUSERCLICK). Silent: no sound, and respects do-not-disturb hours.
+    /// Title is clipped to 63 chars and body to 255 chars by the shell so we don't bother truncating.
+    /// </summary>
+    public void ShowBalloon(string title, string message)
+    {
+        if (_disposed || !_isCreated) return;
+
+        NOTIFYICONDATAW data = new()
+        {
+            cbSize = Marshal.SizeOf<NOTIFYICONDATAW>(),
+            hWnd = _window.Handle,
+            uFlags = NotifyIconFlags.NIF_INFO | NotifyIconFlags.NIF_GUID,
+            guidItem = IconGuid,
+            szInfo = message,
+            szInfoTitle = title,
+            dwInfoFlags = (uint)(NotifyIconInfoFlags.NIIF_USER | NotifyIconInfoFlags.NIIF_RESPECT_QUIET_TIME),
+            // The shell pulls the balloon icon from the icon already registered for this notify icon
+            // when hBalloonIcon is null and NIIF_USER is set, so we don't need to provide one separately.
+            hBalloonIcon = IntPtr.Zero,
+        };
+
+        if (!Shell32.Shell_NotifyIconW(Shell32.NotifyIconMessage.NIM_MODIFY, ref data))
+        {
+            int lastError = Marshal.GetLastWin32Error();
+            WPFLog.Log($"ShellNotifyIcon.ShowBalloon: NIM_MODIFY failed (lastError=0x{lastError:X8})");
         }
     }
 

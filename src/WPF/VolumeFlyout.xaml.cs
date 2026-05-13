@@ -167,6 +167,25 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// </summary>
     public bool AllowFlyoutUndock => _appSettings?.AllowFlyoutUndock ?? true;
 
+    /// <summary>
+    /// Drives the floating "Update!" affordance's Visibility. True when the user has the in-flyout
+    /// affordance enabled (<see cref="AppSettings.ShowUpdateButtonInFlyout"/>) and the background
+    /// poller has actually surfaced an available update.
+    /// Recomputed on every <see cref="NotifyUpdateStateChanged"/> call so the bound visibility
+    /// flips live without rebuilding the visual tree.
+    /// </summary>
+    public bool IsUpdateButtonVisible
+    {
+        get => _isUpdateButtonVisible;
+        private set
+        {
+            if (_isUpdateButtonVisible == value) return;
+            _isUpdateButtonVisible = value;
+            OnPropertyChanged();
+        }
+    }
+    private bool _isUpdateButtonVisible;
+
     // Drives DockPanel.Dock for the title-bar row. The cells Grid is the DockPanel's last child so
     // it always fills the remaining space, regardless of which edge this property docks to. XAML
     // style triggers also pivot on this property to flip the buttons' Margin between top-edge and
@@ -988,6 +1007,79 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
     /// <summary>Footer Settings button. Hands off to the host; App.xaml.cs opens SettingsWindow.</summary>
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
+
+    /// <summary>
+    /// Called by App when the global UpdateCheckService state changes. Recomputes whether the
+    /// floating Update! button should be visible against the live setting toggle.
+    /// </summary>
+    public void NotifyUpdateStateChanged()
+    {
+        bool toggleOn = _appSettings?.ShowUpdateButtonInFlyout ?? true;
+        bool available = AppServices.UpdateCheckService?.AvailableUpdate != null;
+        IsUpdateButtonVisible = toggleOn && available;
+    }
+
+    /// <summary>
+    /// Programmatically opens the update confirmation prompt. Used by the tray balloon's click
+    /// handler so the user lands on the same modal whether they took the in-flyout path or the
+    /// notification path.
+    /// </summary>
+    public void RequestUpdatePrompt()
+    {
+        if (AppServices.UpdateCheckService?.AvailableUpdate == null) return;
+        ShowUpdateConfirmation();
+    }
+
+    private void UpdateButton_Click(object sender, RoutedEventArgs e) => ShowUpdateConfirmation();
+
+    // Guards against re-entrant clicks while a download is in flight. The button stays visually
+    // unchanged (per design - it's either shown or not) so the flag does the gating silently.
+    private bool _isUpdateDownloadInFlight;
+
+    /// <summary>
+    /// Walks the user through the update flow: confirm modal -> kick off download in the background
+    /// and shut the app down on success so the staged BAT can swap the exe and relaunch. Failures
+    /// are logged and the user is left running on the existing version.
+    /// </summary>
+    private void ShowUpdateConfirmation()
+    {
+        if (_isUpdateDownloadInFlight) return;
+
+        UpdateCheckService? svc = AppServices.UpdateCheckService;
+        UpdateInfo? info = svc?.AvailableUpdate;
+        if (svc == null || info == null) return;
+
+        UpdateConfirmationWindow dialog = new(info) { Owner = this };
+        bool? result = dialog.ShowDialog();
+        if (result != true) return;
+
+        _isUpdateDownloadInFlight = true;
+        _ = Task.Run(async () =>
+        {
+            bool ok = false;
+            try
+            {
+                ok = await svc.DownloadAndStageAsync(info);
+            }
+            catch (Exception ex)
+            {
+                WPFLog.Log($"VolumeFlyout.ShowUpdateConfirmation: {ex.Message}");
+            }
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (ok)
+                {
+                    // The staged BAT polls our PID; shutting down here lets it move the new exe over.
+                    System.Windows.Application.Current?.Shutdown();
+                }
+                else
+                {
+                    _isUpdateDownloadInFlight = false;
+                }
+            });
+        });
+    }
 
     /// <summary>
     /// Titlebar communications-activity button. Plain click flips between "Do nothing" and "Mute

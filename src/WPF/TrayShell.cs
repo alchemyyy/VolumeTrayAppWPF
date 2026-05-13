@@ -37,6 +37,8 @@ internal sealed class TrayShell : IDisposable
     public event Action<int>? Scrolled;
     /// <summary>Raised on tray-icon right click with the cursor position.</summary>
     public event Action<System.Windows.Point>? RightClick;
+    /// <summary>Raised when the user clicks the body of a balloon notification raised via <see cref="ShowBalloon"/>.</summary>
+    public event Action? BalloonClicked;
 
     /// <summary>Currently tracked audio device (the system default). Null until first attach.</summary>
     public AudioDevice? TrackedDevice => _trackedDevice;
@@ -59,6 +61,7 @@ internal sealed class TrayShell : IDisposable
         _trayManager.RightClick += OnTrayRightClick;
         _trayManager.RefreshNeeded += RequestRefresh;
         _trayManager.Scrolled += OnTrayScrolled;
+        _trayManager.BalloonClicked += OnTrayBalloonClicked;
 
         _audioManager.PropertyChanged += OnAudioManagerPropertyChanged;
         AttachToTrackedDevice(_audioManager.DefaultDevice);
@@ -96,11 +99,18 @@ internal sealed class TrayShell : IDisposable
     public void ShowContextMenu(ContextMenu menu, System.Windows.Point point, ContextMenuPosition placement) =>
         _trayManager.ShowContextMenu(menu, point, placement);
 
+    /// <summary>
+    /// Push a balloon notification through the tray icon. Title is clipped to 63 chars and body to
+    /// 255 chars by the shell so callers don't need to truncate.
+    /// </summary>
+    public void ShowBalloon(string title, string message) => _trayManager.ShowBalloon(title, message);
+
     private void OnTrayLeftMouseDown() => LeftMouseDown?.Invoke();
     private void OnTrayLeftClick() => LeftClick?.Invoke();
     private void OnTrayLeftDoubleClick() => LeftDoubleClick?.Invoke();
     private void OnTrayRightClick(System.Windows.Point point) => RightClick?.Invoke(point);
     private void OnTrayScrolled(int delta) => Scrolled?.Invoke(delta);
+    private void OnTrayBalloonClicked() => BalloonClicked?.Invoke();
 
     private void OnAudioManagerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -186,6 +196,7 @@ internal sealed class TrayShell : IDisposable
         _trayManager.RightClick -= OnTrayRightClick;
         _trayManager.RefreshNeeded -= RequestRefresh;
         _trayManager.Scrolled -= OnTrayScrolled;
+        _trayManager.BalloonClicked -= OnTrayBalloonClicked;
 
         Safe.Dispose(_trayManager);
         Safe.Dispose(_renderer);

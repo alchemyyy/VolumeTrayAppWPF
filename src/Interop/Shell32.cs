@@ -25,6 +25,10 @@ internal static class Shell32
     public enum NotifyIconNotification
     {
         NIN_SELECT = 0x400,
+        NIN_BALLOONSHOW = 0x402,
+        NIN_BALLOONHIDE = 0x403,
+        NIN_BALLOONTIMEOUT = 0x404,
+        NIN_BALLOONUSERCLICK = 0x405,
         NIN_POPUPOPEN = 0x406,
     }
 
@@ -68,8 +72,21 @@ internal enum NotifyIconFlags : uint
     NIF_MESSAGE = 0x00000001,
     NIF_ICON = 0x00000002,
     NIF_TIP = 0x00000004,
+    NIF_INFO = 0x00000010,
     NIF_GUID = 0x00000020,
     NIF_SHOWTIP = 0x00000080,
+}
+
+[Flags]
+internal enum NotifyIconInfoFlags : uint
+{
+    NIIF_NONE = 0x00000000,
+    NIIF_INFO = 0x00000001,
+    NIIF_WARNING = 0x00000002,
+    NIIF_ERROR = 0x00000003,
+    NIIF_USER = 0x00000004,
+    NIIF_LARGE_ICON = 0x00000020,
+    NIIF_RESPECT_QUIET_TIME = 0x00000080,
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

@@ -113,9 +113,9 @@ public enum FlyoutDeviceSortOrder
 
 /// <summary>
 /// Visibility rule for the titlebar communications-activity button.
-/// AlwaysShow (default): button always rendered in the header cluster.
-/// WhenDuckingOn: button only rendered when UserDuckingPreference is set to any active mode
-///                (mute / 80% / 50%); hidden when "Do nothing" is selected.
+/// AlwaysShow: button always rendered in the header cluster.
+/// WhenDuckingOn (default): button only rendered when UserDuckingPreference is set to any active
+///                mode (mute / 80% / 50%); hidden when "Do nothing" is selected.
 /// Hidden: button never rendered; the registry watcher also stays asleep.
 /// </summary>
 public enum CommunicationsButtonVisibility
@@ -382,7 +382,7 @@ public class AppSettings
     // toward the incoming smoothed target. Caps single-frame jumps so a sudden silence-to-loud
     // (or loud-to-silence) transition ramps over a few frames instead of teleporting. 0 freezes
     // the meter; 100 disables the clamp (one-tick catch-up).
-    public const int MeterPeakChangeCeilingDefault = 10;
+    public const int MeterPeakChangeCeilingDefault = 9;
     public const int MeterPeakChangeCeilingMin = 0;
     public const int MeterPeakChangeCeilingMax = 100;
 
@@ -395,7 +395,7 @@ public class AppSettings
     public const int UnifiedMeterLowChannelBiasMultiplierMin = 0;
     public const int UnifiedMeterLowChannelBiasMultiplierMax = 100;
 
-    public bool UnifiedPeakMeter { get; set; } = false;
+    public bool UnifiedPeakMeter { get; set; } = true;
 
     private int _unifiedMeterLowChannelBiasMultiplier = UnifiedMeterLowChannelBiasMultiplierDefault;
 
@@ -614,7 +614,7 @@ public class AppSettings
     // action does. The skeleton's TrayClickAction enum is a placeholder set extend it with app-specific
     // actions, then update App.xaml.cs's tray click handlers to dispatch on the chosen action.
     public bool TrayScrollEnabled { get; set; } = true;
-    public TrayClickAction TrayDoubleClickAction { get; set; } = TrayClickAction.OpenSettings;
+    public TrayClickAction TrayDoubleClickAction { get; set; } = TrayClickAction.Nothing;
     public TrayClickAction TrayCtrlLeftClickAction { get; set; } = TrayClickAction.Nothing;
     public TrayClickAction TrayAltLeftClickAction { get; set; } = TrayClickAction.Nothing;
     public TrayClickAction TrayCtrlRightClickAction { get; set; } = TrayClickAction.Nothing;
@@ -632,7 +632,7 @@ public class AppSettings
     // never per-frame, so a drag doesn't saturate disk I/O.
     public bool AllowFlyoutUndock { get; set; } = true;
     public bool RestoreFlyoutUndockedOnStartup { get; set; } = true;
-    public bool FlyoutUndocked { get; set; } = false;
+    public bool FlyoutUndocked { get; set; } = true;
     public bool FlyoutHasSavedPosition { get; set; } = false;
     public double FlyoutLeft { get; set; } = 0;
     public double FlyoutTop { get; set; } = 0;
@@ -662,26 +662,28 @@ public class AppSettings
     // Titlebar communications-activity button visibility. Drives both the button's Visibility and
     // whether the registry watcher even runs - Hidden keeps the watcher asleep entirely.
     public CommunicationsButtonVisibility FlyoutCommunicationsButtonVisibility { get; set; }
-        = CommunicationsButtonVisibility.AlwaysShow;
+        = CommunicationsButtonVisibility.WhenDuckingOn;
 
     // Per-device-row control-button visibility. One pair per button - playback rows read the *ForPlayback
     // flag, recording rows read the *ForRecording flag. The Listen button is capture-only by nature, so
-    // only the recording flag exists; toggling it off hides the listen glyph on recording rows. All
-    // default to true so the shipped UI matches the long-standing "every button visible" layout.
-    public bool ShowLockButtonForPlayback { get; set; } = true;
-    public bool ShowEqualizerAPOButtonForPlayback { get; set; } = true;
+    // only the recording flag exists; toggling it off hides the listen glyph on recording rows.
+    // Default-device and Battery buttons ship on; Lock, EqualizerAPO, and Listen ship off as they are
+    // power-user features the typical user never reaches for.
+    public bool ShowLockButtonForPlayback { get; set; } = false;
+    public bool ShowEqualizerAPOButtonForPlayback { get; set; } = false;
     public bool ShowDefaultDeviceButtonForPlayback { get; set; } = true;
     public bool ShowBatteryButtonForPlayback { get; set; } = true;
-    public bool ShowLockButtonForRecording { get; set; } = true;
-    public bool ShowEqualizerAPOButtonForRecording { get; set; } = true;
-    public bool ShowListenButtonForRecording { get; set; } = true;
+    public bool ShowLockButtonForRecording { get; set; } = false;
+    public bool ShowEqualizerAPOButtonForRecording { get; set; } = false;
+    public bool ShowListenButtonForRecording { get; set; } = false;
     public bool ShowDefaultDeviceButtonForRecording { get; set; } = true;
     public bool ShowBatteryButtonForRecording { get; set; } = true;
 
-    // Compact PKEY_AudioEngine_DeviceFormat readout under the device name. Off by default - the strip is
-    // niche diagnostic info, not something most users want eating row space. Toggling on / off just
-    // shows / collapses the Canvas; no row metrics shift since the Canvas is already zero-measure.
-    public bool ShowDeviceFormatText { get; set; } = false;
+    // Compact PKEY_AudioEngine_DeviceFormat readout under the device name. On by default - shows the
+    // current sample-rate / bit-depth / channel layout in a compact strip under the device name.
+    // Toggling on / off just shows / collapses the Canvas; no row metrics shift since the Canvas is
+    // already zero-measure.
+    public bool ShowDeviceFormatText { get; set; } = true;
 
     // Suffix the format readout strip with the live Bluetooth A2DP codec on BT-flagged devices.
     // Independent from ShowDeviceFormatText: with format off and codec on, the codec name renders
@@ -750,6 +752,17 @@ public class AppSettings
     public int PlaybackAppDrawerIconsMaxRows { get; set; } = AppDrawerIconsMaxRowsDefault;
     public int RecordingAppDrawerSlidersMaxApps { get; set; } = AppDrawerSlidersMaxAppsDefault;
     public int RecordingAppDrawerIconsMaxRows { get; set; } = AppDrawerIconsMaxRowsDefault;
+
+    // Auto-update
+    // CheckForUpdatesEnabled gates the background poll loop entirely. ShowUpdateNotificationsEnabled
+    // controls whether a "new version available" tray balloon fires while the flyout is closed;
+    // ShowUpdateButtonInFlyout drives the floating "Update!" affordance in the flyout's header row.
+    // UpdateCheckIntervalMs is the polling cadence (defaulted to 1h; clamped to the [Min, Max] floor
+    // and ceiling defined in TimeConstants on each poll).
+    public bool CheckForUpdatesEnabled { get; set; } = true;
+    public bool ShowUpdateNotificationsEnabled { get; set; } = false;
+    public bool ShowUpdateButtonInFlyout { get; set; } = true;
+    public int UpdateCheckIntervalMs { get; set; } = TimeConstants.UpdateCheckIntervalDefaultMs;
 
     // Empty by default; defaults are seeded by HotkeyDefaults.EnsureDefaults after construction or load.
     // The previous in-place initializer collided with XmlSerializer's "append to existing list" behavior:
