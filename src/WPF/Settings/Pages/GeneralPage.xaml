@@ -75,6 +75,33 @@
         <TextBlock Text="{loc:Loc Settings_General_Notifications_Header}"
                    Style="{StaticResource SubsectionHeaderStyle}"/>
 
+        <utils:SettingsCard x:Name="PlayDeviceVolumeChangeSoundCard"
+                               Title="{loc:Loc Settings_General_PlayDeviceVolumeChangeSound_Title}"
+                               Description="{loc:Loc Settings_General_PlayDeviceVolumeChangeSound_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="PlayDeviceVolumeChangeSoundToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="PlayDeviceVolumeChangeSound"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <!-- Child of the device-ding toggle. Hidden when the parent toggle is off since the gate is
+             only meaningful while the ding can fire at all. -->
+        <utils:SettingsCard x:Name="SuppressDeviceVolumeChangeSoundWhenAudioPlayingCard"
+                               Title="{loc:Loc Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Title}"
+                               Description="{loc:Loc Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Description}"
+                               Visibility="{Binding IsChecked, ElementName=PlayDeviceVolumeChangeSoundToggle, Converter={StaticResource BoolToVisibility}}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="SuppressDeviceVolumeChangeSoundWhenAudioPlayingToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="SuppressDeviceVolumeChangeSoundWhenAudioPlaying"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
         <utils:SettingsCard x:Name="PlayAppVolumeChangeSoundCard"
                                Title="{loc:Loc Settings_General_PlayAppVolumeChangeSound_Title}"
                                Description="{loc:Loc Settings_General_PlayAppVolumeChangeSound_Description}">

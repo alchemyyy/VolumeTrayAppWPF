@@ -29,6 +29,7 @@ public static class SettingsBindings
         ["UnifiedPeakMeter"] = (s, v) => s.UnifiedPeakMeter = v,
         ["UseLogarithmicVolumeScale"] = (s, v) => s.UseLogarithmicVolumeScale = v,
         ["PlayDeviceVolumeChangeSound"] = (s, v) => s.PlayDeviceVolumeChangeSound = v,
+        ["SuppressDeviceVolumeChangeSoundWhenAudioPlaying"] = (s, v) => s.SuppressDeviceVolumeChangeSoundWhenAudioPlaying = v,
         ["PlayAppVolumeChangeSound"] = (s, v) => s.PlayAppVolumeChangeSound = v,
         ["SetDefaultCommsToDefault"] = (s, v) => s.SetDefaultCommsToDefault = v,
         ["ShowDisabledPlaybackDevices"] = (s, v) => s.ShowDisabledPlaybackDevices = v,

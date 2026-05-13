@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio;
@@ -31,6 +32,11 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
     // after the last event"; larger = fewer wakeups. 10ms is well below human perception.
     private const int DingDwellPollSliceMs = 10;
 
+    // Grace tacked onto the wav's natural duration when stamping "ding in flight". Covers the
+    // MeterLerp's decay tail after the last sample renders so the peak hasn't quite returned to
+    // zero by the time the bypass-window check runs on a rapid follow-up gesture.
+    private const int DingMeterBypassGraceMs = 250;
+
     // Trailing-edge debouncer for the volume-change ding. Each scroll/wheel/drag-end calls
     // RunAsync; the payload polls HasReplacement during its dwell and bails the moment a fresher
     // event lands, so the ding only fires once the dwell elapses with no new event arriving.
@@ -42,6 +48,13 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
     // PlaySound directly, which - unlike WPF's MediaPlayer - doesn't depend on Windows Media Player
     // and so works on Windows N installs.
     private WavTemplate? _wavTemplate;
+
+    // Per-device UTC timestamp: the moment after which the meter should no longer reflect our own
+    // ding. PlayForDevice consults this to bypass the suppress-when-audio-playing check while a
+    // previously fired ding is still draining - otherwise the ding's own peak would chain-suppress
+    // every follow-up ding during a fast scroll. Concurrent because device payloads run on the
+    // throttler's pool, one per device id in parallel.
+    private readonly ConcurrentDictionary<string, DateTime> _dingActiveUntilUtc = new(StringComparer.Ordinal);
 
     // Held across plays so the byte[] backing the in-flight async PlaySound isn't GC'd mid-playback
     // and so a follow-up play disposes the prior player (which preempts its still-playing sound).
@@ -76,6 +89,7 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
 
         string throttleKey = DeviceDingThrottleKey + ":" + device.Id;
         byte[] wavBytes = wav.Bytes;
+        int dingWindowMs = wav.DurationMs + DingMeterBypassGraceMs;
         _ = _feedbackThrottler.RunAsync(throttleKey, async ctx =>
         {
             if (!immediate)
@@ -83,6 +97,19 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
                 if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
             }
             else if (ctx.HasReplacement) return;
+            // Suppress the ding when the device is already rendering audio so the beep doesn't step on
+            // music / calls / games. Bypassed while a previously fired ding is still draining on this
+            // device so a fast scroll doesn't chain-suppress on its own residual peak. PeakValueMax is
+            // the smoothed display value, fine for a coarse "is anything playing" gate.
+            if (_settings?.SuppressDeviceVolumeChangeSoundWhenAudioPlaying == true && device.PeakValueMax > 0f)
+            {
+                bool ownDingInFlight = _dingActiveUntilUtc.TryGetValue(device.Id, out DateTime until)
+                                       && DateTime.UtcNow < until;
+                if (!ownDingInFlight) return;
+            }
+            // Stamp the bypass window BEFORE PlayChangeFeedback returns so any payload that lands
+            // between this assignment and the actual playback start still sees an in-flight ding.
+            _dingActiveUntilUtc[device.Id] = DateTime.UtcNow.AddMilliseconds(dingWindowMs);
             try { device.PlayChangeFeedback(wavBytes); }
             catch { /* feedback is best-effort */ }
         });

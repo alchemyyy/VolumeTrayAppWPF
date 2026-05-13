@@ -46,6 +46,8 @@ public partial class GeneralPage : UserControl
             RunOnStartupToggle.IsChecked = StartupManager.GetRunOnStartup();
             UpdateRunOnStartupDescription();
             LogarithmicVolumeScaleToggle.IsChecked = settings.UseLogarithmicVolumeScale;
+            PlayDeviceVolumeChangeSoundToggle.IsChecked = settings.PlayDeviceVolumeChangeSound;
+            SuppressDeviceVolumeChangeSoundWhenAudioPlayingToggle.IsChecked = settings.SuppressDeviceVolumeChangeSoundWhenAudioPlaying;
             PlayAppVolumeChangeSoundToggle.IsChecked = settings.PlayAppVolumeChangeSound;
 
             SettingsBindings.BindSpinner(
@@ -93,6 +95,7 @@ public partial class GeneralPage : UserControl
     }
 
     // Tag-based bool toggle dispatcher for every non-side-effecting checkbox on this page:
+    // PlayDeviceVolumeChangeSound, SuppressDeviceVolumeChangeSoundWhenAudioPlaying,
     // PlayAppVolumeChangeSound, UseLogarithmicVolumeScale.
     // The shared BoolToggleSetters table in SettingsBindings carries the property writer for each Tag.
     private void BoolToggle_Changed(object sender, RoutedEventArgs e)

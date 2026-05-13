@@ -6,9 +6,10 @@ using UserControl = System.Windows.Controls.UserControl;
 namespace VolumeTrayAppWPF.WPF.Settings.Pages;
 
 /// <summary>
-/// Devices settings page. Hosts the comms-default tie toggle, the playback-volume-change ping,
-/// and the per-state visibility + per-row button toggles for the device list. Tray-menu device-link
-/// toggles live on <see cref="TrayIconPage"/>. Every toggle is Tag-bound so
+/// Devices settings page. Hosts the comms-default tie toggle and the per-state visibility +
+/// per-row button toggles for the device list. The volume-change ping toggles live on
+/// <see cref="GeneralPage"/>; tray-menu device-link toggles live on <see cref="TrayIconPage"/>.
+/// Every toggle is Tag-bound so
 /// SettingsBindings.HandleBoolToggle does the dispatch; the cascading "even if disabled" child cards
 /// drive their Visibility off XAML bindings against the parent toggles (InverseBoolToVisibility and
 /// AndBoolToVisibility), so this code-behind only manages seed-from-settings + the bool dispatch.
@@ -27,8 +28,6 @@ public partial class DevicesPage : UserControl
         try
         {
             SetDefaultCommsToDefaultToggle.IsChecked = settings.SetDefaultCommsToDefault;
-
-            PlayDeviceVolumeChangeSoundToggle.IsChecked = settings.PlayDeviceVolumeChangeSound;
 
             ShowDisabledPlaybackToggle.IsChecked = settings.ShowDisabledPlaybackDevices;
             ShowDefaultPlaybackEvenIfDisabledToggle.IsChecked = settings.ShowDefaultPlaybackDeviceEvenIfDisabled;

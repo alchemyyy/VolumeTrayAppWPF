@@ -267,6 +267,11 @@ public class AppSettings
     // just adjusted (WASAPI shared mode), so the ding comes out of that device instead of the system
     // default. Fires on mouse-up after a click/drag and on each wheel notch over the device row.
     public bool PlayDeviceVolumeChangeSound { get; set; } = true;
+    // Gate on top of PlayDeviceVolumeChangeSound: skip the ding when the device is already rendering
+    // audio (peak meter > 0 at play-time). Keeps the beep out of music / calls / games where it would
+    // just step on the existing audio. Checked right before PlayChangeFeedback, after the dwell, so
+    // the reading reflects "is anything playing right now" rather than the gesture's leading edge.
+    public bool SuppressDeviceVolumeChangeSoundWhenAudioPlaying { get; set; } = true;
     // Same idea for per-app sliders. The wav plays through this app's audio session at MediaPlayer.Volume
     // scaled to the target app's slider value, so the feedback's loudness matches what the user just dialed
     // the app to. Caveat: it isn't injected into the target app's session - if the user has muted/lowered

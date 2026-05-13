@@ -27,6 +27,13 @@ internal sealed class WavTemplate
     public int BlockAlign { get; }
     public int BitsPerSample { get; }
 
+    // Natural playback length of the PCM data, derived from frames / sample-rate. Used by feedback
+    // callers to size "ding still in flight" windows without hard-coding a wav-specific constant.
+    // Guarded against the malformed-but-parsed case (zero sample rate / block align) by returning 0.
+    public int DurationMs => SamplesPerSec > 0 && BlockAlign > 0
+        ? (int)((long)(DataLength / BlockAlign) * 1000 / SamplesPerSec)
+        : 0;
+
     // Volume threshold above which CloneScaled skips the per-sample scaling pass entirely -- the
     // multiply would round-trip the bytes unchanged and just burn CPU.
     private const float ScaleSkipThreshold = 0.999f;

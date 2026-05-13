@@ -433,6 +433,18 @@
   <data name="Settings_General_Notifications_Header" xml:space="preserve">
     <value>Volume changed ping</value>
   </data>
+  <data name="Settings_General_PlayDeviceVolumeChangeSound_Title" xml:space="preserve">
+    <value>Play a sound when changing playback device volume</value>
+  </data>
+  <data name="Settings_General_PlayDeviceVolumeChangeSound_Description" xml:space="preserve">
+    <value>Play a beep through the playback device whose slider you adjust. Recording devices and per-app sliders stay silent.</value>
+  </data>
+  <data name="Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Title" xml:space="preserve">
+    <value>Skip the sound when audio is already playing</value>
+  </data>
+  <data name="Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Description" xml:space="preserve">
+    <value>Don't play the volume-change beep when the device's peak meter is above zero, so the feedback won't step on music, calls, or games.</value>
+  </data>
   <data name="Settings_General_PlayAppVolumeChangeSound_Description" xml:space="preserve">
     <value>Play a Windows notification sound when you change a per-app slider, scaled to the app's mixed volume so quieter apps preview quieter.</value>
   </data>
@@ -844,15 +856,6 @@ Target: {1}</value>
   </data>
   <data name="Settings_Devices_SectionHeader" xml:space="preserve">
     <value>Devices</value>
-  </data>
-  <data name="Settings_Devices_Playback_Header" xml:space="preserve">
-    <value>Playback</value>
-  </data>
-  <data name="Settings_Devices_PlayDeviceVolumeChangeSound_Title" xml:space="preserve">
-    <value>Play a sound when changing playback device volume</value>
-  </data>
-  <data name="Settings_Devices_PlayDeviceVolumeChangeSound_Description" xml:space="preserve">
-    <value>Play a beep through the playback device whose slider you adjust. Recording devices and per-app sliders stay silent.</value>
   </data>
   <data name="Settings_Devices_SetDefaultCommsToDefault_Title" xml:space="preserve">
     <value>Tie default comms device to default device</value>
