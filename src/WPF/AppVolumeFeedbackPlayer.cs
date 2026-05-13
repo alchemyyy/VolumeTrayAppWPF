@@ -49,12 +49,13 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
     // and so works on Windows N installs.
     private WavTemplate? _wavTemplate;
 
-    // Per-device UTC timestamp: the moment after which the meter should no longer reflect our own
-    // ding. PlayForDevice consults this to bypass the suppress-when-audio-playing check while a
-    // previously fired ding is still draining - otherwise the ding's own peak would chain-suppress
-    // every follow-up ding during a fast scroll. Concurrent because device payloads run on the
-    // throttler's pool, one per device id in parallel.
-    private readonly ConcurrentDictionary<string, DateTime> _dingActiveUntilUtc = new(StringComparer.Ordinal);
+    // Per-device TickCount64 deadline: the monotonic ms after which the meter should no longer
+    // reflect our own ding. PlayForDevice consults this to bypass the suppress-when-audio-playing
+    // check while a previously fired ding is still draining - otherwise the ding's own peak would
+    // chain-suppress every follow-up ding during a fast scroll. TickCount64 picked over DateTime
+    // for the cheaper read + plain long compare; we only need elapsed-ms semantics, not wall clock.
+    // Concurrent because device payloads run on the throttler's pool, one per device id in parallel.
+    private readonly ConcurrentDictionary<string, long> _dingActiveUntilTicks = new(StringComparer.Ordinal);
 
     // Held across plays so the byte[] backing the in-flight async PlaySound isn't GC'd mid-playback
     // and so a follow-up play disposes the prior player (which preempts its still-playing sound).
@@ -101,15 +102,19 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
             // music / calls / games. Bypassed while a previously fired ding is still draining on this
             // device so a fast scroll doesn't chain-suppress on its own residual peak. PeakValueMax is
             // the smoothed display value, fine for a coarse "is anything playing" gate.
-            if (_settings?.SuppressDeviceVolumeChangeSoundWhenAudioPlaying == true && device.PeakValueMax > 0f)
+            long nowTicks = Environment.TickCount64;
+            AppSettings? settings = _settings;
+            if (settings != null
+                && settings.SuppressDeviceVolumeChangeSoundWhenAudioPlaying
+                && device.PeakValueMax > settings.DingSuppressionPeakThresholdPercent * 0.01f)
             {
-                bool ownDingInFlight = _dingActiveUntilUtc.TryGetValue(device.Id, out DateTime until)
-                                       && DateTime.UtcNow < until;
+                bool ownDingInFlight = _dingActiveUntilTicks.TryGetValue(device.Id, out long until)
+                                       && nowTicks < until;
                 if (!ownDingInFlight) return;
             }
             // Stamp the bypass window BEFORE PlayChangeFeedback returns so any payload that lands
             // between this assignment and the actual playback start still sees an in-flight ding.
-            _dingActiveUntilUtc[device.Id] = DateTime.UtcNow.AddMilliseconds(dingWindowMs);
+            _dingActiveUntilTicks[device.Id] = nowTicks + dingWindowMs;
             try { device.PlayChangeFeedback(wavBytes); }
             catch { /* feedback is best-effort */ }
         });

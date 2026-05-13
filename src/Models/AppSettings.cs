@@ -272,6 +272,31 @@ public class AppSettings
     // just step on the existing audio. Checked right before PlayChangeFeedback, after the dwell, so
     // the reading reflects "is anything playing right now" rather than the gesture's leading edge.
     public bool SuppressDeviceVolumeChangeSoundWhenAudioPlaying { get; set; } = true;
+
+    // Noise floor for the suppression gate above, expressed as 0..100 percent of full scale on the
+    // smoothed peak meter (PeakValueMax). Suppression triggers only when the meter EXCEEDS this
+    // value, so 0 reproduces the original "any audio at all" behavior and 100 effectively disables
+    // suppression. Clamped to [Min, Max] in the setter so a corrupt settings.xml can't drift the
+    // gate outside what the spinner allows.
+    public const int DingSuppressionPeakThresholdPercentDefault = 5;
+    public const int DingSuppressionPeakThresholdPercentMin = 0;
+    public const int DingSuppressionPeakThresholdPercentMax = 100;
+
+    private int _dingSuppressionPeakThresholdPercent = DingSuppressionPeakThresholdPercentDefault;
+
+    [XmlElement]
+    public int DingSuppressionPeakThresholdPercent
+    {
+        get => _dingSuppressionPeakThresholdPercent;
+        set
+        {
+            int clamped = Math.Max(
+                DingSuppressionPeakThresholdPercentMin,
+                Math.Min(DingSuppressionPeakThresholdPercentMax, value));
+            if (_dingSuppressionPeakThresholdPercent == clamped) return;
+            _dingSuppressionPeakThresholdPercent = clamped;
+        }
+    }
     // Same idea for per-app sliders. The wav plays through this app's audio session at MediaPlayer.Volume
     // scaled to the target app's slider value, so the feedback's loudness matches what the user just dialed
     // the app to. Caveat: it isn't injected into the target app's session - if the user has muted/lowered

@@ -15,6 +15,11 @@
     d:Background="#1F1F1F"
     d:DataContext="{d:DesignInstance Type=models:AppSettings, IsDesignTimeCreatable=False}"
     utils1:SettingsKeyboardNavigation.IsContentSection="True">
+    <UserControl.Resources>
+        <!-- Page-scoped because App.xaml only ships BoolToVisibility; the AND-of-bools converter is
+             only needed here for the threshold spinner that gates on (ding-on AND suppress-on). -->
+        <utils1:AndBoolToVisibilityConverter x:Key="AndBoolToVisibility"/>
+    </UserControl.Resources>
     <StackPanel>
         <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="{loc:Loc Settings_General_SectionHeader}"/>
 
@@ -87,6 +92,18 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
+        <utils:SettingsCard x:Name="PlayAppVolumeChangeSoundCard"
+                               Title="{loc:Loc Settings_General_PlayAppVolumeChangeSound_Title}"
+                               Description="{loc:Loc Settings_General_PlayAppVolumeChangeSound_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="PlayAppVolumeChangeSoundToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="PlayAppVolumeChangeSound"
+                          Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
         <!-- Child of the device-ding toggle. Hidden when the parent toggle is off since the gate is
              only meaningful while the ding can fire at all. -->
         <utils:SettingsCard x:Name="SuppressDeviceVolumeChangeSoundWhenAudioPlayingCard"
@@ -102,15 +119,22 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
-        <utils:SettingsCard x:Name="PlayAppVolumeChangeSoundCard"
-                               Title="{loc:Loc Settings_General_PlayAppVolumeChangeSound_Title}"
-                               Description="{loc:Loc Settings_General_PlayAppVolumeChangeSound_Description}">
+        <!-- Grandchild of the device-ding toggle: only meaningful while both the ding and the
+             suppress-when-playing gate are on, so its visibility ANDs the two parent IsChecked
+             values. Spinner bounds come from AppSettings.DingSuppressionPeakThresholdPercent[Min|Max]. -->
+        <utils:SettingsCard x:Name="DingSuppressionPeakThresholdCard"
+                               Title="{loc:Loc Settings_General_DingSuppressionPeakThreshold_Title}"
+                               Description="{loc:Loc Settings_General_DingSuppressionPeakThreshold_Description}">
+            <utils:SettingsCard.Visibility>
+                <MultiBinding Converter="{StaticResource AndBoolToVisibility}">
+                    <Binding ElementName="PlayDeviceVolumeChangeSoundToggle" Path="IsChecked"/>
+                    <Binding ElementName="SuppressDeviceVolumeChangeSoundWhenAudioPlayingToggle" Path="IsChecked"/>
+                </MultiBinding>
+            </utils:SettingsCard.Visibility>
             <utils:SettingsCard.Control>
-                <CheckBox x:Name="PlayAppVolumeChangeSoundToggle"
-                          Style="{StaticResource ToggleSwitchStyle}"
-                          Tag="PlayAppVolumeChangeSound"
-                          Checked="BoolToggle_Changed"
-                          Unchecked="BoolToggle_Changed"/>
+                <local:NumericSpinner x:Name="DingSuppressionPeakThresholdBox"
+                                      Minimum="{x:Static models:AppSettings.DingSuppressionPeakThresholdPercentMin}"
+                                      Maximum="{x:Static models:AppSettings.DingSuppressionPeakThresholdPercentMax}"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 

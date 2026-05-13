@@ -27,12 +27,10 @@ internal sealed class WavTemplate
     public int BlockAlign { get; }
     public int BitsPerSample { get; }
 
-    // Natural playback length of the PCM data, derived from frames / sample-rate. Used by feedback
-    // callers to size "ding still in flight" windows without hard-coding a wav-specific constant.
-    // Guarded against the malformed-but-parsed case (zero sample rate / block align) by returning 0.
-    public int DurationMs => SamplesPerSec > 0 && BlockAlign > 0
-        ? (int)((long)(DataLength / BlockAlign) * 1000 / SamplesPerSec)
-        : 0;
+    // Natural playback length of the PCM data, derived from frames / sample-rate at construction.
+    // Stored rather than computed so hot-path callers sizing "ding still in flight" windows don't
+    // repeat the divisions on every call. Zero when the format fields would make the math undefined.
+    public int DurationMs { get; }
 
     // Volume threshold above which CloneScaled skips the per-sample scaling pass entirely -- the
     // multiply would round-trip the bytes unchanged and just burn CPU.
@@ -48,6 +46,9 @@ internal sealed class WavTemplate
         SamplesPerSec = samplesPerSec;
         BlockAlign = blockAlign;
         BitsPerSample = bitsPerSample;
+        DurationMs = samplesPerSec > 0 && blockAlign > 0
+            ? (int)((long)(dataLength / blockAlign) * 1000 / samplesPerSec)
+            : 0;
     }
 
     /// <summary>

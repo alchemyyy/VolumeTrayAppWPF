@@ -56,6 +56,13 @@ public partial class GeneralPage : UserControl
                 v => settings.IconRetryIntervalMs = v,
                 () => _suppressChangeEvents,
                 SaveAndNotify);
+
+            SettingsBindings.BindSpinner(
+                DingSuppressionPeakThresholdBox,
+                () => settings.DingSuppressionPeakThresholdPercent,
+                v => settings.DingSuppressionPeakThresholdPercent = v,
+                () => _suppressChangeEvents,
+                SaveAndNotify);
         }
         finally
         {

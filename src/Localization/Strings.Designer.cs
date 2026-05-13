@@ -160,6 +160,42 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Equalizer APO was not found on this system. Set its install location in the app settings, or download the latest x64 installer..
+        /// </summary>
+        public static string EqualizerAPO_NotAvailable_Body {
+            get {
+                return ResourceManager.GetString("EqualizerAPO_NotAvailable_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Download installer.
+        /// </summary>
+        public static string EqualizerAPO_NotAvailable_DownloadButton {
+            get {
+                return ResourceManager.GetString("EqualizerAPO_NotAvailable_DownloadButton", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Equalizer APO not detected.
+        /// </summary>
+        public static string EqualizerAPO_NotAvailable_Title {
+            get {
+                return ResourceManager.GetString("EqualizerAPO_NotAvailable_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Battery: {0}%.
+        /// </summary>
+        public static string Flyout_BatteryButton_Tooltip_Format {
+            get {
+                return ResourceManager.GetString("Flyout_BatteryButton_Tooltip_Format", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Click: set as default. Ctrl+click: enable / disable. Shift+click: set as default communications..
         /// </summary>
         public static string Flyout_DeviceIcon_Tooltip {
@@ -167,7 +203,70 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Flyout_DeviceIcon_Tooltip", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Equalizer APO is installed but enhancements are disabled for this device. Click to enable. Ctrl+click or right-click: open the Configuration Editor..
+        /// </summary>
+        public static string Flyout_EqualizerAPO_Tooltip_EnhancementsOff {
+            get {
+                return ResourceManager.GetString("Flyout_EqualizerAPO_Tooltip_EnhancementsOff", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Equalizer APO is not detected on this system. Click for installation options..
+        /// </summary>
+        public static string Flyout_EqualizerAPO_Tooltip_NotAvailable {
+            get {
+                return ResourceManager.GetString("Flyout_EqualizerAPO_Tooltip_NotAvailable", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Equalizer APO is not installed on this device. Click to install. Ctrl+click or right-click: open the Configuration Editor..
+        /// </summary>
+        public static string Flyout_EqualizerAPO_Tooltip_NotInstalled {
+            get {
+                return ResourceManager.GetString("Flyout_EqualizerAPO_Tooltip_NotInstalled", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Equalizer APO is running on this device. Click to uninstall. Ctrl+click or right-click: open the Configuration Editor..
+        /// </summary>
+        public static string Flyout_EqualizerAPO_Tooltip_Running {
+            get {
+                return ResourceManager.GetString("Flyout_EqualizerAPO_Tooltip_Running", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Exclusive mode is allowed. Click to disallow apps from taking exclusive control of this device..
+        /// </summary>
+        public static string Flyout_ExclusiveMode_Tooltip_Allowed {
+            get {
+                return ResourceManager.GetString("Flyout_ExclusiveMode_Tooltip_Allowed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Exclusive mode is disallowed. Click to allow apps to take exclusive control of this device..
+        /// </summary>
+        public static string Flyout_ExclusiveMode_Tooltip_Disallowed {
+            get {
+                return ResourceManager.GetString("Flyout_ExclusiveMode_Tooltip_Disallowed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An app is currently holding this device in exclusive mode. Click to disallow exclusive control..
+        /// </summary>
+        public static string Flyout_ExclusiveMode_Tooltip_Held {
+            get {
+                return ResourceManager.GetString("Flyout_ExclusiveMode_Tooltip_Held", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Click: toggle Listen to this device. Ctrl+click: enable with Default Playback target. Right-click: pick target device..
         /// </summary>
@@ -176,7 +275,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Flyout_ListenButton_Tooltip", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Default Playback Device.
         /// </summary>
@@ -185,7 +284,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Flyout_ListenMenu_DefaultPlaybackDevice", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Redock.
         /// </summary>
@@ -201,6 +300,15 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Flyout_Settings_Tooltip {
             get {
                 return ResourceManager.GetString("Flyout_Settings_Tooltip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Open Windows sound settings.
+        /// </summary>
+        public static string Flyout_SoundSettings_Tooltip {
+            get {
+                return ResourceManager.GetString("Flyout_SoundSettings_Tooltip", resourceCulture);
             }
         }
         
@@ -277,6 +385,15 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to App Drawers.
+        /// </summary>
+        public static string Settings_Common_Tab_DeviceAppDrawers {
+            get {
+                return ResourceManager.GetString("Settings_Common_Tab_DeviceAppDrawers", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Devices.
         /// </summary>
         public static string Settings_Common_Tab_Devices {
@@ -331,11 +448,29 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Defaulting.
+        ///   Looks up a localized string similar to App drawers.
         /// </summary>
-        public static string Settings_Devices_Defaulting_Header {
+        public static string Settings_DeviceAppDrawers_SectionHeader {
             get {
-                return ResourceManager.GetString("Settings_Devices_Defaulting_Header", resourceCulture);
+                return ResourceManager.GetString("Settings_DeviceAppDrawers_SectionHeader", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Playback row buttons.
+        /// </summary>
+        public static string Settings_Devices_PlaybackButtons_Header {
+            get {
+                return ResourceManager.GetString("Settings_Devices_PlaybackButtons_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Recording row buttons.
+        /// </summary>
+        public static string Settings_Devices_RecordingButtons_Header {
+            get {
+                return ResourceManager.GetString("Settings_Devices_RecordingButtons_Header", resourceCulture);
             }
         }
         
@@ -520,6 +655,78 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to A battery glyph on Bluetooth playback rows showing the remaining charge reported by the headset / speaker. Hidden automatically on devices that don&apos;t report a battery level..
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackBatteryButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackBatteryButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show Bluetooth battery indicator.
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackBatteryButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackBatteryButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The device icon button on the right edge of the row. Left-click sets default, right-click opens the device menu..
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackDefaultDeviceButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackDefaultDeviceButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show default-device button.
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackDefaultDeviceButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackDefaultDeviceButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The equalizer glyph that reflects Equalizer APO state and toggles install / enable on click..
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackEqualizerAPOButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackEqualizerAPOButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show Equalizer APO button.
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackEqualizerAPOButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackEqualizerAPOButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The lock / unlock glyph that toggles the endpoint&apos;s &quot;Allow applications to take exclusive control&quot; bit..
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackLockButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackLockButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show exclusive-mode (lock) button.
+        /// </summary>
+        public static string Settings_Devices_ShowPlaybackLockButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowPlaybackLockButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Master switch for recording-device entries. When off, every recording-side option below is ignored..
         /// </summary>
         public static string Settings_Devices_ShowRecording_Description {
@@ -534,6 +741,96 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Devices_ShowRecording_Title {
             get {
                 return ResourceManager.GetString("Settings_Devices_ShowRecording_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A battery glyph on Bluetooth recording rows showing the remaining charge reported by the headset. Hidden automatically on devices that don&apos;t report a battery level..
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingBatteryButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingBatteryButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show Bluetooth battery indicator.
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingBatteryButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingBatteryButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The device icon button on the right edge of the row. Left-click sets default, right-click opens the device menu..
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingDefaultDeviceButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingDefaultDeviceButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show default-device button.
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingDefaultDeviceButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingDefaultDeviceButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The equalizer glyph that reflects Equalizer APO state and toggles install / enable on click..
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingEqualizerAPOButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingEqualizerAPOButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show Equalizer APO button.
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingEqualizerAPOButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingEqualizerAPOButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Adds a button to each recording row that toggles the Windows &quot;Listen to this device&quot; feature. Left-click toggles, Ctrl+left-click enables with Default Playback as the target, right-click picks a specific target..
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingListenButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingListenButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show &quot;Listen to this device&quot; button.
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingListenButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingListenButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The lock / unlock glyph that toggles the endpoint&apos;s &quot;Allow applications to take exclusive control&quot; bit..
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingLockButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingLockButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show exclusive-mode (lock) button.
+        /// </summary>
+        public static string Settings_Devices_ShowRecordingLockButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_Devices_ShowRecordingLockButton_Title", resourceCulture);
             }
         }
         
@@ -610,20 +907,272 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Tray menu.
-        /// </summary>
-        public static string Settings_Devices_TrayMenu_Header {
-            get {
-                return ResourceManager.GetString("Settings_Devices_TrayMenu_Header", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to Playback visibility.
         /// </summary>
         public static string Settings_Devices_Visibility_Header {
             get {
                 return ResourceManager.GetString("Settings_Devices_Visibility_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Scales the app icons in the grid drawer. 100 matches the slider-drawer baseline; values above 100 enlarge the icons while keeping eight per row..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconScale_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconScale_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Icon scale (percent).
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconScale_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconScale_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to How the trailing partial row anchors. Off keeps it left-aligned; Centered shifts it to the middle; Centered soft-max left-anchors at the position a centered soft-max-icon row would occupy until the row exceeds soft-max, then crosses over to fully centered..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsCentered_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsCentered_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Icon grid centering.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsCentered_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsCentered_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Centered.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsCenterMode_Centered {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsCenterMode_Centered", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Off.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsCenterMode_Off {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsCenterMode_Off", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Centered soft-max.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsCenterMode_SoftMax {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsCenterMode_SoftMax", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Anchors the growing row at the position a centered row of this many icons would occupy. Past this count the layout switches to fully centered..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsCenterSoftMax_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsCenterSoftMax_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Soft-max width (icons).
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsCenterSoftMax_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsCenterSoftMax_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Caps how many icons fit in a column in the grid drawer. Once a column fills, the next icon starts a new column alongside it..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsPerColumn_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsPerColumn_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Max apps per column.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsPerColumn_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsPerColumn_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Caps how many icons fit on a row in the grid drawer. Values above 8 shrink each cell to keep the grid inside the drawer; values below 8 leave the cells at their default size and the grid reads narrower..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsPerRow_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsPerRow_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Max apps per row.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerIconsPerRow_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerIconsPerRow_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Caps how many icon rows render before the drawer enters scrolling overflow..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerMaxApps_Icons_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerMaxApps_Icons_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Max rows before scrolling - Icon grid.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerMaxApps_Icons_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerMaxApps_Icons_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Caps how many app slider rows render before the drawer enters scrolling overflow..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerMaxApps_Sliders_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerMaxApps_Sliders_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Max apps before scrolling - Full sliders.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerMaxApps_Sliders_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerMaxApps_Sliders_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Auto.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerStackDirection_Auto {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerStackDirection_Auto", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Bottom to top.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerStackDirection_BottomTop {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerStackDirection_BottomTop", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to How the app icons stack inside the grid drawer. Auto picks the direction that puts the first app closest to the device row based on whether apps sit above or below it..
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerStackDirection_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerStackDirection_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Left to right.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerStackDirection_LeftRight {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerStackDirection_LeftRight", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Right to left.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerStackDirection_RightLeft {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerStackDirection_RightLeft", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Icon stack direction.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerStackDirection_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerStackDirection_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Top to bottom.
+        /// </summary>
+        public static string Settings_Flyout_AppDrawerStackDirection_TopBottom {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_AppDrawerStackDirection_TopBottom", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Always show.
+        /// </summary>
+        public static string Settings_Flyout_CommunicationsButtonVisibility_AlwaysShow {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_CommunicationsButtonVisibility_AlwaysShow", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Controls when the communications ducking button appears in the flyout title-bar. Ducking is the classic &quot;Mute all other sounds by 80%&quot; etc. setting. &quot;When ducking is on&quot; hides it whenever Windows is set to &quot;Do nothing&quot; on the Communications tab..
+        /// </summary>
+        public static string Settings_Flyout_CommunicationsButtonVisibility_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_CommunicationsButtonVisibility_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hidden.
+        /// </summary>
+        public static string Settings_Flyout_CommunicationsButtonVisibility_Hidden {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_CommunicationsButtonVisibility_Hidden", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Communications ducking button.
+        /// </summary>
+        public static string Settings_Flyout_CommunicationsButtonVisibility_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_CommunicationsButtonVisibility_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to When ducking is on.
+        /// </summary>
+        public static string Settings_Flyout_CommunicationsButtonVisibility_WhenDuckingOn {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_CommunicationsButtonVisibility_WhenDuckingOn", resourceCulture);
             }
         }
         
@@ -709,6 +1258,60 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Above slider.
+        /// </summary>
+        public static string Settings_Flyout_DeviceTitlePosition_AboveSlider {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceTitlePosition_AboveSlider", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Below slider.
+        /// </summary>
+        public static string Settings_Flyout_DeviceTitlePosition_BelowSlider {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceTitlePosition_BelowSlider", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Where the device name and per-device action buttons sit relative to the device slider..
+        /// </summary>
+        public static string Settings_Flyout_DeviceTitlePosition_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceTitlePosition_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Device title row position.
+        /// </summary>
+        public static string Settings_Flyout_DeviceTitlePosition_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_DeviceTitlePosition_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Render the flyout&apos;s title bar (Settings cluster and Undock button) at the bottom of the flyout instead of the top..
+        /// </summary>
+        public static string Settings_Flyout_HeaderAtBottom_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_HeaderAtBottom_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Title bar at the bottom.
+        /// </summary>
+        public static string Settings_Flyout_HeaderAtBottom_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_HeaderAtBottom_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to When on, recording devices interleave with playback devices inside each sort bucket. When off, all playback devices show first and recording devices group together at the top of the list..
         /// </summary>
         public static string Settings_Flyout_IntermixRecording_Description {
@@ -716,31 +1319,67 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_Flyout_IntermixRecording_Description", resourceCulture);
             }
         }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Show "Listen to this device" button.
-        /// </summary>
-        public static string Settings_Flyout_ShowListenButton_Title {
-            get {
-                return ResourceManager.GetString("Settings_Flyout_ShowListenButton_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Adds a button to each recording device row that toggles the Windows "Listen to this device" feature..
-        /// </summary>
-        public static string Settings_Flyout_ShowListenButton_Description {
-            get {
-                return ResourceManager.GetString("Settings_Flyout_ShowListenButton_Description", resourceCulture);
-            }
-        }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Intermix recording with playback.
         /// </summary>
         public static string Settings_Flyout_IntermixRecording_Title {
             get {
                 return ResourceManager.GetString("Settings_Flyout_IntermixRecording_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Playback drawers.
+        /// </summary>
+        public static string Settings_Flyout_PlaybackDrawer_Header {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_PlaybackDrawer_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Displaying applications with volume mixer sliders for recording devices is pointless, as recording devices do not go through a volume mixing layer. But this is still here if you want to make the flyout look consistent..
+        /// </summary>
+        public static string Settings_Flyout_RecordingAppDrawerDisplayType_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_RecordingAppDrawerDisplayType_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Icon grid.
+        /// </summary>
+        public static string Settings_Flyout_RecordingAppDrawerDisplayType_Icons {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_RecordingAppDrawerDisplayType_Icons", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Full sliders.
+        /// </summary>
+        public static string Settings_Flyout_RecordingAppDrawerDisplayType_Sliders {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_RecordingAppDrawerDisplayType_Sliders", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to App drawer display type.
+        /// </summary>
+        public static string Settings_Flyout_RecordingAppDrawerDisplayType_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_RecordingAppDrawerDisplayType_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Recording drawers.
+        /// </summary>
+        public static string Settings_Flyout_RecordingDrawer_Header {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_RecordingDrawer_Header", resourceCulture);
             }
         }
         
@@ -768,6 +1407,42 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Flyout_SectionHeader {
             get {
                 return ResourceManager.GetString("Settings_Flyout_SectionHeader", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Suffix the format strip with the live A2DP codec (SBC, AAC, aptX, LDAC, etc.) on Bluetooth playback devices. Independent of the format readout toggle - with that off, the codec name renders alone for Bluetooth devices. Requires running the app elevated; otherwise the codec stays unknown. Off by default..
+        /// </summary>
+        public static string Settings_Flyout_ShowDeviceCodecText_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowDeviceCodecText_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show Bluetooth codec on the format strip.
+        /// </summary>
+        public static string Settings_Flyout_ShowDeviceCodecText_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowDeviceCodecText_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The compact format strip (sample rate, bit depth, channels) drawn under each device name. Right-clicking the strip opens the format picker. Off by default..
+        /// </summary>
+        public static string Settings_Flyout_ShowDeviceFormatText_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowDeviceFormatText_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show default-format readout.
+        /// </summary>
+        public static string Settings_Flyout_ShowDeviceFormatText_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_ShowDeviceFormatText_Title", resourceCulture);
             }
         }
         
@@ -808,6 +1483,42 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Which Windows surface the flyout&apos;s sound-settings titlebar button opens..
+        /// </summary>
+        public static string Settings_Flyout_SoundSettingsTarget_Description {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_SoundSettingsTarget_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Classic Sound control panel.
+        /// </summary>
+        public static string Settings_Flyout_SoundSettingsTarget_Legacy {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_SoundSettingsTarget_Legacy", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Windows Settings app.
+        /// </summary>
+        public static string Settings_Flyout_SoundSettingsTarget_Modern {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_SoundSettingsTarget_Modern", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sound settings button target.
+        /// </summary>
+        public static string Settings_Flyout_SoundSettingsTarget_Title {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_SoundSettingsTarget_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Visibility.
         /// </summary>
         public static string Settings_Flyout_Visibility_Header {
@@ -824,7 +1535,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_AppIcons_Header", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Cancel.
         /// </summary>
@@ -833,7 +1544,61 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_Cancel_Button", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Active glyph.
+        /// </summary>
+        public static string Settings_General_CaptureActivityIndicator_ActiveGlyph {
+            get {
+                return ResourceManager.GetString("Settings_General_CaptureActivityIndicator_ActiveGlyph", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to How the flyout marks apps that currently have the microphone open inside a recording device&apos;s drawer..
+        /// </summary>
+        public static string Settings_General_CaptureActivityIndicator_Description {
+            get {
+                return ResourceManager.GetString("Settings_General_CaptureActivityIndicator_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Dim inactive.
+        /// </summary>
+        public static string Settings_General_CaptureActivityIndicator_DimInactive {
+            get {
+                return ResourceManager.GetString("Settings_General_CaptureActivityIndicator_DimInactive", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hide inactive.
+        /// </summary>
+        public static string Settings_General_CaptureActivityIndicator_HideInactive {
+            get {
+                return ResourceManager.GetString("Settings_General_CaptureActivityIndicator_HideInactive", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Don&apos;t indicate.
+        /// </summary>
+        public static string Settings_General_CaptureActivityIndicator_None {
+            get {
+                return ResourceManager.GetString("Settings_General_CaptureActivityIndicator_None", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Visually indicate actively capturing apps.
+        /// </summary>
+        public static string Settings_General_CaptureActivityIndicator_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_CaptureActivityIndicator_Title", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Currently running from &quot;{0}&quot;..
         /// </summary>
@@ -842,7 +1607,25 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_CurrentlyRunning_Format", resourceCulture);
             }
         }
-
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Only suppress the beep when the peak meter is above this percentage. Lower values are stricter (silence required); higher values let the beep play even over loud audio..
+        /// </summary>
+        public static string Settings_General_DingSuppressionPeakThreshold_Description {
+            get {
+                return ResourceManager.GetString("Settings_General_DingSuppressionPeakThreshold_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Peak meter threshold (%).
+        /// </summary>
+        public static string Settings_General_DingSuppressionPeakThreshold_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_DingSuppressionPeakThreshold_Title", resourceCulture);
+            }
+        }
+        
         /// <summary>
         ///   Looks up a localized string similar to Wait between attempts when an app icon fails to resolve. Four attempts run with linear backoff (1x, 2x, 3x this value), so the worst case with the default is roughly 1.5 seconds before the fallback glyph stays..
         /// </summary>
@@ -851,7 +1634,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_IconRetryInterval_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Icon retry interval (ms).
         /// </summary>
@@ -860,7 +1643,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_General_IconRetryInterval_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Install.
         /// </summary>
@@ -988,7 +1771,7 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Notifications.
+        ///   Looks up a localized string similar to Volume changed ping.
         /// </summary>
         public static string Settings_General_Notifications_Header {
             get {
@@ -1033,7 +1816,7 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Play the Windows default beep when you change the volume on the device slider. Per-app sliders stay silent..
+        ///   Looks up a localized string similar to Play a beep through the playback device whose slider you adjust. Recording devices and per-app sliders stay silent..
         /// </summary>
         public static string Settings_General_PlayDeviceVolumeChangeSound_Description {
             get {
@@ -1042,7 +1825,7 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Play a sound when changing device volume.
+        ///   Looks up a localized string similar to Play a sound when changing playback device volume.
         /// </summary>
         public static string Settings_General_PlayDeviceVolumeChangeSound_Title {
             get {
@@ -1106,6 +1889,42 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Not installed from the Microsoft Store..
+        /// </summary>
+        public static string Settings_General_StoreNotInstalled {
+            get {
+                return ResourceManager.GetString("Settings_General_StoreNotInstalled", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Running from the Microsoft Store install..
+        /// </summary>
+        public static string Settings_General_StoreRunning {
+            get {
+                return ResourceManager.GetString("Settings_General_StoreRunning", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Don&apos;t play the volume-change beep when the device&apos;s peak meter is above zero, so the feedback won&apos;t step on music, calls, or games..
+        /// </summary>
+        public static string Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Description {
+            get {
+                return ResourceManager.GetString("Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Skip the sound when audio is already playing.
+        /// </summary>
+        public static string Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_SuppressDeviceVolumeChangeSoundWhenAudioPlaying_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to System wide.
         /// </summary>
         public static string Settings_General_SystemWide_Title {
@@ -1147,6 +1966,15 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_General_Update_Button {
             get {
                 return ResourceManager.GetString("Settings_General_Update_Button", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Windows Store.
+        /// </summary>
+        public static string Settings_General_WindowsStore_Title {
+            get {
+                return ResourceManager.GetString("Settings_General_WindowsStore_Title", resourceCulture);
             }
         }
         
@@ -1358,6 +2186,24 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Show the volume flyout near the tray icon..
+        /// </summary>
+        public static string Settings_Hotkeys_OpenFlyout_Description {
+            get {
+                return ResourceManager.GetString("Settings_Hotkeys_OpenFlyout_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Open flyout.
+        /// </summary>
+        public static string Settings_Hotkeys_OpenFlyout_Title {
+            get {
+                return ResourceManager.GetString("Settings_Hotkeys_OpenFlyout_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Open this settings window..
         /// </summary>
         public static string Settings_Hotkeys_OpenSettings_Description {
@@ -1462,6 +2308,24 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Theme_BackgroundColor_Title {
             get {
                 return ResourceManager.GetString("Settings_Theme_BackgroundColor_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Context menu.
+        /// </summary>
+        public static string Settings_Theme_ContextMenu_Header {
+            get {
+                return ResourceManager.GetString("Settings_Theme_ContextMenu_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Flyout.
+        /// </summary>
+        public static string Settings_Theme_Flyout_Header {
+            get {
+                return ResourceManager.GetString("Settings_Theme_Flyout_Header", resourceCulture);
             }
         }
         
@@ -1682,6 +2546,42 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Dark theme static tray icon color.
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_DarkTooltip {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_DarkTooltip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Override the tray icon color when Tray icon style is set to Static. Each variant falls back to the default when unset..
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_Description {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Light theme static tray icon color.
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_LightTooltip {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_LightTooltip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Static tray icon color.
+        /// </summary>
+        public static string Settings_Theme_StaticIconColor_Title {
+            get {
+                return ResourceManager.GetString("Settings_Theme_StaticIconColor_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Dark theme text color.
         /// </summary>
         public static string Settings_Theme_TextColor_DarkTooltip {
@@ -1759,6 +2659,15 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Theme_ThemeStyle_Title {
             get {
                 return ResourceManager.GetString("Settings_Theme_ThemeStyle_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Tray icon.
+        /// </summary>
+        public static string Settings_Theme_TrayIcon_Header {
+            get {
+                return ResourceManager.GetString("Settings_Theme_TrayIcon_Header", resourceCulture);
             }
         }
         
@@ -1878,7 +2787,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_DeviceName_Model", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Name.
         /// </summary>
@@ -1887,7 +2796,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_DeviceName_Name", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Name+Model.
         /// </summary>
@@ -1896,7 +2805,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_DeviceName_NameAndModel", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Names longer than this character count are truncated with a 2-dot ellipsis suffix..
         /// </summary>
@@ -1905,7 +2814,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_DeviceNameMaxLength_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Device name max length.
         /// </summary>
@@ -1914,7 +2823,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_DeviceNameMaxLength_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Double left click.
         /// </summary>
@@ -1995,7 +2904,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_MouseWheel_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Which slice of each playback device&apos;s name appears in the tray context menu..
         /// </summary>
@@ -2004,7 +2913,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_PlaybackDeviceName_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Playback device names.
         /// </summary>
@@ -2013,7 +2922,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_PlaybackDeviceName_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Which slice of each recording device&apos;s name appears in the tray context menu..
         /// </summary>
@@ -2022,7 +2931,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_RecordingDeviceName_Description", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Recording device names.
         /// </summary>
@@ -2031,7 +2940,7 @@ namespace VolumeTrayAppWPF.Localization {
                 return ResourceManager.GetString("Settings_TrayIcon_RecordingDeviceName_Title", resourceCulture);
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to Tray Icon.
         /// </summary>
@@ -2281,114 +3190,6 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Uninstaller_UninstallingButton {
             get {
                 return ResourceManager.GetString("Uninstaller_UninstallingButton", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Windows Store.
-        /// </summary>
-        public static string Settings_General_WindowsStore_Title {
-            get {
-                return ResourceManager.GetString("Settings_General_WindowsStore_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Running from the Microsoft Store install.
-        /// </summary>
-        public static string Settings_General_StoreRunning {
-            get {
-                return ResourceManager.GetString("Settings_General_StoreRunning", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Not installed from the Microsoft Store.
-        /// </summary>
-        public static string Settings_General_StoreNotInstalled {
-            get {
-                return ResourceManager.GetString("Settings_General_StoreNotInstalled", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Open flyout.
-        /// </summary>
-        public static string Settings_Hotkeys_OpenFlyout_Title {
-            get {
-                return ResourceManager.GetString("Settings_Hotkeys_OpenFlyout_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Show the volume flyout near the tray icon.
-        /// </summary>
-        public static string Settings_Hotkeys_OpenFlyout_Description {
-            get {
-                return ResourceManager.GetString("Settings_Hotkeys_OpenFlyout_Description", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Static tray icon color.
-        /// </summary>
-        public static string Settings_Theme_StaticIconColor_Title {
-            get {
-                return ResourceManager.GetString("Settings_Theme_StaticIconColor_Title", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Override the tray icon color when Tray icon style is set to Static. Each variant falls back to the default when unset.
-        /// </summary>
-        public static string Settings_Theme_StaticIconColor_Description {
-            get {
-                return ResourceManager.GetString("Settings_Theme_StaticIconColor_Description", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Light theme static tray icon color.
-        /// </summary>
-        public static string Settings_Theme_StaticIconColor_LightTooltip {
-            get {
-                return ResourceManager.GetString("Settings_Theme_StaticIconColor_LightTooltip", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Dark theme static tray icon color.
-        /// </summary>
-        public static string Settings_Theme_StaticIconColor_DarkTooltip {
-            get {
-                return ResourceManager.GetString("Settings_Theme_StaticIconColor_DarkTooltip", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Context menu.
-        /// </summary>
-        public static string Settings_Theme_ContextMenu_Header {
-            get {
-                return ResourceManager.GetString("Settings_Theme_ContextMenu_Header", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Flyout.
-        /// </summary>
-        public static string Settings_Theme_Flyout_Header {
-            get {
-                return ResourceManager.GetString("Settings_Theme_Flyout_Header", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Tray icon.
-        /// </summary>
-        public static string Settings_Theme_TrayIcon_Header {
-            get {
-                return ResourceManager.GetString("Settings_Theme_TrayIcon_Header", resourceCulture);
             }
         }
     }
