@@ -641,10 +641,12 @@ public class AppSettings
     public bool ShowLockButtonForPlayback { get; set; } = true;
     public bool ShowEqualizerAPOButtonForPlayback { get; set; } = true;
     public bool ShowDefaultDeviceButtonForPlayback { get; set; } = true;
+    public bool ShowBatteryButtonForPlayback { get; set; } = true;
     public bool ShowLockButtonForRecording { get; set; } = true;
     public bool ShowEqualizerAPOButtonForRecording { get; set; } = true;
     public bool ShowListenButtonForRecording { get; set; } = true;
     public bool ShowDefaultDeviceButtonForRecording { get; set; } = true;
+    public bool ShowBatteryButtonForRecording { get; set; } = true;
 
     // Compact PKEY_AudioEngine_DeviceFormat readout under the device name. Off by default - the strip is
     // niche diagnostic info, not something most users want eating row space. Toggling on / off just

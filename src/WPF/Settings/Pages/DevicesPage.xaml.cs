@@ -42,11 +42,13 @@ public partial class DevicesPage : UserControl
             ShowPlaybackLockButtonToggle.IsChecked = settings.ShowLockButtonForPlayback;
             ShowPlaybackEqualizerAPOButtonToggle.IsChecked = settings.ShowEqualizerAPOButtonForPlayback;
             ShowPlaybackDefaultDeviceButtonToggle.IsChecked = settings.ShowDefaultDeviceButtonForPlayback;
+            ShowPlaybackBatteryButtonToggle.IsChecked = settings.ShowBatteryButtonForPlayback;
 
             ShowRecordingLockButtonToggle.IsChecked = settings.ShowLockButtonForRecording;
             ShowRecordingEqualizerAPOButtonToggle.IsChecked = settings.ShowEqualizerAPOButtonForRecording;
             ShowRecordingListenButtonToggle.IsChecked = settings.ShowListenButtonForRecording;
             ShowRecordingDefaultDeviceButtonToggle.IsChecked = settings.ShowDefaultDeviceButtonForRecording;
+            ShowRecordingBatteryButtonToggle.IsChecked = settings.ShowBatteryButtonForRecording;
         }
         finally
         {

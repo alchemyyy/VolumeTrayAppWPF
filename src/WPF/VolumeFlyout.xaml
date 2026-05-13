@@ -31,6 +31,8 @@
         <wpf:TitleRowVerticalOffsetConverter x:Key="TitleRowVerticalOffset"/>
         <wpf:DeviceFormatLineTextConverter x:Key="DeviceFormatLineText"/>
         <wpf:DeviceFormatLineVisibilityConverter x:Key="DeviceFormatLineVisibility"/>
+        <wpf:BatteryGlyphConverter x:Key="BatteryGlyph"/>
+        <wpf:BatteryButtonVisibilityConverter x:Key="BatteryButtonVisibility"/>
         <utils:DeviceButtonVisibilityConverter x:Key="DeviceButtonVisibility"/>
 
         <!-- Per-cell slot size for the icon grid drawer. Lifted into the resource dictionary as a
@@ -502,11 +504,13 @@
                      distinct rows.
                      Column layout left to right:
                        0  device name (takes remaining width)
-                       1  exclusive-mode toggle (lock / unlock)
-                       2  Equalizer APO state / install
-                       3  Listen-to-this-device (capture endpoints only; collapses to zero on render)
-                       4  device icon (set as default / enable-disable hub)
-                       5  app-drawer expand / collapse chevron (rightmost; hidden when the cell has
+                       1  Bluetooth battery indicator (BT devices that report a level only;
+                          collapses to zero on every other endpoint)
+                       2  exclusive-mode toggle (lock / unlock)
+                       3  Equalizer APO state / install
+                       4  Listen-to-this-device (capture endpoints only; collapses to zero on render)
+                       5  device icon (set as default / enable-disable hub)
+                       6  app-drawer expand / collapse chevron (rightmost; hidden when the cell has
                           no visible groups). -->
                 <Grid Grid.Row="{Binding DeviceTitleRowIndex, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                       Margin="-1,-4,0,6">
@@ -529,6 +533,7 @@
                     </Grid.RenderTransform>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -619,13 +624,46 @@
                             </TextBlock>
                         </Canvas>
                     </Grid>
+                    <!-- Bluetooth battery indicator. Leftmost of the device-control cluster.
+                         Glyph swaps between BATTERY_0..BATTERY_10 via BatteryGlyphConverter
+                         (10% buckets, round-to-nearest). Visibility collapses whenever
+                         AudioDevice.BatteryLevel is null - covers non-BT endpoints and any BT
+                         device that doesn't surface a battery reading - so the column folds to
+                         zero width and the row reads exactly as it did before this feature on
+                         devices without a battery. No click behavior; ToolTip carries the
+                         exact remaining percent. -->
+                    <Button x:Name="BatteryButton" Grid.Column="1"
+                            Margin="0,3,0,-3"
+                            Tag="{Binding}"
+                            IsHitTestVisible="True"
+                            Focusable="False">
+                        <Button.Visibility>
+                            <MultiBinding Converter="{StaticResource BatteryButtonVisibility}">
+                                <Binding Path="BatteryLevel"/>
+                                <Binding Path="IsCaptureDevice"/>
+                                <Binding Path="ShowBatteryButtonForPlayback" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                <Binding Path="ShowBatteryButtonForRecording" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                            </MultiBinding>
+                        </Button.Visibility>
+                        <Button.ToolTip>
+                            <Binding Path="BatteryLevel" StringFormat="{loc:Loc Flyout_BatteryButton_Tooltip_Format}"/>
+                        </Button.ToolTip>
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}"/>
+                        </Button.Style>
+                        <TextBlock Text="{Binding BatteryLevel, Converter={StaticResource BatteryGlyph}}"
+                                   FontFamily="{StaticResource IconFontFamily}"
+                                   FontSize="15"
+                                   Foreground="{DynamicResource ThemeIconForeground}"/>
+                    </Button>
+
                     <!-- Exclusive-mode toggle. Three visual states driven by two bindings:
                            IsExclusiveModeAllowed=False  -> Unlock glyph, dimmed (mmsys.cpl checkbox off)
                            IsExclusiveModeAllowed=True,  IsExclusiveControlHeld=False -> Unlock, full bright
                            IsExclusiveModeAllowed=True,  IsExclusiveControlHeld=True  -> Lock,   full bright
                          Click toggles the allow bit on the endpoint. Held / not-held is observed
                          from the audio engine, not user-toggleable from this button. -->
-                    <Button x:Name="ExclusiveModeButton" Grid.Column="1"
+                    <Button x:Name="ExclusiveModeButton" Grid.Column="2"
                             Margin="0,3,0,-3"
                             Tag="{Binding}"
                             Click="ExclusiveModeButton_Click">
@@ -678,7 +716,7 @@
                          (full bright) when the APO binary can't be found anywhere on the system. Click
                          is a two-state toggle (Running -> uninstall; everything else -> install + enable);
                          NotAvailable click routes through the not-available dialog in code-behind. -->
-                    <Button x:Name="EqualizerAPOButton" Grid.Column="2"
+                    <Button x:Name="EqualizerAPOButton" Grid.Column="3"
                             Margin="0,3,0,-3"
                             Tag="{Binding}"
                             Click="EqualizerAPOButton_Click"
@@ -765,7 +803,7 @@
                          playback device" (pid 0 deleted). Right click opens a context menu to pick
                          a specific target. Opacity binds to (listening AND target active) so the
                          button reads dim whenever no audio is actually flowing. -->
-                    <Button x:Name="ListenButton" Grid.Column="3"
+                    <Button x:Name="ListenButton" Grid.Column="4"
                             Margin="0,3,0,-3"
                             Tag="{Binding}"
                             Click="ListenButton_Click"
@@ -794,7 +832,7 @@
                                    FontSize="15"
                                    Foreground="{DynamicResource ThemeIconForeground}"/>
                     </Button>
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="5"
                             Style="{StaticResource DeviceIconButtonStyle}"
                             Margin="0,3,0,-3"
                             Tag="{Binding}"
@@ -846,7 +884,7 @@
                          disables clicks). The glyph swaps between CHEVRON_UP (drawer expanded, or
                          the no-drawer placeholder) and CHEVRON_DOWN (drawer present but collapsed,
                          click to expand). -->
-                    <Button x:Name="AppDrawerToggleButton" Grid.Column="5"
+                    <Button x:Name="AppDrawerToggleButton" Grid.Column="6"
                             Margin="0,3,-1,-3"
                             DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContentControl}}}"
                             Tag="{Binding}"

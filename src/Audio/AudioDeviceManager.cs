@@ -58,6 +58,11 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     // stays null on every device.
     private readonly BluetoothCodecMonitor _codecMonitor;
 
+    // Event-driven battery monitor keyed by PnP container id. Reads Windows' aggregated
+    // DEVPKEY_Bluetooth_Battery (covers BLE GATT, HFP IPHONEACCEV, HID battery reports) and
+    // fans changes out to every AudioDevice sharing that container.
+    private readonly BluetoothBatteryMonitor _batteryMonitor;
+
     private AudioDevice? _defaultDevice;
     private AudioDevice? _defaultCommunicationsDevice;
     private AudioDevice? _defaultCaptureDevice;
@@ -104,6 +109,13 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// service-level flags, not for codec readout.
     /// </summary>
     public BluetoothCodecMonitor CodecMonitor => _codecMonitor;
+
+    /// <summary>
+    /// Bluetooth battery monitor. Exposed so UI can bind to its <see cref="BluetoothBatteryMonitor.IsRunning"/>
+    /// flag for diagnostics. Per-device battery readout is already surfaced as
+    /// <see cref="AudioDevice.BatteryLevel"/>.
+    /// </summary>
+    public BluetoothBatteryMonitor BatteryMonitor => _batteryMonitor;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -169,6 +181,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         _codecMonitor.CodecChanged += OnBluetoothCodecChanged;
         _codecMonitor.Start();
         PropagateCodecToBluetoothDevices(_codecMonitor.CurrentCodec);
+
+        // Bluetooth battery monitor. No elevation requirement; DeviceWatcher events fan in
+        // through OnBluetoothBatteryChanged on the dispatcher. The first burst of Added events
+        // after Start() will retroactively seed BatteryLevel on any wrapper whose container id
+        // matches a paired BT device that already had a cached battery reading.
+        _batteryMonitor = new BluetoothBatteryMonitor(dispatcher);
+        _batteryMonitor.BatteryChanged += OnBluetoothBatteryChanged;
+        _batteryMonitor.Start();
     }
 
     private double ResolveRenderIntervalMs()
@@ -357,6 +377,13 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
                 if (wrapped.IsBluetooth && wrapped.DataFlow == EDataFlow.eRender)
                 {
                     wrapped.CurrentCodec = _codecMonitor.CurrentCodec;
+                }
+                // Seed cached battery for either flow - capture (HFP) and render (A2DP) on the
+                // same headset share a container id, so both should pick up whatever level the
+                // monitor has recorded without waiting for the next DeviceWatcher tick.
+                if (wrapped.IsBluetooth && wrapped.ContainerId is Guid container)
+                {
+                    wrapped.BatteryLevel = _batteryMonitor.TryGet(container);
                 }
             }
         }
@@ -691,6 +718,20 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         }
     }
 
+    // BatteryMonitor fires this on the dispatcher whenever a tracked container's battery
+    // transitions. Fan out to every wrapper (render and capture - a single BT headset typically
+    // exposes both an A2DP render endpoint and a HFP capture endpoint that share the same
+    // container, and both rows should show the same level).
+    private void OnBluetoothBatteryChanged(Guid containerId, int? batteryPercent)
+    {
+        foreach (AudioDevice d in _devices)
+        {
+            if (!d.IsBluetooth) continue;
+            if (d.ContainerId != containerId) continue;
+            d.BatteryLevel = batteryPercent;
+        }
+    }
+
     // True when at least one Bluetooth render endpoint is currently Active. Drives the codec
     // reset path: when the last BT device disconnects the cached codec from the monitor is
     // stale (the ETW provider only emits on stream start / reconfigure, never on stream stop),
@@ -726,6 +767,9 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
         _codecMonitor.CodecChanged -= OnBluetoothCodecChanged;
         Safe.Dispose(_codecMonitor);
+
+        _batteryMonitor.BatteryChanged -= OnBluetoothBatteryChanged;
+        Safe.Dispose(_batteryMonitor);
 
         try { _enumerator.UnregisterEndpointNotificationCallback(_bridge); } catch { }
 

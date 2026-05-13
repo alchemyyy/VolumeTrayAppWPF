@@ -196,6 +196,16 @@
             </utils:SettingsCard.Control>
         </utils:SettingsCard>
 
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowPlaybackBatteryButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowPlaybackBatteryButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowPlaybackBatteryButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowBatteryButtonForPlayback" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
         <TextBlock Text="{loc:Loc Settings_Devices_RecordingButtons_Header}" Style="{StaticResource SubsectionHeaderStyle}"/>
 
         <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowRecordingLockButton_Title}"
@@ -234,6 +244,16 @@
                 <CheckBox x:Name="ShowRecordingDefaultDeviceButtonToggle"
                           Style="{StaticResource ToggleSwitchStyle}"
                           Tag="ShowDefaultDeviceButtonForRecording" Checked="BoolToggle_Changed"
+                          Unchecked="BoolToggle_Changed"/>
+            </utils:SettingsCard.Control>
+        </utils:SettingsCard>
+
+        <utils:SettingsCard Title="{loc:Loc Settings_Devices_ShowRecordingBatteryButton_Title}"
+                            Description="{loc:Loc Settings_Devices_ShowRecordingBatteryButton_Description}">
+            <utils:SettingsCard.Control>
+                <CheckBox x:Name="ShowRecordingBatteryButtonToggle"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          Tag="ShowBatteryButtonForRecording" Checked="BoolToggle_Changed"
                           Unchecked="BoolToggle_Changed"/>
             </utils:SettingsCard.Control>
         </utils:SettingsCard>

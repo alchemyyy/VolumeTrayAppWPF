@@ -181,10 +181,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     public bool ShowLockButtonForPlayback => _appSettings?.ShowLockButtonForPlayback ?? true;
     public bool ShowEqualizerAPOButtonForPlayback => _appSettings?.ShowEqualizerAPOButtonForPlayback ?? true;
     public bool ShowDefaultDeviceButtonForPlayback => _appSettings?.ShowDefaultDeviceButtonForPlayback ?? true;
+    public bool ShowBatteryButtonForPlayback => _appSettings?.ShowBatteryButtonForPlayback ?? true;
     public bool ShowLockButtonForRecording => _appSettings?.ShowLockButtonForRecording ?? true;
     public bool ShowEqualizerAPOButtonForRecording => _appSettings?.ShowEqualizerAPOButtonForRecording ?? true;
     public bool ShowListenButtonForRecording => _appSettings?.ShowListenButtonForRecording ?? true;
     public bool ShowDefaultDeviceButtonForRecording => _appSettings?.ShowDefaultDeviceButtonForRecording ?? true;
+    public bool ShowBatteryButtonForRecording => _appSettings?.ShowBatteryButtonForRecording ?? true;
 
     // Bound by the device-format readout Canvas in DeviceRowTemplate. Defaults false to match the
     // shipped AppSettings default (strip hidden) when settings aren't wired (test harness / early init).
@@ -409,10 +411,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(ShowLockButtonForPlayback));
             OnPropertyChanged(nameof(ShowEqualizerAPOButtonForPlayback));
             OnPropertyChanged(nameof(ShowDefaultDeviceButtonForPlayback));
+            OnPropertyChanged(nameof(ShowBatteryButtonForPlayback));
             OnPropertyChanged(nameof(ShowLockButtonForRecording));
             OnPropertyChanged(nameof(ShowEqualizerAPOButtonForRecording));
             OnPropertyChanged(nameof(ShowListenButtonForRecording));
             OnPropertyChanged(nameof(ShowDefaultDeviceButtonForRecording));
+            OnPropertyChanged(nameof(ShowBatteryButtonForRecording));
             OnPropertyChanged(nameof(ShowDeviceFormatText));
             OnPropertyChanged(nameof(ShowDeviceCodecText));
             OnPropertyChanged(nameof(DeviceTitleRowIndex));

@@ -101,10 +101,22 @@ internal struct PROPVARIANT
     public const ushort VT_UI4 = 19;
     public const ushort VT_LPWSTR = 31;
     public const ushort VT_BLOB = 65;
+    public const ushort VT_CLSID = 72;
 
     public string? GetString() => vt == VT_LPWSTR ? Marshal.PtrToStringUni(p1) : null;
 
     public uint GetUInt32() => vt == VT_UI4 ? (uint)p1.ToInt64() : 0u;
+
+    // VT_CLSID: p1 holds a pointer to a 16-byte GUID. Returns null on type mismatch / null
+    // pointer so callers don't have to recheck vt. Used to read PKEY_Device_ContainerId,
+    // which DEVPROP_TYPE_GUID maps to VT_CLSID through IPropertyStore.
+    public Guid? GetGuid()
+    {
+        if (vt != VT_CLSID || p1 == IntPtr.Zero) return null;
+        byte[] buf = new byte[16];
+        Marshal.Copy(p1, buf, 0, 16);
+        return new Guid(buf);
+    }
 
     // VT_BLOB: low 32 bits of p1 hold cbSize (rest is alignment padding), p2 holds the data
     // pointer. Returns null on type mismatch or empty payload so callers don't have to recheck vt.
@@ -148,6 +160,14 @@ internal static class PropertyKeys
     // PKEY_Device_FriendlyName / PKEY_Device_DeviceDesc); pid 24 is documented in devpkey.h.
     public static readonly PROPERTYKEY PKEY_Device_EnumeratorName = new(
         new Guid(0xA45C254E, 0xDF1C, 0x4EFD, 0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0), 24);
+
+    // DEVPKEY_Device_ContainerId - the GUID of the physical "container" a PnP device belongs to.
+    // Every interface a single physical device exposes (audio render endpoint, audio capture
+    // endpoint, HID, the Bluetooth radio node itself) inherits the same container id, so this is
+    // the canonical key for matching an audio endpoint to the Bluetooth devnode that backs it.
+    // VT_CLSID through IPropertyStore. Documented in devpkey.h; pid 2.
+    public static readonly PROPERTYKEY PKEY_Device_ContainerId = new(
+        new Guid(0x8C7ED206, 0x3F8A, 0x4827, 0xB3, 0xAB, 0xAE, 0x9E, 0x1F, 0xAE, 0xFC, 0x6C), 2);
 
     // 'Listen to this device' state on capture endpoints, mirroring the checkbox under
     // Sound > Recording > [Mic Properties] > Listen tab. Stored as VT_BOOL (VARIANT_TRUE / FALSE)

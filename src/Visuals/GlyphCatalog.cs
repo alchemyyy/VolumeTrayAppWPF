@@ -111,6 +111,18 @@ internal static class GlyphCatalog
     public const string APP_FALLBACK = "\uE978";      // Presence Chicklet
 
 
+    public const string BATTERY_0 = "\uF5F2"; // Vertical Battery 0
+    public const string BATTERY_1 = "\uF5F3"; // Vertical Battery 1
+    public const string BATTERY_2 = "\uF5F4"; // Vertical Battery 2
+    public const string BATTERY_3 = "\uF5F5"; // Vertical Battery 3
+    public const string BATTERY_4 = "\uF5F6"; // Vertical Battery 4
+    public const string BATTERY_5 = "\uF5F7"; // Vertical Battery 5
+    public const string BATTERY_6 = "\uF5F8"; // Vertical Battery 6
+    public const string BATTERY_7 = "\uF5F9"; // Vertical Battery 7
+    public const string BATTERY_8 = "\uF5FA"; // Vertical Battery 8
+    public const string BATTERY_9 = "\uF5FB"; // Vertical Battery 9
+    public const string BATTERY_10 = "\uF5FC"; // Vertical Battery 10
+
 
     // ===========================================================================
     // Window-chrome caption glyphs

@@ -210,6 +210,72 @@ internal sealed class DeviceFormatLineVisibilityConverter : IMultiValueConverter
 }
 
 /// <summary>
+/// Maps a Bluetooth battery level (int? percent, 0-100) onto one of the eleven BATTERY_N glyphs.
+/// Buckets in 10% steps with round-to-nearest, so 0-4% reads as BATTERY_0, 5-14% as BATTERY_1,
+/// ... 95-100% as BATTERY_10. Null collapses to BATTERY_0; the row's Visibility binding hides
+/// the whole button in that case, so the glyph picked here is never actually seen.
+/// </summary>
+internal sealed class BatteryGlyphConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not int level) return GlyphCatalog.BATTERY_0;
+
+        int index = (int)Math.Round(level / 10.0);
+        if (index < 0) index = 0;
+        if (index > 10) index = 10;
+
+        return index switch
+        {
+            0 => GlyphCatalog.BATTERY_0,
+            1 => GlyphCatalog.BATTERY_1,
+            2 => GlyphCatalog.BATTERY_2,
+            3 => GlyphCatalog.BATTERY_3,
+            4 => GlyphCatalog.BATTERY_4,
+            5 => GlyphCatalog.BATTERY_5,
+            6 => GlyphCatalog.BATTERY_6,
+            7 => GlyphCatalog.BATTERY_7,
+            8 => GlyphCatalog.BATTERY_8,
+            9 => GlyphCatalog.BATTERY_9,
+            _ => GlyphCatalog.BATTERY_10,
+        };
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Visibility for the per-row battery button. Extends the standard device-button visibility rule
+/// (capture rows read the recording flag, render rows read the playback flag) with a fourth input:
+/// the battery level must be known. A null level collapses the button so non-BT devices and BT
+/// devices that don't surface a battery reading stay clean.
+///
+/// MultiBinding inputs (in declared order):
+///   [0]=BatteryLevel (int?)  [1]=IsCaptureDevice (bool)
+///   [2]=ShowBatteryButtonForPlayback (bool)  [3]=ShowBatteryButtonForRecording (bool)
+/// </summary>
+internal sealed class BatteryButtonVisibilityConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length < 4) return Visibility.Collapsed;
+
+        if (values[0] is not int) return Visibility.Collapsed;
+
+        bool isCapture = values[1] is true;
+        bool showForPlayback = values[2] is true;
+        bool showForRecording = values[3] is true;
+
+        bool show = isCapture ? showForRecording : showForPlayback;
+        return show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// Y offset (positive = down) applied via TranslateTransform to the device title band when the
 /// FlyoutDeviceTitlePosition setting is AboveSlider. Anchors the title's visual bottom to the top
 /// of the percent textblock (the volume-level indicator) so the title sits flush against the

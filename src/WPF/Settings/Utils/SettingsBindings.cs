@@ -49,10 +49,12 @@ public static class SettingsBindings
         ["ShowLockButtonForPlayback"] = (s, v) => s.ShowLockButtonForPlayback = v,
         ["ShowEqualizerAPOButtonForPlayback"] = (s, v) => s.ShowEqualizerAPOButtonForPlayback = v,
         ["ShowDefaultDeviceButtonForPlayback"] = (s, v) => s.ShowDefaultDeviceButtonForPlayback = v,
+        ["ShowBatteryButtonForPlayback"] = (s, v) => s.ShowBatteryButtonForPlayback = v,
         ["ShowLockButtonForRecording"] = (s, v) => s.ShowLockButtonForRecording = v,
         ["ShowEqualizerAPOButtonForRecording"] = (s, v) => s.ShowEqualizerAPOButtonForRecording = v,
         ["ShowListenButtonForRecording"] = (s, v) => s.ShowListenButtonForRecording = v,
         ["ShowDefaultDeviceButtonForRecording"] = (s, v) => s.ShowDefaultDeviceButtonForRecording = v,
+        ["ShowBatteryButtonForRecording"] = (s, v) => s.ShowBatteryButtonForRecording = v,
         ["ShowDeviceFormatText"] = (s, v) => s.ShowDeviceFormatText = v,
         ["ShowDeviceCodecText"] = (s, v) => s.ShowDeviceCodecText = v,
     };

@@ -941,6 +941,12 @@ Target: {1}</value>
   <data name="Settings_Devices_ShowPlaybackDefaultDeviceButton_Description" xml:space="preserve">
     <value>The device icon button on the right edge of the row. Left-click sets default, right-click opens the device menu.</value>
   </data>
+  <data name="Settings_Devices_ShowPlaybackBatteryButton_Title" xml:space="preserve">
+    <value>Show Bluetooth battery indicator</value>
+  </data>
+  <data name="Settings_Devices_ShowPlaybackBatteryButton_Description" xml:space="preserve">
+    <value>A battery glyph on Bluetooth playback rows showing the remaining charge reported by the headset / speaker. Hidden automatically on devices that don't report a battery level.</value>
+  </data>
   <data name="Settings_Devices_RecordingButtons_Header" xml:space="preserve">
     <value>Recording row buttons</value>
   </data>
@@ -967,6 +973,15 @@ Target: {1}</value>
   </data>
   <data name="Settings_Devices_ShowRecordingDefaultDeviceButton_Description" xml:space="preserve">
     <value>The device icon button on the right edge of the row. Left-click sets default, right-click opens the device menu.</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingBatteryButton_Title" xml:space="preserve">
+    <value>Show Bluetooth battery indicator</value>
+  </data>
+  <data name="Settings_Devices_ShowRecordingBatteryButton_Description" xml:space="preserve">
+    <value>A battery glyph on Bluetooth recording rows showing the remaining charge reported by the headset. Hidden automatically on devices that don't report a battery level.</value>
+  </data>
+  <data name="Flyout_BatteryButton_Tooltip_Format" xml:space="preserve">
+    <value>Battery: {0}%</value>
   </data>
   <data name="Settings_Devices_ShowTrayRecordingLink_Title" xml:space="preserve">
     <value>Show "Recording" link in tray menu</value>

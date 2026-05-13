@@ -78,6 +78,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private EqualizerAPOState _equalizerAPOState;
     private DeviceState _state;
     private BluetoothCodec? _currentCodec;
+    private int? _batteryLevel;
     private bool _disposed;
 
     // Single-flight gate for IPolicyConfig calls on this device. SetEnabled / SetAsDefault /
@@ -126,6 +127,17 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     public bool IsBluetooth { get; }
 
     /// <summary>
+    /// PnP container id this endpoint belongs to, read from PKEY_Device_ContainerId. Every
+    /// interface a single physical device exposes (this audio endpoint, the Bluetooth radio
+    /// devnode, HID battery reports, etc.) inherits the same GUID, so this is what
+    /// <see cref="BluetoothBatteryMonitor"/> keys its battery map on to attribute a level to
+    /// the right wrapper. Null when the property store doesn't carry the key - common for
+    /// virtual / synthetic devices and for any non-Bluetooth endpoint we never query against.
+    /// Stable for the lifetime of the wrapper.
+    /// </summary>
+    public Guid? ContainerId { get; }
+
+    /// <summary>
     /// Last A2DP codec the Bluetooth stack negotiated for this endpoint, pushed in by
     /// <see cref="AudioDeviceManager"/> from <see cref="BluetoothCodecMonitor"/>. Always null on
     /// non-Bluetooth endpoints. The Microsoft.Windows.Bluetooth.BthA2dp ETW event the monitor
@@ -151,6 +163,31 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// without needing a value converter.
     /// </summary>
     public string CurrentCodecName => _currentCodec?.FriendlyName ?? string.Empty;
+
+    /// <summary>
+    /// Battery percentage (0-100) most recently reported for the Bluetooth device backing this
+    /// endpoint, or null when unknown - the device doesn't report battery, isn't paired, or hasn't
+    /// been queried yet. Pushed in by <see cref="AudioDeviceManager"/> from
+    /// <see cref="BluetoothBatteryMonitor"/>, keyed by <see cref="ContainerId"/>. Always null on
+    /// non-Bluetooth endpoints.
+    /// </summary>
+    public int? BatteryLevel
+    {
+        get => _batteryLevel;
+        internal set
+        {
+            if (_batteryLevel == value) return;
+            _batteryLevel = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(BatteryLevelText));
+        }
+    }
+
+    /// <summary>
+    /// Convenience projection for XAML bindings: "85%" when battery is known, empty string when
+    /// not. Lets a TextBlock collapse via EmptyToVisibility without needing a value converter.
+    /// </summary>
+    public string BatteryLevelText => _batteryLevel.HasValue ? _batteryLevel.Value + "%" : string.Empty;
 
     public string FriendlyName
     {
@@ -809,6 +846,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         (_friendlyName, _deviceDescription, _interfaceFriendlyName) = ResolveDeviceNames(device);
         _defaultFormat = ResolveDefaultFormat(device);
         IsBluetooth = DetectIsBluetooth(device, _friendlyName, _deviceDescription, _interfaceFriendlyName);
+        ContainerId = ReadContainerId(device);
 
         device.GetState(out uint stateRaw);
         _state = (DeviceState)stateRaw;
@@ -1648,6 +1686,25 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             PROPERTYKEY key = PropertyKeys.PKEY_Device_EnumeratorName;
             store.GetValue(ref key, out PROPVARIANT pv);
             try { return pv.GetString(); }
+            finally { Ole32.PropVariantClear(ref pv); }
+        }
+        catch { return null; }
+        finally { Safe.Release(store); }
+    }
+
+    // Reads PKEY_Device_ContainerId off the audio endpoint property store. Returns null on
+    // missing property / wrong type / COM exception. The audio endpoint inherits the container
+    // id from its underlying PnP device, so for a Bluetooth headset this matches the GUID that
+    // BluetoothBatteryMonitor reads from the corresponding devnode.
+    private static Guid? ReadContainerId(IMMDevice device)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            device.OpenPropertyStore(Stgm.Read, out store);
+            PROPERTYKEY key = PropertyKeys.PKEY_Device_ContainerId;
+            store.GetValue(ref key, out PROPVARIANT pv);
+            try { return pv.GetGuid(); }
             finally { Ole32.PropVariantClear(ref pv); }
         }
         catch { return null; }
