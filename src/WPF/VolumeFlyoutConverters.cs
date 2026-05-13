@@ -138,6 +138,78 @@ internal sealed class DeviceIconOpacityConverter : IValueConverter
 }
 
 /// <summary>
+/// Builds the composite text drawn under each device's name. Combines two independent toggles
+/// (ShowDeviceFormatText, ShowDeviceCodecText) with the device-side inputs to emit one of four
+/// shapes:
+///   format on, codec on, BT device with codec  -> "FORMAT, CODEC"
+///   format on, codec off (or non-BT, or codec empty) -> "FORMAT"
+///   format off, codec on, BT device with codec -> "CODEC"
+///   format off, codec off (or both inputs empty) -> ""  (Canvas visibility collapses on empty)
+///
+/// MultiBinding inputs (in declared order):
+///   [0]=DefaultFormat (string?)  [1]=IsBluetooth (bool)  [2]=CurrentCodecName (string)
+///   [3]=ShowDeviceFormatText (bool)  [4]=ShowDeviceCodecText (bool)
+/// </summary>
+internal sealed class DeviceFormatLineTextConverter : IMultiValueConverter
+{
+    public static readonly DeviceFormatLineTextConverter Instance = new();
+
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length < 5) return string.Empty;
+
+        string format = values[0] as string ?? string.Empty;
+        bool isBluetooth = values[1] is true;
+        string codec = values[2] as string ?? string.Empty;
+        bool showFormat = values[3] is true;
+        bool showCodec = values[4] is true;
+
+        bool formatShown = showFormat && format.Length > 0;
+        bool codecShown = showCodec && isBluetooth && codec.Length > 0;
+
+        if (formatShown && codecShown) return format + ", " + codec;
+        if (formatShown) return format;
+        if (codecShown) return codec;
+        return string.Empty;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Visibility companion to <see cref="DeviceFormatLineTextConverter"/>. Mirrors its activation
+/// rules and returns Visible whenever the converter would emit a non-empty string. Used on the
+/// hosting Canvas so the format strip collapses cleanly when both lines are suppressed (no row
+/// metric shift either way - the Canvas is zero-measure).
+///
+/// Inputs match <see cref="DeviceFormatLineTextConverter"/> exactly.
+/// </summary>
+internal sealed class DeviceFormatLineVisibilityConverter : IMultiValueConverter
+{
+    public static readonly DeviceFormatLineVisibilityConverter Instance = new();
+
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length < 5) return Visibility.Collapsed;
+
+        string format = values[0] as string ?? string.Empty;
+        bool isBluetooth = values[1] is true;
+        string codec = values[2] as string ?? string.Empty;
+        bool showFormat = values[3] is true;
+        bool showCodec = values[4] is true;
+
+        bool formatShown = showFormat && format.Length > 0;
+        bool codecShown = showCodec && isBluetooth && codec.Length > 0;
+
+        return (formatShown || codecShown) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// Y offset (positive = down) applied via TranslateTransform to the device title band when the
 /// FlyoutDeviceTitlePosition setting is AboveSlider. Anchors the title's visual bottom to the top
 /// of the percent textblock (the volume-level indicator) so the title sits flush against the

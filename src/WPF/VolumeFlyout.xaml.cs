@@ -130,8 +130,9 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// <summary>
     /// Mirror of the system-wide "When Windows detects communications activity" preference. True
     /// for any active ducking mode (mute, reduce 80%, reduce 50%); false only when the user has
-    /// explicitly picked "Do nothing" in mmsys.cpl. Re-read on every Show so external changes flow
-    /// in on next open. Drives the titlebar communications button's glyph opacity.
+    /// explicitly picked "Do nothing" in mmsys.cpl. Updated live by the registry watcher while the
+    /// flyout is visible. Drives the titlebar communications button's glyph opacity and (in the
+    /// WhenDuckingOn visibility mode) its Visibility.
     /// </summary>
     public bool IsCommunicationsDuckingActive
     {
@@ -141,8 +142,23 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             if (_isCommunicationsDuckingActive == value) return;
             _isCommunicationsDuckingActive = value;
             OnPropertyChanged();
+            // ShowCommunicationsButton transitively depends on this flag in WhenDuckingOn mode.
+            OnPropertyChanged(nameof(ShowCommunicationsButton));
         }
     }
+
+    /// <summary>
+    /// Resolved visibility for the titlebar communications-activity button. Cross of the user's
+    /// FlyoutCommunicationsButtonVisibility setting and the live ducking state. Hidden never paints
+    /// the button; AlwaysShow always paints; WhenDuckingOn paints only while ducking is active.
+    /// </summary>
+    public bool ShowCommunicationsButton =>
+        (_appSettings?.FlyoutCommunicationsButtonVisibility ?? CommunicationsButtonVisibility.AlwaysShow) switch
+        {
+            CommunicationsButtonVisibility.Hidden => false,
+            CommunicationsButtonVisibility.WhenDuckingOn => _isCommunicationsDuckingActive,
+            _ => true,
+        };
 
     /// <summary>
     /// Drives the undock-button visibility from settings. Toggling this off while the flyout is
@@ -173,6 +189,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // Bound by the device-format readout Canvas in DeviceRowTemplate. Defaults false to match the
     // shipped AppSettings default (strip hidden) when settings aren't wired (test harness / early init).
     public bool ShowDeviceFormatText => _appSettings?.ShowDeviceFormatText ?? false;
+
+    // Bound alongside ShowDeviceFormatText by the format-line MultiBindings in DeviceRowTemplate.
+    // When on, BT-flagged devices append their live A2DP codec to the format strip (or render it
+    // alone if format text is off). Same false default as the format toggle.
+    public bool ShowDeviceCodecText => _appSettings?.ShowDeviceCodecText ?? false;
 
     // Grid.Row index for the title + control-buttons band inside DeviceRowTemplate.
     // BelowSlider (default) keeps the band on Grid.Row=1 under the slider; AboveSlider swaps it to row 0.
@@ -359,11 +380,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
         if (_appSettings != null) _appSettings.Changed += OnAppSettingsChanged;
 
-        // Subscribe to the system-wide ducking preference and seed the initial value. The first
-        // call to IsActive() also wakes the watcher's background thread, so subsequent writes by
-        // mmsys.cpl / the Settings app raise Changed and we marshal back to the UI dispatcher.
+        // Subscribe to the ducking-preference watcher. The watcher itself only runs while the
+        // flyout is visible (see Show / Hide); the event subscription stays connected so that a
+        // subsequent Show reuses the same handler.
         CommunicationsDucking.Changed += OnCommunicationsDuckingChanged;
-        IsCommunicationsDuckingActive = CommunicationsDucking.IsActive();
 
         SourceInitialized += OnFlyoutSourceInitialized;
         Closed += OnFlyoutClosed;
@@ -394,6 +414,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(ShowListenButtonForRecording));
             OnPropertyChanged(nameof(ShowDefaultDeviceButtonForRecording));
             OnPropertyChanged(nameof(ShowDeviceFormatText));
+            OnPropertyChanged(nameof(ShowDeviceCodecText));
             OnPropertyChanged(nameof(DeviceTitleRowIndex));
             OnPropertyChanged(nameof(DeviceSliderRowIndex));
             OnPropertyChanged(nameof(CaptureActivityIndicator));
@@ -405,6 +426,13 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(AppDrawerHoverPillSize));
             OnPropertyChanged(nameof(AppDrawerIconsPerRow));
             OnPropertyChanged(nameof(AppDrawerStackDirection));
+            OnPropertyChanged(nameof(ShowCommunicationsButton));
+
+            // Visibility setting may have flipped to / from Hidden; re-evaluate the watcher so it
+            // stops running when the button is fully suppressed (and starts again when re-enabled
+            // while the flyout is visible).
+            if (IsVisible) StartCommunicationsDuckingWatch();
+            else CommunicationsDucking.Stop();
 
             RebuildCellList();
 
@@ -450,6 +478,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _subscribedDevices.Clear();
         if (_appSettings != null) _appSettings.Changed -= OnAppSettingsChanged;
         CommunicationsDucking.Changed -= OnCommunicationsDuckingChanged;
+        CommunicationsDucking.Stop();
 
         ((INotifyCollectionChanged)_cells).CollectionChanged -= _onSliderListChanged;
         foreach (VolumeFlyoutCell cell in _cellsByDevice.Values)
@@ -704,6 +733,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     public new void Show()
     {
         ApplyWorkAreaMaxHeight();
+        StartCommunicationsDuckingWatch();
         base.Show();
         UpdateLayout();
         PositionNearTray();
@@ -720,6 +750,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     public void ShowWithoutActivating()
     {
         ApplyWorkAreaMaxHeight();
+        StartCommunicationsDuckingWatch();
 
         bool previousShowActivated = ShowActivated;
         ShowActivated = false;
@@ -730,6 +761,24 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         PositionNearTray();
         _deviceManager.StartMetering();
         ScrollCellsToBottom();
+    }
+
+    /// <summary>
+    /// Spins up the registry watcher (idempotent) and seeds the visual indicator from the current
+    /// preference. The Hidden visibility setting skips both - no watcher and no read - so a fully
+    /// suppressed button doesn't pay for any kernel handles. Called from both Show paths and from
+    /// the settings-change handler when the visibility setting flips.
+    /// </summary>
+    private void StartCommunicationsDuckingWatch()
+    {
+        if ((_appSettings?.FlyoutCommunicationsButtonVisibility ?? CommunicationsButtonVisibility.AlwaysShow)
+            == CommunicationsButtonVisibility.Hidden)
+        {
+            CommunicationsDucking.Stop();
+            return;
+        }
+        CommunicationsDucking.Start();
+        IsCommunicationsDuckingActive = CommunicationsDucking.IsActive();
     }
 
     /// <summary>
@@ -758,6 +807,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     public new void Hide()
     {
         _deviceManager.StopMetering();
+        CommunicationsDucking.Stop();
         base.Hide();
     }
 

@@ -1,5 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using Microsoft.Win32;
 using VolumeTrayAppWPF.Utils;
 
@@ -497,10 +501,12 @@ internal static class EqualizerAPOInstaller
         string[] originalApoGuids = new string[FxSlotCount];
         for (int i = 0; i < FxSlotCount; i++) originalApoGuids[i] = "";
 
+        bool childBackupFound = false;
         using (RegistryKey? childDevice = hklm.OpenSubKey(childDeviceSubKey, writable: false))
         {
             if (childDevice != null)
             {
+                childBackupFound = true;
                 for (int i = 0; i < FxSlotCount; i++)
                 {
                     if (childDevice.GetValue(FxSlotValueNames[i]) is string s)
@@ -509,32 +515,71 @@ internal static class EqualizerAPOInstaller
             }
         }
 
+        WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): childBackup={childBackupFound} slots=[{string.Join(",", originalApoGuids)}]");
+
         if (originalApoGuids[0] == APOGUID_NOKEY)
         {
             // Synthetic FxProperties key - delete it whole. Tolerate "not there" so re-uninstall
-            // is idempotent.
-            using RegistryKey? deviceKey = hklm.OpenSubKey(deviceSubKey, writable: true);
-            if (deviceKey != null)
+            // is idempotent. Falls back to take-ownership on access denied (Realtek-style locked
+            // device key).
+            using RegistryKey? deviceKey = OpenWritableWithFallback(hklm, deviceSubKey);
+            if (deviceKey == null)
             {
-                try { deviceKey.DeleteSubKeyTree("FxProperties", throwOnMissingSubKey: false); }
+                WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): could not open {deviceSubKey} for write (key missing or access denied)");
+            }
+            else
+            {
+                try
+                {
+                    deviceKey.DeleteSubKeyTree("FxProperties", throwOnMissingSubKey: false);
+                    WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): deleted synthetic FxProperties key");
+                }
                 catch (ArgumentException) { /* already gone */ }
             }
         }
         else
         {
             // Replay each slot's original state. Real GUID -> write back; NOVALUE -> ensure
-            // value is gone. "" means we never touched that slot (legacy / partial install).
-            using RegistryKey? fxProps = hklm.OpenSubKey(fxPropsSubKey, writable: true);
-            if (fxProps != null)
+            // value is gone. "" -> Child APOs had no entry for this slot (most commonly:
+            // backup was missing or partial). Fall back to clearing any EAPO-GUID still
+            // sitting in the slot - otherwise the chain stays attached after Uninstall claims
+            // success. EAPO's own dialog never hits this path because it always has the load()
+            // state in memory; we re-read from the registry, so we have to defend against an
+            // absent / stale Child APOs.
+            using RegistryKey? fxProps = OpenWritableWithFallback(hklm, fxPropsSubKey);
+            if (fxProps == null)
             {
+                WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): could not open {fxPropsSubKey} for write (key missing or access denied)");
+            }
+            else
+            {
+                string preGuid = FormatGuid(PreMixGuid);
+                string postGuid = FormatGuid(PostMixGuid);
                 for (int i = 0; i < FxSlotCount; i++)
                 {
                     string slot = originalApoGuids[i];
                     if (slot == APOGUID_NOVALUE)
+                    {
                         DeleteValueIfPresent(fxProps, FxSlotValueNames[i]);
+                    }
                     else if (slot.Length > 0)
+                    {
                         fxProps.SetValue(FxSlotValueNames[i], slot, RegistryValueKind.String);
+                    }
+                    else
+                    {
+                        // No backup entry for this slot. Clear any EAPO GUID still living
+                        // here so the chain actually goes away.
+                        if (fxProps.GetValue(FxSlotValueNames[i]) is string current
+                            && (string.Equals(current, preGuid, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(current, postGuid, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            fxProps.DeleteValue(FxSlotValueNames[i], throwOnMissingValue: false);
+                            WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): cleared orphaned EAPO GUID from slot {i} (no Child APOs backup)");
+                        }
+                    }
                 }
+                WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): replayed slots from backup");
             }
         }
 
@@ -604,6 +649,183 @@ internal static class EqualizerAPOInstaller
         Version v = Environment.OSVersion.Version;
         if (v.Major != major) return v.Major > major;
         return v.Minor >= minor;
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Take-ownership + make-writable fallback (port of EAPO RegistryHelper::takeOwnership +
+    // makeWritable). Realtek and a few other audio drivers ship FxProperties keys owned by
+    // SYSTEM with admins denied write - even an elevated process gets ACCESS_DENIED on a
+    // straight RegOpenKeyEx for KEY_SET_VALUE. The fix is the standard "enable
+    // SeTakeOwnershipPrivilege, set owner = BUILTIN\Administrators, then add FullControl DACL"
+    // dance. Same approach mmsys.cpl uses internally and what EAPO falls back to in install().
+    // ----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Attempts to make <paramref name="fullSubKeyPath"/> writable by the current process: enable
+    /// SeTakeOwnershipPrivilege, set owner to BUILTIN\Administrators, then add a FullControl
+    /// DACL entry for that group. Best-effort - returns silently on failure (caller will see the
+    /// next OpenSubKey throw and log the still-denied state).
+    /// </summary>
+    private static void TryGrantWriteAccess(string fullSubKeyPath)
+    {
+        if (!TryEnableTakeOwnershipPrivilege())
+        {
+            WPFLog.Log($"EqualizerAPOInstaller.TryGrantWriteAccess({fullSubKeyPath}): SeTakeOwnership privilege unavailable - process needs admin");
+            return;
+        }
+
+        using RegistryKey hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        SecurityIdentifier admins = new(WellKnownSidType.BuiltinAdministratorsSid, null);
+
+        // Phase 1: take ownership. Open with WRITE_OWNER + ReadPermissions so we can both read
+        // the existing security descriptor and set a new owner. The privilege we just enabled
+        // bypasses the existing owner check so this works even when the current owner is SYSTEM.
+        try
+        {
+            using RegistryKey? ownerKey = hklm.OpenSubKey(fullSubKeyPath,
+                RegistryKeyPermissionCheck.ReadWriteSubTree,
+                RegistryRights.TakeOwnership | RegistryRights.ReadPermissions);
+            if (ownerKey == null)
+            {
+                WPFLog.Log($"EqualizerAPOInstaller.TryGrantWriteAccess({fullSubKeyPath}): could not open with TakeOwnership");
+                return;
+            }
+            RegistrySecurity ownerSec = ownerKey.GetAccessControl(AccessControlSections.Owner);
+            ownerSec.SetOwner(admins);
+            ownerKey.SetAccessControl(ownerSec);
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"EqualizerAPOInstaller.TryGrantWriteAccess({fullSubKeyPath}): take-ownership failed - {ex.Message}");
+            return;
+        }
+
+        // Phase 2: now that admins owns it, modify the DACL to grant FullControl. ChangePermissions
+        // is implied by ownership but we ask for it explicitly so OpenSubKey rejects up front if
+        // the audio service races us and reclaims ownership between phases.
+        try
+        {
+            using RegistryKey? daclKey = hklm.OpenSubKey(fullSubKeyPath,
+                RegistryKeyPermissionCheck.ReadWriteSubTree,
+                RegistryRights.ChangePermissions | RegistryRights.ReadPermissions);
+            if (daclKey == null)
+            {
+                WPFLog.Log($"EqualizerAPOInstaller.TryGrantWriteAccess({fullSubKeyPath}): could not open with ChangePermissions after ownership");
+                return;
+            }
+            RegistrySecurity dacl = daclKey.GetAccessControl(AccessControlSections.Access);
+            dacl.AddAccessRule(new RegistryAccessRule(
+                admins,
+                RegistryRights.FullControl,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None,
+                AccessControlType.Allow));
+            daclKey.SetAccessControl(dacl);
+            WPFLog.Log($"EqualizerAPOInstaller.TryGrantWriteAccess({fullSubKeyPath}): admins granted FullControl");
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"EqualizerAPOInstaller.TryGrantWriteAccess({fullSubKeyPath}): DACL grant failed - {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Opens <paramref name="fullSubKeyPath"/> writable, falling back to <see cref="TryGrantWriteAccess"/>
+    /// + retry on SecurityException. Returns null only when the key truly doesn't exist or the
+    /// fallback couldn't grant access - logged in either case.
+    /// </summary>
+    private static RegistryKey? OpenWritableWithFallback(RegistryKey baseKey, string fullSubKeyPath)
+    {
+        try
+        {
+            RegistryKey? key = baseKey.OpenSubKey(fullSubKeyPath, writable: true);
+            if (key != null) return key;
+        }
+        catch (SecurityException)
+        {
+            WPFLog.Log($"EqualizerAPOInstaller.OpenWritableWithFallback({fullSubKeyPath}): access denied, attempting take-ownership fallback");
+            TryGrantWriteAccess(fullSubKeyPath);
+            try { return baseKey.OpenSubKey(fullSubKeyPath, writable: true); }
+            catch (Exception ex)
+            {
+                WPFLog.Log($"EqualizerAPOInstaller.OpenWritableWithFallback({fullSubKeyPath}): retry after fallback failed - {ex.Message}");
+                return null;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            WPFLog.Log($"EqualizerAPOInstaller.OpenWritableWithFallback({fullSubKeyPath}): access denied, attempting take-ownership fallback");
+            TryGrantWriteAccess(fullSubKeyPath);
+            try { return baseKey.OpenSubKey(fullSubKeyPath, writable: true); }
+            catch (Exception ex)
+            {
+                WPFLog.Log($"EqualizerAPOInstaller.OpenWritableWithFallback({fullSubKeyPath}): retry after fallback failed - {ex.Message}");
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static bool TryEnableTakeOwnershipPrivilege()
+    {
+        IntPtr token = IntPtr.Zero;
+        try
+        {
+            if (!Win32.OpenProcessToken(Process.GetCurrentProcess().Handle,
+                    Win32.TOKEN_ADJUST_PRIVILEGES | Win32.TOKEN_QUERY, out token))
+                return false;
+            if (!Win32.LookupPrivilegeValueW(null, Win32.SE_TAKE_OWNERSHIP_NAME, out long luid))
+                return false;
+            Win32.TOKEN_PRIVILEGES tp = new()
+            {
+                PrivilegeCount = 1,
+                Luid = luid,
+                Attributes = Win32.SE_PRIVILEGE_ENABLED,
+            };
+            if (!Win32.AdjustTokenPrivileges(token, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero))
+                return false;
+            // AdjustTokenPrivileges returns true even when not all privileges were assigned.
+            // GetLastError == ERROR_NOT_ALL_ASSIGNED (1300) is the "you weren't admin" case.
+            return Marshal.GetLastWin32Error() == 0;
+        }
+        finally
+        {
+            if (token != IntPtr.Zero) Win32.CloseHandle(token);
+        }
+    }
+
+    private static class Win32
+    {
+        public const uint TOKEN_ADJUST_PRIVILEGES = 0x0020;
+        public const uint TOKEN_QUERY = 0x0008;
+        public const uint SE_PRIVILEGE_ENABLED = 0x00000002;
+        public const string SE_TAKE_OWNERSHIP_NAME = "SeTakeOwnershipPrivilege";
+
+        // Pack = 4 is load-bearing. Win32's TOKEN_PRIVILEGES is naturally packed (no padding
+        // between PrivilegeCount and the LUID). Default .NET layout would 8-byte-align the
+        // `long Luid` after the uint PrivilegeCount, leaving 4 bytes of padding that Windows
+        // reads as the LUID's low dword - the resulting garbage LUID matches no privilege and
+        // AdjustTokenPrivileges silently no-ops with ERROR_NOT_ALL_ASSIGNED.
+        [StructLayout(LayoutKind.Sequential, Pack = 4)]
+        public struct TOKEN_PRIVILEGES
+        {
+            public uint PrivilegeCount;
+            public long Luid;
+            public uint Attributes;
+        }
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "LookupPrivilegeValueW")]
+        public static extern bool LookupPrivilegeValueW(string? lpSystemName, string lpName, out long lpLuid);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges,
+            ref TOKEN_PRIVILEGES NewState, uint BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(IntPtr hObject);
     }
 }
 

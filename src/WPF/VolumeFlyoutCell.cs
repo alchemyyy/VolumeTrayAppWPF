@@ -75,8 +75,9 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Per-cell expand / collapse state for the apps band. Toggled by the chevron button in the
-    /// device row. Defaults true so newly built cells render the drawer; the state lives on the
-    /// cell instance and resets if the cell is rebuilt.
+    /// device row. Seeded from devices.xml when the cell is built (defaults true for unknown
+    /// endpoints) and written back to disk on every flip, so the drawer state survives both cell
+    /// rebuilds and process restarts.
     /// </summary>
     public bool IsAppDrawerExpanded
     {
@@ -87,7 +88,18 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
             _isAppDrawerExpanded = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsAppDrawerVisible));
+            PersistAppDrawerExpanded(value);
         }
+    }
+
+    private void PersistAppDrawerExpanded(bool value)
+    {
+        DeviceSettings? store = AppServices.DeviceSettings;
+        if (store == null) return;
+        DeviceSettingsEntry entry = store.GetOrCreate(Device.Id);
+        if (entry.IsAppDrawerExpanded == value) return;
+        entry.IsAppDrawerExpanded = value;
+        store.Save();
     }
 
     /// <summary>
@@ -194,6 +206,11 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
         Device = device;
         _ownAppID = ownAppID;
         VisibleGroups = new ReadOnlyObservableCollection<AudioAppGroup>(_visibleGroups);
+
+        // Seed drawer state from devices.xml without creating a row -- unknown endpoints stay
+        // out of the persisted list until the user actually toggles the drawer.
+        DeviceSettingsEntry? persistedEntry = AppServices.DeviceSettings?.Find(device.Id);
+        if (persistedEntry != null) _isAppDrawerExpanded = persistedEntry.IsAppDrawerExpanded;
 
         ((INotifyCollectionChanged)Device.Groups).CollectionChanged += OnGroupsCollectionChanged;
 #if DEBUG_SPAWN_APP_DUMMY_ON_DEVICE_VOLUME_CHANGE

@@ -38,10 +38,14 @@ public partial class FlyoutPage : UserControl
                 FlyoutDeviceTitlePositionCombo,
                 settings.FlyoutDeviceTitlePosition.ToString());
             SettingsBindings.SelectComboByTag(FlyoutDeviceSortCombo, settings.FlyoutDeviceSort.ToString());
+            SettingsBindings.SelectComboByTag(
+                FlyoutCommunicationsButtonVisibilityCombo,
+                settings.FlyoutCommunicationsButtonVisibility.ToString());
 
             ShowRecordingDevicesInFlyoutToggle.IsChecked = settings.ShowRecordingDevicesInFlyout;
             IntermixRecordingWithPlaybackInFlyoutToggle.IsChecked = settings.IntermixRecordingWithPlaybackInFlyout;
             ShowDeviceFormatTextToggle.IsChecked = settings.ShowDeviceFormatText;
+            ShowDeviceCodecTextToggle.IsChecked = settings.ShowDeviceCodecText;
         }
         finally
         {

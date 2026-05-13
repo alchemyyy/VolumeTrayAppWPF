@@ -29,6 +29,8 @@
         <wpf:DeviceIconGlyphConverter x:Key="DeviceIconGlyph"/>
         <wpf:DeviceIconOpacityConverter x:Key="DeviceIconOpacity"/>
         <wpf:TitleRowVerticalOffsetConverter x:Key="TitleRowVerticalOffset"/>
+        <wpf:DeviceFormatLineTextConverter x:Key="DeviceFormatLineText"/>
+        <wpf:DeviceFormatLineVisibilityConverter x:Key="DeviceFormatLineVisibility"/>
         <utils:DeviceButtonVisibilityConverter x:Key="DeviceButtonVisibility"/>
 
         <!-- Per-cell slot size for the icon grid drawer. Lifted into the resource dictionary as a
@@ -576,25 +578,45 @@
                                  Margin="0"
                                  KeyDown="DeviceNameEdit_KeyDown"
                                  LostKeyboardFocus="DeviceNameEdit_LostKeyboardFocus"/>
-                        <!-- Compact PKEY_AudioEngine_DeviceFormat readout, drawn just below the
-                             name baseline. Hosted in a Canvas so its size doesn't feed back into
-                             the row's measure - the title row stays sized by the icon buttons and
+                        <!-- Compact PKEY_AudioEngine_DeviceFormat readout (and, on Bluetooth
+                             endpoints, the live A2DP codec suffix), drawn just below the name
+                             baseline. Hosted in a Canvas so its size doesn't feed back into the
+                             row's measure - the title row stays sized by the icon buttons and
                              the format text overflows downward into the band below. The TextBlock's
                              transparent background widens the hit area to the whole bounding box
-                             so the right-click format picker is reachable on glyph gaps too. -->
+                             so the right-click format picker is reachable on glyph gaps too.
+                             Visibility + Text both run through composite converters so the line
+                             collapses when both toggles are off or no content qualifies. -->
                         <Canvas ClipToBounds="False"
                                 HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                Visibility="{Binding ShowDeviceFormatText, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource BoolToVisibility}}">
+                                VerticalAlignment="Center">
+                            <Canvas.Visibility>
+                                <MultiBinding Converter="{StaticResource DeviceFormatLineVisibility}">
+                                    <Binding Path="DefaultFormat"/>
+                                    <Binding Path="IsBluetooth"/>
+                                    <Binding Path="CurrentCodecName"/>
+                                    <Binding Path="ShowDeviceFormatText" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                    <Binding Path="ShowDeviceCodecText" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                </MultiBinding>
+                            </Canvas.Visibility>
                             <TextBlock x:Name="DeviceFormatText"
-                                       Text="{Binding DefaultFormat}"
                                        Tag="{Binding}"
                                        Canvas.Top="9"
                                        FontSize="8"
                                        Foreground="{DynamicResource ThemeForeground}"
                                        Background="Transparent"
                                        Opacity="0.45"
-                                       PreviewMouseRightButtonUp="DeviceFormatMenu_PreviewMouseRightButtonUp"/>
+                                       PreviewMouseRightButtonUp="DeviceFormatMenu_PreviewMouseRightButtonUp">
+                                <TextBlock.Text>
+                                    <MultiBinding Converter="{StaticResource DeviceFormatLineText}">
+                                        <Binding Path="DefaultFormat"/>
+                                        <Binding Path="IsBluetooth"/>
+                                        <Binding Path="CurrentCodecName"/>
+                                        <Binding Path="ShowDeviceFormatText" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                        <Binding Path="ShowDeviceCodecText" RelativeSource="{RelativeSource AncestorType={x:Type Window}}"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
                         </Canvas>
                     </Grid>
                     <!-- Exclusive-mode toggle. Three visual states driven by two bindings:
@@ -818,10 +840,12 @@
                     <!-- App-drawer expand / collapse toggle. Sits at the rightmost column so it
                          picks up the row's right-edge tuck. DataContext is rebound to the cell via
                          the cell-hosting ContentControl ancestor; Tag echoes that so the click
-                         handler flips IsAppDrawerExpanded directly. Visibility gates on
-                         HasVisibleGroups so an empty drawer doesn't show a toggle, and the glyph
-                         swaps between CHEVRON_UP (currently expanded, click to collapse) and
-                         CHEVRON_DOWN (currently collapsed, click to expand). -->
+                         handler flips IsAppDrawerExpanded directly. Always rendered so the row's
+                         right edge stays visually consistent; when HasVisibleGroups is False the
+                         button goes IsEnabled=False which the base style dims to Opacity 0.4 (and
+                         disables clicks). The glyph swaps between CHEVRON_UP (drawer expanded, or
+                         the no-drawer placeholder) and CHEVRON_DOWN (drawer present but collapsed,
+                         click to expand). -->
                     <Button x:Name="AppDrawerToggleButton" Grid.Column="5"
                             Margin="0,3,-1,-3"
                             DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContentControl}}}"
@@ -829,10 +853,9 @@
                             Click="AppDrawerToggleButton_Click">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DeviceIconButtonStyle}">
-                                <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasVisibleGroups}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible"/>
+                                    <DataTrigger Binding="{Binding HasVisibleGroups}" Value="False">
+                                        <Setter Property="Opacity" Value="0.2"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -844,9 +867,17 @@
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CHEVRON_UP}"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsAppDrawerExpanded}" Value="False">
+                                        <!-- Only flip to the "collapsed, click to expand" glyph
+                                             when there is actually a drawer to expand. No drawer
+                                             keeps the default CHEVRON_UP and the dimming comes
+                                             from the disabled-button Opacity trigger. -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding HasVisibleGroups}" Value="True"/>
+                                                <Condition Binding="{Binding IsAppDrawerExpanded}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
                                             <Setter Property="Text" Value="{x:Static visuals:GlyphCatalog.CHEVRON_DOWN}"/>
-                                        </DataTrigger>
+                                        </MultiDataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </TextBlock.Style>
@@ -1509,7 +1540,8 @@
                                    Foreground="{DynamicResource ThemeIconForeground}"/>
                     </Button>
                     <Button x:Name="CommunicationsButton" Style="{StaticResource HeaderIconButtonStyle}"
-                            Click="CommunicationsButton_Click">
+                            Click="CommunicationsButton_Click"
+                            Visibility="{Binding ShowCommunicationsButton, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="{x:Static visuals:GlyphCatalog.COMMUNICATIONS_ACTIVITY}"
                                    FontFamily="{StaticResource IconFontFamily}"
                                    FontSize="19"

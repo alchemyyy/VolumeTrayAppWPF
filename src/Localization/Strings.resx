@@ -235,6 +235,21 @@
   <data name="Settings_Flyout_DeviceTitlePosition_AboveSlider" xml:space="preserve">
     <value>Above slider</value>
   </data>
+  <data name="Settings_Flyout_CommunicationsButtonVisibility_Title" xml:space="preserve">
+    <value>Communications button</value>
+  </data>
+  <data name="Settings_Flyout_CommunicationsButtonVisibility_Description" xml:space="preserve">
+    <value>Controls when the communications-activity glyph appears in the flyout header. "When ducking is on" hides it whenever Windows is set to "Do nothing" on the Communications tab.</value>
+  </data>
+  <data name="Settings_Flyout_CommunicationsButtonVisibility_AlwaysShow" xml:space="preserve">
+    <value>Always show</value>
+  </data>
+  <data name="Settings_Flyout_CommunicationsButtonVisibility_WhenDuckingOn" xml:space="preserve">
+    <value>When ducking is on</value>
+  </data>
+  <data name="Settings_Flyout_CommunicationsButtonVisibility_Hidden" xml:space="preserve">
+    <value>Hidden</value>
+  </data>
   <data name="Settings_Flyout_DeviceSort_Title" xml:space="preserve">
     <value>Device sort</value>
   </data>
@@ -264,6 +279,12 @@
   </data>
   <data name="Settings_Flyout_ShowDeviceFormatText_Description" xml:space="preserve">
     <value>The compact format strip (sample rate, bit depth, channels) drawn under each device name. Right-clicking the strip opens the format picker. Off by default.</value>
+  </data>
+  <data name="Settings_Flyout_ShowDeviceCodecText_Title" xml:space="preserve">
+    <value>Show Bluetooth codec on the format strip</value>
+  </data>
+  <data name="Settings_Flyout_ShowDeviceCodecText_Description" xml:space="preserve">
+    <value>Suffix the format strip with the live A2DP codec (SBC, AAC, aptX, LDAC, etc.) on Bluetooth playback devices. Independent of the format readout toggle - with that off, the codec name renders alone for Bluetooth devices. Requires running the app elevated; otherwise the codec stays unknown. Off by default.</value>
   </data>
   <data name="Settings_Flyout_RecordingAppDrawerDisplayType_Title" xml:space="preserve">
     <value>App drawer display type</value>

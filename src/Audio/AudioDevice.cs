@@ -77,6 +77,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private uint? _exclusiveControlHolderPID;
     private EqualizerAPOState _equalizerAPOState;
     private DeviceState _state;
+    private BluetoothCodec? _currentCodec;
     private bool _disposed;
 
     // Single-flight gate for IPolicyConfig calls on this device. SetEnabled / SetAsDefault /
@@ -112,6 +113,44 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     public string Id { get; }
     public EDataFlow DataFlow { get; }
     public ReadOnlyObservableCollection<AudioAppGroup> Groups { get; }
+
+    /// <summary>
+    /// True when this endpoint is backed by a Bluetooth radio. Primary signal is the audio
+    /// endpoint's <c>PKEY_Device_EnumeratorName</c> reading "BTHENUM" - the PnP bus enumerator
+    /// every Bluetooth Classic A2DP / HFP endpoint inherits, regardless of how the driver names
+    /// the device (Win11 strips the "Bluetooth" prefix from many drivers, so substring checks on
+    /// the friendly names alone miss e.g. "Headphones (WH-1000XM4)"). Name-substring tokens are
+    /// kept as a fallback for the rare driver that doesn't surface EnumeratorName through the
+    /// endpoint property store. Stable for the lifetime of the wrapper.
+    /// </summary>
+    public bool IsBluetooth { get; }
+
+    /// <summary>
+    /// Last A2DP codec the Bluetooth stack negotiated for this endpoint, pushed in by
+    /// <see cref="AudioDeviceManager"/> from <see cref="BluetoothCodecMonitor"/>. Always null on
+    /// non-Bluetooth endpoints. The Microsoft.Windows.Bluetooth.BthA2dp ETW event the monitor
+    /// listens to publishes a single system-wide codec per stream, so when more than one BT
+    /// render endpoint is active, the codec is shared across them - one stream at a time.
+    /// </summary>
+    public BluetoothCodec? CurrentCodec
+    {
+        get => _currentCodec;
+        internal set
+        {
+            if (_currentCodec == value) return;
+            _currentCodec = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CurrentCodecName));
+        }
+    }
+
+    /// <summary>
+    /// Convenience projection for XAML bindings that don't want to drill into
+    /// <see cref="CurrentCodec"/>.<see cref="BluetoothCodec.FriendlyName"/>. Empty string when
+    /// no codec is known, which lets a TextBlock collapse via the usual EmptyToVisibility path
+    /// without needing a value converter.
+    /// </summary>
+    public string CurrentCodecName => _currentCodec?.FriendlyName ?? string.Empty;
 
     public string FriendlyName
     {
@@ -358,6 +397,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         bool isCapture = DataFlow == EDataFlow.eCapture;
         EqualizerAPOState before = EqualizerAPOState;
+        WPFLog.Log($"AudioDevice.ToggleEqualizerAPO({FriendlyName}): begin state={before} guid={endpointGuid} capture={isCapture}");
 
         try
         {
@@ -396,6 +436,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // Reprobe so the button glyph reflects the new state. Other devices on the same system
         // are unaffected by a per-endpoint toggle, so don't broadcast availability changed here.
         RefreshEqualizerAPOState();
+        WPFLog.Log($"AudioDevice.ToggleEqualizerAPO({FriendlyName}): end state={EqualizerAPOState}");
     }
 
     /// <summary>
@@ -767,6 +808,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
         (_friendlyName, _deviceDescription, _interfaceFriendlyName) = ResolveDeviceNames(device);
         _defaultFormat = ResolveDefaultFormat(device);
+        IsBluetooth = DetectIsBluetooth(device, _friendlyName, _deviceDescription, _interfaceFriendlyName);
 
         device.GetState(out uint stateRaw);
         _state = (DeviceState)stateRaw;
@@ -1566,6 +1608,50 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         {
             Safe.Release(store);
         }
+    }
+
+    // Primary signal: the PnP bus enumerator the endpoint's underlying device sits on. Bluetooth
+    // Classic devices (A2DP / HFP) report "BTHENUM" verbatim; we observed this on the Sony
+    // WH-1000XM4 and other paired BT headsets via the audio endpoint property store. Friendly
+    // names alone are unreliable - Win11 strips the "Bluetooth" prefix many drivers used to add,
+    // so a device can read as plain "Headphones (WH-1000XM4)" with no protocol hint.
+    // Fallbacks (name substrings) cover the rare driver that doesn't surface EnumeratorName
+    // through the endpoint property store.
+    private static readonly string[] BluetoothNameTokens = ["Bluetooth", "Hands-Free", "A2DP"];
+
+    private static bool DetectIsBluetooth(IMMDevice device, string friendlyName,
+        string deviceDescription, string interfaceFriendlyName)
+    {
+        string? enumerator = ReadEnumeratorName(device);
+        if (enumerator != null && enumerator.StartsWith("BTH", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        foreach (string token in BluetoothNameTokens)
+        {
+            if (friendlyName.Contains(token, StringComparison.OrdinalIgnoreCase)) return true;
+            if (deviceDescription.Contains(token, StringComparison.OrdinalIgnoreCase)) return true;
+            if (interfaceFriendlyName.Contains(token, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    // Reads PKEY_Device_EnumeratorName off the audio endpoint property store. Returns null on
+    // missing property / wrong type / COM exception so callers can chain to a fallback signal.
+    private static string? ReadEnumeratorName(IMMDevice device)
+    {
+        IPropertyStore? store = null;
+        try
+        {
+            device.OpenPropertyStore(Stgm.Read, out store);
+            PROPERTYKEY key = PropertyKeys.PKEY_Device_EnumeratorName;
+            store.GetValue(ref key, out PROPVARIANT pv);
+            try { return pv.GetString(); }
+            finally { Ole32.PropVariantClear(ref pv); }
+        }
+        catch { return null; }
+        finally { Safe.Release(store); }
     }
 
     private static string? ReadStringProperty(IPropertyStore store, PROPERTYKEY key)

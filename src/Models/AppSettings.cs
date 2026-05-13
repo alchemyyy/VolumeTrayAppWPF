@@ -112,6 +112,20 @@ public enum FlyoutDeviceSortOrder
 }
 
 /// <summary>
+/// Visibility rule for the titlebar communications-activity button.
+/// AlwaysShow (default): button always rendered in the header cluster.
+/// WhenDuckingOn: button only rendered when UserDuckingPreference is set to any active mode
+///                (mute / 80% / 50%); hidden when "Do nothing" is selected.
+/// Hidden: button never rendered; the registry watcher also stays asleep.
+/// </summary>
+public enum CommunicationsButtonVisibility
+{
+    AlwaysShow,
+    WhenDuckingOn,
+    Hidden,
+}
+
+/// <summary>
 /// Visual treatment that flags which apps in a recording device's drawer are currently capturing
 /// from the microphone (their session State is Active).
 /// DimInactive (default): icons of non-capturing apps are dimmed, matching how disabled devices are dimmed.
@@ -615,6 +629,11 @@ public class AppSettings
     public bool ShowRecordingDevicesInFlyout { get; set; } = true;
     public bool IntermixRecordingWithPlaybackInFlyout { get; set; } = false;
 
+    // Titlebar communications-activity button visibility. Drives both the button's Visibility and
+    // whether the registry watcher even runs - Hidden keeps the watcher asleep entirely.
+    public CommunicationsButtonVisibility FlyoutCommunicationsButtonVisibility { get; set; }
+        = CommunicationsButtonVisibility.AlwaysShow;
+
     // Per-device-row control-button visibility. One pair per button - playback rows read the *ForPlayback
     // flag, recording rows read the *ForRecording flag. The Listen button is capture-only by nature, so
     // only the recording flag exists; toggling it off hides the listen glyph on recording rows. All
@@ -631,6 +650,12 @@ public class AppSettings
     // niche diagnostic info, not something most users want eating row space. Toggling on / off just
     // shows / collapses the Canvas; no row metrics shift since the Canvas is already zero-measure.
     public bool ShowDeviceFormatText { get; set; } = false;
+
+    // Suffix the format readout strip with the live Bluetooth A2DP codec on BT-flagged devices.
+    // Independent from ShowDeviceFormatText: with format off and codec on, the codec name renders
+    // alone on the strip for BT devices (non-BT devices stay collapsed). Same diagnostic-info
+    // tier as the format readout itself, so the default is off.
+    public bool ShowDeviceCodecText { get; set; } = false;
 
     // How the flyout marks actively-capturing app sessions inside a recording device's drawer.
     public CaptureActivityIndicator CaptureActivityIndicator { get; set; } = CaptureActivityIndicator.ActiveGlyph;

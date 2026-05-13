@@ -52,6 +52,12 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private readonly AsyncThrottler<string> _defaultsRefreshThrottler;
     private const string DefaultsRefreshKey = "defaults";
 
+    // Realtime listener for the system A2DP codec. The ETW event the monitor consumes is
+    // system-wide (one A2DP stream at a time), so we propagate the codec to every Active BT
+    // render device on each change. Non-admin runs leave the monitor inert and CurrentCodec
+    // stays null on every device.
+    private readonly BluetoothCodecMonitor _codecMonitor;
+
     private AudioDevice? _defaultDevice;
     private AudioDevice? _defaultCommunicationsDevice;
     private AudioDevice? _defaultCaptureDevice;
@@ -90,6 +96,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         get => _defaultCommunicationsCaptureDevice;
         private set { if (!ReferenceEquals(_defaultCommunicationsCaptureDevice, value)) { _defaultCommunicationsCaptureDevice = value; OnPropertyChanged(); } }
     }
+
+    /// <summary>
+    /// Bluetooth A2DP codec monitor. Exposed so UI can bind to its IsRunning / RequiresElevation
+    /// flags (e.g. to show a "codec unavailable - needs admin" hint). Per-device codec state is
+    /// already surfaced as <see cref="AudioDevice.CurrentCodec"/> - this property is for the
+    /// service-level flags, not for codec readout.
+    /// </summary>
+    public BluetoothCodecMonitor CodecMonitor => _codecMonitor;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -147,6 +161,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         _enumerator.RegisterEndpointNotificationCallback(_bridge);
 
         RebuildDeviceList();
+
+        // Bluetooth codec monitor. Start fires up an ETW worker thread if elevated; on non-admin
+        // runs it stays inert and exposes RequiresElevation = true. CodecChanged marshals onto
+        // the dispatcher inside the monitor, so the propagation handler runs on the UI thread.
+        _codecMonitor = new BluetoothCodecMonitor(dispatcher);
+        _codecMonitor.CodecChanged += OnBluetoothCodecChanged;
+        _codecMonitor.Start();
+        PropagateCodecToBluetoothDevices(_codecMonitor.CurrentCodec);
     }
 
     private double ResolveRenderIntervalMs()
@@ -330,6 +352,12 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             {
                 _devices.Add(wrapped);
                 ScheduleUpdateAllDefaults();
+                // Newly-added BT render endpoint inherits whatever codec the monitor last saw
+                // so it doesn't paint blank until the next ETW event fires.
+                if (wrapped.IsBluetooth && wrapped.DataFlow == EDataFlow.eRender)
+                {
+                    wrapped.CurrentCodec = _codecMonitor.CurrentCodec;
+                }
             }
         }
         catch
@@ -349,9 +377,13 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         AudioDevice? match = FindDeviceByID(id);
         if (match == null) return;
 
+        bool wasBluetoothRender = match.IsBluetooth && match.DataFlow == EDataFlow.eRender;
         _devices.Remove(match);
         Safe.Dispose(match);
         ScheduleUpdateAllDefaults();
+
+        // Last BT render endpoint just got removed - drop the cached codec.
+        if (wasBluetoothRender && !HasActiveBluetoothRenderDevice()) _codecMonitor.Reset();
     }
 
     /// <summary>
@@ -379,6 +411,16 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         // Any render endpoint going active / inactive can change the dim state of every capture
         // row's listen button (target-active is a cross-device derived flag), so recompute here.
         UpdateListenTargetActiveness();
+
+        // BT state transition: if the last Active BT render endpoint just went away, reset the
+        // codec monitor so stale codec readouts collapse. If a BT endpoint just came back to
+        // Active and the monitor has a cached codec, re-push it so the newly-Active device
+        // doesn't paint as "unknown" until the next ETW event.
+        if (match.IsBluetooth && match.DataFlow == EDataFlow.eRender)
+        {
+            if (!HasActiveBluetoothRenderDevice()) _codecMonitor.Reset();
+            else PropagateCodecToBluetoothDevices(_codecMonitor.CurrentCodec);
+        }
     }
 
     /// <summary>
@@ -626,6 +668,42 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         return null;
     }
 
+    // CodecMonitor fires this on the dispatcher whenever a new A2DP SET_CONFIGURATION /
+    // RECONFIGURE event lands. Push the new codec onto every Active BT render endpoint so the
+    // bound UI reflects it. We don't try to attribute the codec to one specific device when
+    // multiple BT endpoints are Active - the ETW event is system-wide (one A2DP stream at a
+    // time on Windows) and doesn't carry the remote BDADDR in a field we can rely on; in the
+    // overwhelmingly common single-headset case this is correct.
+    private void OnBluetoothCodecChanged(BluetoothCodec? codec)
+    {
+        PropagateCodecToBluetoothDevices(codec);
+    }
+
+    private void PropagateCodecToBluetoothDevices(BluetoothCodec? codec)
+    {
+        foreach (AudioDevice d in _devices)
+        {
+            if (!d.IsBluetooth) continue;
+            // Render-only: the ETW event covers A2DP playback, not HFP capture. Pushing it on a
+            // BT capture endpoint would surface "Sony LDAC" next to the mic, which is wrong.
+            if (d.DataFlow != EDataFlow.eRender) continue;
+            d.CurrentCodec = codec;
+        }
+    }
+
+    // True when at least one Bluetooth render endpoint is currently Active. Drives the codec
+    // reset path: when the last BT device disconnects the cached codec from the monitor is
+    // stale (the ETW provider only emits on stream start / reconfigure, never on stream stop),
+    // so we explicitly clear it.
+    private bool HasActiveBluetoothRenderDevice()
+    {
+        foreach (AudioDevice d in _devices)
+        {
+            if (d.IsBluetooth && d.DataFlow == EDataFlow.eRender && d.IsActive) return true;
+        }
+        return false;
+    }
+
     private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
@@ -645,6 +723,9 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             _settings.MeterPeakFpsChanged -= OnMeterPeakFpsChanged;
             _settings.MeterPeakSampleRateChanged -= OnMeterPeakSampleRateChanged;
         }
+
+        _codecMonitor.CodecChanged -= OnBluetoothCodecChanged;
+        Safe.Dispose(_codecMonitor);
 
         try { _enumerator.UnregisterEndpointNotificationCallback(_bridge); } catch { }
 

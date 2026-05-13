@@ -139,6 +139,16 @@ internal static class PropertyKeys
     public static readonly PROPERTYKEY PKEY_AudioEndpoint_GUID = new(
         new Guid(0x1DA5D803, 0xD492, 0x4EDD, 0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E), 4);
 
+    // DEVPKEY_Device_EnumeratorName - the bus enumerator a PnP device belongs to. The audio
+    // endpoint property store inherits this from the underlying device, so for any endpoint
+    // backed by Bluetooth Classic (A2DP / HFP) it reads "BTHENUM". USB endpoints read "USB",
+    // PCI read "PCI", HDAudio read "HDAUDIO". This is the definitive Bluetooth signal -
+    // friendly names like "Headphones (WH-1000XM4)" carry no protocol hint, so we can't rely
+    // on substring heuristics alone. fmtid family is the PnP-name family (shared with
+    // PKEY_Device_FriendlyName / PKEY_Device_DeviceDesc); pid 24 is documented in devpkey.h.
+    public static readonly PROPERTYKEY PKEY_Device_EnumeratorName = new(
+        new Guid(0xA45C254E, 0xDF1C, 0x4EFD, 0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0), 24);
+
     // 'Listen to this device' state on capture endpoints, mirroring the checkbox under
     // Sound > Recording > [Mic Properties] > Listen tab. Stored as VT_BOOL (VARIANT_TRUE / FALSE)
     // in HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture\{guid}\Properties.

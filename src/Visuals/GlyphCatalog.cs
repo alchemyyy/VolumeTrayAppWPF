@@ -101,14 +101,14 @@ internal static class GlyphCatalog
     public const string PLAYBACK_DEVICE_DEFAULT = "\uF137";  // Status Circle Inner (filled)
     public const string PLAYBACK_DEVICE_ENABLED = "\uF138";  // Status Circle Ring
     public const string PLAYBACK_DEVICE_DISABLED = "\uF13D";  // Status Circle Error X
-    public const string PLAYBACK_DEVICE_DEFAULT_COMMS = "\uE626";  // Phone (per spec for default comms device)
+    public const string PLAYBACK_DEVICE_DEFAULT_COMMS = "\uE95B"; // Headset
 
     // Per-app-icon overlays. APP_MUTE_OVERLAY is the small X stamped on a muted app's icon -
     // matches what the flyout actually renders (BlockedSite, not Mute).
-    // APP_FALLBACK is the stacked-network silhouette shown when AppIconResolver couldn't extract
+    // APP_FALLBACK is shown when AppIconResolver couldn't extract
     // a real icon for an app session.
     public const string APP_MUTE_OVERLAY = "\uE653";  // BlockedSite / mute X overlay
-    public const string APP_FALLBACK = "\uE7F4";      // StackedNetwork (fallback when no real icon)
+    public const string APP_FALLBACK = "\uE978";      // Presence Chicklet
 
 
 

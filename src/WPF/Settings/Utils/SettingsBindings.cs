@@ -54,6 +54,7 @@ public static class SettingsBindings
         ["ShowListenButtonForRecording"] = (s, v) => s.ShowListenButtonForRecording = v,
         ["ShowDefaultDeviceButtonForRecording"] = (s, v) => s.ShowDefaultDeviceButtonForRecording = v,
         ["ShowDeviceFormatText"] = (s, v) => s.ShowDeviceFormatText = v,
+        ["ShowDeviceCodecText"] = (s, v) => s.ShowDeviceCodecText = v,
     };
 
     /// <summary>Setter + parser pair for an enum-bound ComboBox.</summary>
@@ -77,6 +78,7 @@ public static class SettingsBindings
         ["FlyoutDeviceLayout"] = Bind<FlyoutDeviceLayoutStyle>((s, v) => s.FlyoutDeviceLayout = v),
         ["FlyoutDeviceTitlePosition"] = Bind<FlyoutDeviceTitlePosition>((s, v) => s.FlyoutDeviceTitlePosition = v),
         ["FlyoutDeviceSort"] = Bind<FlyoutDeviceSortOrder>((s, v) => s.FlyoutDeviceSort = v),
+        ["FlyoutCommunicationsButtonVisibility"] = Bind<CommunicationsButtonVisibility>((s, v) => s.FlyoutCommunicationsButtonVisibility = v),
         ["CaptureActivityIndicator"] = Bind<CaptureActivityIndicator>((s, v) => s.CaptureActivityIndicator = v),
         ["RecordingAppDrawerDisplayType"] = Bind<AppDrawerDisplayType>((s, v) => s.RecordingAppDrawerDisplayType = v),
         ["AppDrawerStackDirection"] = Bind<AppDrawerStackDirection>((s, v) => s.AppDrawerStackDirection = v),

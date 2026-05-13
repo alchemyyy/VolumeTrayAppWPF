@@ -150,6 +150,19 @@ public partial class App
         StartupManager.RepairShortcutIfStale();
         _appSettings!.Changed += OnSettingsChanged;
         AppServices.Settings = _appSettings;
+
+        // Per-device persisted UI state (drawer expand/collapse, etc). Lives in devices.xml next to
+        // settings.xml; failures here fall back to an empty in-memory collection so the rest of the
+        // app still works -- worst case the user loses persisted drawer state for this session.
+        try
+        {
+            AppServices.DeviceSettings = DeviceSettings.LoadOrDefault();
+        }
+        catch (Exception ex)
+        {
+            WPFLog.Log($"App.OnStartup: device settings load failed: {ex.Message}");
+            AppServices.DeviceSettings = new DeviceSettings();
+        }
     }
 
     private void LoadThemeAndApplyResources()
