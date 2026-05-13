@@ -134,10 +134,40 @@ internal static class Program
                 InstallResult result = InstallationService.RunAdminInstallSystem(sourceExe, buildNumber);
                 return result.Success ? 0 : 1;
             }
+            case "sync-startmenu":
+            {
+                // --admin-action sync-startmenu [--remove-scope user|system|store]
+                // Runs the all-profiles Start Menu reconcile from an elevated context.
+                // Invoked from the System uninstall .bat (which is already elevated) before
+                // it wipes the install dir, so every user's Programs folder is brought into
+                // line with the post-uninstall state in one pass without firing a second UAC.
+                InstallScope? removingScope = ParseRemoveScopeArg(args);
+                StartMenuShortcut.Sync(removingScope: removingScope, allUsers: true);
+                return 0;
+            }
             default:
                 WPFLog.Log($"Program.RunAdminAction: unknown verb '{verb}'");
                 return 1;
         }
+    }
+
+    /// <summary>
+    /// Parses <c>--remove-scope user|system|store</c> into an <see cref="InstallScope"/>.
+    /// "user" maps to LocalAppData (matches WindowsUninstallRegistry.ScopeArg's user/system
+    /// vocabulary used by the existing --scope flag), "system" to ProgramFiles, "store" to
+    /// WindowsStore. Missing / unknown values return null so the caller treats the sync as
+    /// a general reconcile rather than a removal.
+    /// </summary>
+    private static InstallScope? ParseRemoveScopeArg(string[] args)
+    {
+        if (TryGetArgValue(args, "--remove-scope") is not { } raw) return null;
+        return raw.ToLowerInvariant() switch
+        {
+            "user" or "local" or "localappdata" => InstallScope.LocalAppData,
+            "system" or "programfiles" => InstallScope.ProgramFiles,
+            "store" or "windowsstore" => InstallScope.WindowsStore,
+            _ => null,
+        };
     }
 
     private static int RunUninstall(string[] args, string installDir)

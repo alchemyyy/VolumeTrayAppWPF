@@ -1,7 +1,6 @@
 ﻿using System.IO;
-using System.Runtime.InteropServices;
-using System.Text;
 using Microsoft.Win32;
+using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Services;
@@ -270,106 +269,12 @@ public static class StartupManager
         return string.Empty;
     }
 
-    // -- IShellLink COM glue --------------------------------------------------------
-
     private static void CreateShortcut(string lnkPath, string targetExe)
     {
-        object? linkObj = null;
-        try
-        {
-            linkObj = new CShellLink();
-            IShellLinkW link = (IShellLinkW)linkObj;
-            link.SetPath(targetExe);
-            string? workDir = Path.GetDirectoryName(targetExe);
-            if (!string.IsNullOrEmpty(workDir)) link.SetWorkingDirectory(workDir);
-            link.SetDescription(Program.ApplicationName);
-
-            string? lnkDir = Path.GetDirectoryName(lnkPath);
-            if (!string.IsNullOrEmpty(lnkDir)) Directory.CreateDirectory(lnkDir);
-
-            // Cast through the underlying COM object: CShellLink implements both IShellLinkW
-            // and IPersistFile, but the managed interfaces don't share an inheritance chain
-            // so casting one to the other trips a static analyzer warning.
-            IPersistFile persist = (IPersistFile)linkObj;
-            persist.Save(lnkPath, true);
-        }
-        finally
-        {
-            Safe.Release(linkObj);
-        }
+        string? lnkDir = Path.GetDirectoryName(lnkPath);
+        if (!string.IsNullOrEmpty(lnkDir)) Directory.CreateDirectory(lnkDir);
+        ShellLink.Create(lnkPath, targetExe, Program.ApplicationName);
     }
 
-    private static string? TryReadShortcutTarget(string lnkPath)
-    {
-        object? linkObj = null;
-        try
-        {
-            linkObj = new CShellLink();
-            IShellLinkW link = (IShellLinkW)linkObj;
-            // See CreateShortcut: cast through linkObj rather than 'link' to avoid the
-            // "no shared base type" warning on this cross-interface cast.
-            IPersistFile persist = (IPersistFile)linkObj;
-            persist.Load(lnkPath, 0);
-
-            // SFGAO_NOPATH-like behaviour: prefer raw path.
-            // SLGP_RAWPATH = 4 keeps environment-variable expansion off
-            // so the comparison against InstallationService paths stays apples-to-apples.
-            const uint SLGP_RAWPATH = 0x0004;
-            StringBuilder sb = new(1024);
-            link.GetPath(sb, sb.Capacity, IntPtr.Zero, SLGP_RAWPATH);
-            string raw = sb.ToString();
-            return string.IsNullOrEmpty(raw) ? null : raw;
-        }
-        catch (Exception ex)
-        {
-            WPFLog.Log($"StartupManager.TryReadShortcutTarget: {ex.Message}");
-            return null;
-        }
-        finally
-        {
-            Safe.Release(linkObj);
-        }
-    }
-
-    [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
-    private class CShellLink;
-
-    [ComImport]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    [Guid("000214F9-0000-0000-C000-000000000046")]
-    private interface IShellLinkW
-    {
-        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cch, IntPtr pfd, uint fFlags);
-        void GetIDList(out IntPtr ppidl);
-        void SetIDList(IntPtr pidl);
-        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cch);
-        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
-        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cch);
-        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
-        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cch);
-        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
-        void GetHotkey(out short pwHotkey);
-        void SetHotkey(short wHotkey);
-        void GetShowCmd(out int piShowCmd);
-        void SetShowCmd(int iShowCmd);
-        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cch, out int piIcon);
-        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
-        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
-        void Resolve(IntPtr hwnd, uint fFlags);
-        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
-    }
-
-    [ComImport]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    [Guid("0000010b-0000-0000-C000-000000000046")]
-    private interface IPersistFile
-    {
-        void GetClassID(out Guid pClassID);
-        [PreserveSig]
-        int IsDirty();
-        void Load([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
-        void Save([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, [MarshalAs(UnmanagedType.Bool)] bool fRemember);
-        void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string pszFileName);
-        void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string ppszFileName);
-    }
+    private static string? TryReadShortcutTarget(string lnkPath) => ShellLink.TryRead(lnkPath);
 }

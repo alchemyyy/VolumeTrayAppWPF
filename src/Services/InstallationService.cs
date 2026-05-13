@@ -179,6 +179,7 @@ public static class InstallationService
 
             WindowsUninstallRegistry.Write(WindowsUninstallRegistry.Scope.CurrentUser,
                 LocalAppDataInstallDir, BuildInfo.BuildNumber);
+            StartMenuShortcut.Sync();
             return new InstallResult(true);
         }
         catch (Exception ex)
@@ -220,6 +221,10 @@ public static class InstallationService
                 File.Copy(sourceExe, dest, overwrite: true);
             WindowsUninstallRegistry.Write(WindowsUninstallRegistry.Scope.LocalMachine,
                 ProgramFilesInstallDir, buildNumber);
+            // System install is elevated by definition - sweep every user profile (plus the
+            // Default template) so the entry appears on first sign-in for every account,
+            // and any existing per-user Local entry has its suffix updated atomically.
+            StartMenuShortcut.Sync(allUsers: true);
             return new InstallResult(true);
         }
         catch (Exception ex)
@@ -253,6 +258,14 @@ public static class InstallationService
         }
         else
             return null;
+
+        // Pre-bat Start Menu sync (current user only): treat the scope being uninstalled as
+        // already gone so the current user's Programs folder updates the instant they click,
+        // without waiting for the bat. For System uninstall, the bat additionally re-invokes
+        // us with --admin-action sync-startmenu (still elevated, no second UAC) to walk every
+        // other user profile - that pass covers everyone, this pass just races ahead for the
+        // currently-logged-in user's Start Menu so the visible state matches the click.
+        StartMenuShortcut.Sync(removingScope: scope);
 
         Process? batProcess = UninstallScript.Run(installDir, regScope, deleteSettings);
 

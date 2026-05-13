@@ -145,5 +145,17 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <TextBlock Text="{loc:Loc Settings_About_KnownIssues_Header}"
+                   Style="{StaticResource SubsectionHeaderStyle}"/>
+
+        <Border Style="{StaticResource SettingsCardStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SettingTitleStyle}"
+                           Text="{loc:Loc Settings_About_BluetoothCodecNotDisplaying_Title}"/>
+                <TextBlock Style="{StaticResource SettingDescriptionStyle}"
+                           Text="{loc:Loc Settings_About_BluetoothCodecNotDisplaying_Description}"/>
+            </StackPanel>
+        </Border>
     </StackPanel>
 </UserControl>

@@ -322,11 +322,47 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Update!.
+        /// </summary>
+        public static string Flyout_Update_ButtonText {
+            get {
+                return ResourceManager.GetString("Flyout_Update_ButtonText", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A newer release is available - click to review and install..
+        /// </summary>
+        public static string Flyout_Update_Tooltip {
+            get {
+                return ResourceManager.GetString("Flyout_Update_Tooltip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Author.
         /// </summary>
         public static string Settings_About_AuthorLabel {
             get {
                 return ResourceManager.GetString("Settings_About_AuthorLabel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to This is a Windows Bluetooth limitation. The `Microsoft.Windows.Bluetooth.BthA2dp` ETW provider only emits the `A2dpStreaming` event on AVDTP `SET_CONFIGURATION` or `RECONFIGURE` -- i.e. when audio actually begins streaming, not at the moment a Bluetooth endpoint connects. While the headset is connected but idle, no codec event fires and the suffix remains empty. As soon as something pushes audio to the endpoint, the event fires and the codec text populates. There is no on-demand query path and it is not pos [rest of string was truncated]&quot;;.
+        /// </summary>
+        public static string Settings_About_BluetoothCodecNotDisplaying_Description {
+            get {
+                return ResourceManager.GetString("Settings_About_BluetoothCodecNotDisplaying_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Bluetooth device codec not displaying.
+        /// </summary>
+        public static string Settings_About_BluetoothCodecNotDisplaying_Title {
+            get {
+                return ResourceManager.GetString("Settings_About_BluetoothCodecNotDisplaying_Title", resourceCulture);
             }
         }
         
@@ -340,11 +376,110 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Check for updates.
+        /// </summary>
+        public static string Settings_About_CheckForUpdates_Button {
+            get {
+                return ResourceManager.GetString("Settings_About_CheckForUpdates_Button", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Periodically poll Github for a newer release. Turning this off also stops the manual check below..
+        /// </summary>
+        public static string Settings_About_CheckForUpdates_Description {
+            get {
+                return ResourceManager.GetString("Settings_About_CheckForUpdates_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Check for updates.
+        /// </summary>
+        public static string Settings_About_CheckForUpdates_Title {
+            get {
+                return ResourceManager.GetString("Settings_About_CheckForUpdates_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Github.
         /// </summary>
         public static string Settings_About_GithubLabel {
             get {
                 return ResourceManager.GetString("Settings_About_GithubLabel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Install update.
+        /// </summary>
+        public static string Settings_About_InstallUpdate_Available {
+            get {
+                return ResourceManager.GetString("Settings_About_InstallUpdate_Available", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Version stale.
+        /// </summary>
+        public static string Settings_About_InstallUpdate_Stale {
+            get {
+                return ResourceManager.GetString("Settings_About_InstallUpdate_Stale", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Up to date.
+        /// </summary>
+        public static string Settings_About_InstallUpdate_UpToDate {
+            get {
+                return ResourceManager.GetString("Settings_About_InstallUpdate_UpToDate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Known issues.
+        /// </summary>
+        public static string Settings_About_KnownIssues_Header {
+            get {
+                return ResourceManager.GetString("Settings_About_KnownIssues_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} d ago.
+        /// </summary>
+        public static string Settings_About_RelativeTime_DaysFormat {
+            get {
+                return ResourceManager.GetString("Settings_About_RelativeTime_DaysFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} h ago.
+        /// </summary>
+        public static string Settings_About_RelativeTime_HoursFormat {
+            get {
+                return ResourceManager.GetString("Settings_About_RelativeTime_HoursFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to just now.
+        /// </summary>
+        public static string Settings_About_RelativeTime_JustNow {
+            get {
+                return ResourceManager.GetString("Settings_About_RelativeTime_JustNow", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} min ago.
+        /// </summary>
+        public static string Settings_About_RelativeTime_MinutesFormat {
+            get {
+                return ResourceManager.GetString("Settings_About_RelativeTime_MinutesFormat", resourceCulture);
             }
         }
         
@@ -367,11 +502,137 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to A WPF tray app skeleton..
+        ///   Looks up a localized string similar to Show an Update! affordance in the flyout header whenever a newer release is available..
+        /// </summary>
+        public static string Settings_About_ShowUpdateButton_Description {
+            get {
+                return ResourceManager.GetString("Settings_About_ShowUpdateButton_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show update button in flyout.
+        /// </summary>
+        public static string Settings_About_ShowUpdateButton_Title {
+            get {
+                return ResourceManager.GetString("Settings_About_ShowUpdateButton_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Pop a tray balloon the first time a new release is detected while the flyout is closed..
+        /// </summary>
+        public static string Settings_About_ShowUpdateNotifications_Description {
+            get {
+                return ResourceManager.GetString("Settings_About_ShowUpdateNotifications_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Show update notification.
+        /// </summary>
+        public static string Settings_About_ShowUpdateNotifications_Title {
+            get {
+                return ResourceManager.GetString("Settings_About_ShowUpdateNotifications_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A replacement for Windows&apos; Volume tray app.
         /// </summary>
         public static string Settings_About_Tagline {
             get {
                 return ResourceManager.GetString("Settings_About_Tagline", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Update actions.
+        /// </summary>
+        public static string Settings_About_UpdateActions_Title {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateActions_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to How often the background check polls Github. Stays well clear of the unauthenticated rate limit even at the minimum..
+        /// </summary>
+        public static string Settings_About_UpdateInterval_Description {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateInterval_Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to  min.
+        /// </summary>
+        public static string Settings_About_UpdateInterval_MinutesSuffix {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateInterval_MinutesSuffix", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Check interval.
+        /// </summary>
+        public static string Settings_About_UpdateInterval_Title {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateInterval_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Updates.
+        /// </summary>
+        public static string Settings_About_Updates_Header {
+            get {
+                return ResourceManager.GetString("Settings_About_Updates_Header", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Update available: {0}.
+        /// </summary>
+        public static string Settings_About_UpdateStatus_AvailableFormat {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateStatus_AvailableFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Checking for updates....
+        /// </summary>
+        public static string Settings_About_UpdateStatus_Checking {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateStatus_Checking", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Last checked {0}..
+        /// </summary>
+        public static string Settings_About_UpdateStatus_LastCheckedFormat {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateStatus_LastCheckedFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to No check has run yet..
+        /// </summary>
+        public static string Settings_About_UpdateStatus_NeverChecked {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateStatus_NeverChecked", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Update service unavailable..
+        /// </summary>
+        public static string Settings_About_UpdateStatus_Unavailable {
+            get {
+                return ResourceManager.GetString("Settings_About_UpdateStatus_Unavailable", resourceCulture);
             }
         }
         
@@ -1213,15 +1474,6 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Device list.
-        /// </summary>
-        public static string Settings_Flyout_DeviceList_Header {
-            get {
-                return ResourceManager.GetString("Settings_Flyout_DeviceList_Header", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to Default sort: default, default communications, enabled, disabled, disconnected. The default device sits at the bottom of the flyout. Windows sort: untouched MMDevice enumeration order..
         /// </summary>
         public static string Settings_Flyout_DeviceSort_Description {
@@ -1326,6 +1578,15 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Flyout_IntermixRecording_Title {
             get {
                 return ResourceManager.GetString("Settings_Flyout_IntermixRecording_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Layout.
+        /// </summary>
+        public static string Settings_Flyout_Layout_Header {
+            get {
+                return ResourceManager.GetString("Settings_Flyout_Layout_Header", resourceCulture);
             }
         }
         
@@ -1524,15 +1785,6 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_Flyout_Visibility_Header {
             get {
                 return ResourceManager.GetString("Settings_Flyout_Visibility_Header", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to App icons.
-        /// </summary>
-        public static string Settings_General_AppIcons_Header {
-            get {
-                return ResourceManager.GetString("Settings_General_AppIcons_Header", resourceCulture);
             }
         }
         
@@ -1785,6 +2037,15 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Settings_General_NotInstalled_Format {
             get {
                 return ResourceManager.GetString("Settings_General_NotInstalled_Format", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Other.
+        /// </summary>
+        public static string Settings_General_Other_Header {
+            get {
+                return ResourceManager.GetString("Settings_General_Other_Header", resourceCulture);
             }
         }
         
@@ -3190,6 +3451,87 @@ namespace VolumeTrayAppWPF.Localization {
         public static string Uninstaller_UninstallingButton {
             get {
                 return ResourceManager.GetString("Uninstaller_UninstallingButton", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Cancel.
+        /// </summary>
+        public static string UpdateDialog_Cancel {
+            get {
+                return ResourceManager.GetString("UpdateDialog_Cancel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Close.
+        /// </summary>
+        public static string UpdateDialog_CaptionClose_Tooltip {
+            get {
+                return ResourceManager.GetString("UpdateDialog_CaptionClose_Tooltip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A newer release is available. Installing will close the app, swap the binary, and relaunch..
+        /// </summary>
+        public static string UpdateDialog_DefaultDescription {
+            get {
+                return ResourceManager.GetString("UpdateDialog_DefaultDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Update available.
+        /// </summary>
+        public static string UpdateDialog_DefaultTitle {
+            get {
+                return ResourceManager.GetString("UpdateDialog_DefaultTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Install.
+        /// </summary>
+        public static string UpdateDialog_Install {
+            get {
+                return ResourceManager.GetString("UpdateDialog_Install", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to No release notes were provided..
+        /// </summary>
+        public static string UpdateDialog_NoChangelog {
+            get {
+                return ResourceManager.GetString("UpdateDialog_NoChangelog", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Update available: {0}.
+        /// </summary>
+        public static string UpdateDialog_TitleFormat {
+            get {
+                return ResourceManager.GetString("UpdateDialog_TitleFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} is ready to install. Click to review..
+        /// </summary>
+        public static string UpdateNotification_BodyFormat {
+            get {
+                return ResourceManager.GetString("UpdateNotification_BodyFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to VolumeTrayAppWPF update available.
+        /// </summary>
+        public static string UpdateNotification_Title {
+            get {
+                return ResourceManager.GetString("UpdateNotification_Title", resourceCulture);
             }
         }
     }

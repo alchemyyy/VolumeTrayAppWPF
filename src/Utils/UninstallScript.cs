@@ -96,6 +96,15 @@ public static class UninstallScript
         sb.AppendLine("setlocal");
         sb.AppendLine("set ERR=0");
         sb.AppendLine();
+        if (regScope == WindowsUninstallRegistry.Scope.LocalMachine)
+        {
+            sb.AppendLine("rem Reconcile Start Menu shortcuts across every user profile (and the Default");
+            sb.AppendLine("rem template) from an already-elevated context. The install exe is still on disk;");
+            sb.AppendLine("rem we ride its admin-action handler, which does the all-profiles walk in C# and");
+            sb.AppendLine("rem exits before the kill/wipe steps run. start /wait blocks the bat until exit.");
+            sb.AppendLine($"start \"\" /wait \"{EscBat(installEXE)}\" --admin-action sync-startmenu --remove-scope system");
+            sb.AppendLine();
+        }
         sb.AppendLine("rem Kill processes whose executable path equals the install exe (and only those -");
         sb.AppendLine("rem a portable copy of the app running from elsewhere is untouched).");
         sb.AppendLine("rem Loops with a brief sleep so the watcher/monitored restart race resolves.");
