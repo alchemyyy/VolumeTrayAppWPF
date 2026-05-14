@@ -1,6 +1,7 @@
 using System.Windows.Controls;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.WPF.Settings.Utils;
+using RoutedEventArgs = System.Windows.RoutedEventArgs;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace VolumeTrayAppWPF.WPF.Settings.Pages;
@@ -40,6 +41,8 @@ public partial class DeviceAppDrawersPage : UserControl
             SettingsBindings.SelectComboByTag(
                 CaptureActivityIndicatorCombo,
                 settings.CaptureActivityIndicator.ToString());
+
+            DefaultAppDrawerExpandedToggle.IsChecked = settings.DefaultAppDrawerExpanded;
 
             SettingsBindings.BindSpinner(
                 IconRetryIntervalBox,
@@ -112,6 +115,12 @@ public partial class DeviceAppDrawersPage : UserControl
     {
         if (_settings == null) return;
         SettingsBindings.HandleEnumCombo(sender, _settings, SaveAndNotify, () => _suppressChangeEvents, this);
+    }
+
+    private void BoolToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_settings == null) return;
+        SettingsBindings.HandleBoolToggle(sender, _settings, SaveAndNotify, () => _suppressChangeEvents);
     }
 
     private void SaveAndNotify() => SettingsBindings.SaveAndNotify(_settings);

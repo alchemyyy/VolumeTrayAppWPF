@@ -913,6 +913,12 @@ Target: {1}</value>
   <data name="Tray_Bluetooth" xml:space="preserve">
     <value>Bluetooth</value>
   </data>
+  <data name="Settings_DeviceAppDrawers_DefaultAppDrawerExpanded_Title" xml:space="preserve">
+    <value>Expand app drawers by default</value>
+  </data>
+  <data name="Settings_DeviceAppDrawers_DefaultAppDrawerExpanded_Description" xml:space="preserve">
+    <value>Initial expanded state for a device's app drawer the first time it appears. Devices you've explicitly collapsed or expanded with the chevron keep their per-device state; this only controls the default for devices without an override.</value>
+  </data>
   <data name="Settings_DeviceAppDrawers_SectionHeader" xml:space="preserve">
     <value>App drawers</value>
   </data>

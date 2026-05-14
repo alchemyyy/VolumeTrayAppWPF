@@ -40,6 +40,7 @@ public static class SettingsBindings
         ["ShowDisabledRecordingDevices"] = (s, v) => s.ShowDisabledRecordingDevices = v,
         ["ShowDefaultRecordingDeviceEvenIfDisabled"] = (s, v) => s.ShowDefaultRecordingDeviceEvenIfDisabled = v,
         ["ShowDefaultCommsRecordingDeviceEvenIfDisabled"] = (s, v) => s.ShowDefaultCommsRecordingDeviceEvenIfDisabled = v,
+        ["DefaultAppDrawerExpanded"] = (s, v) => s.DefaultAppDrawerExpanded = v,
         ["ShowNotPresentDevices"] = (s, v) => s.ShowNotPresentDevices = v,
         ["ShowTrayMenuRecordingLink"] = (s, v) => s.ShowTrayMenuRecordingLink = v,
         ["ShowTrayMenuSoundsLink"] = (s, v) => s.ShowTrayMenuSoundsLink = v,

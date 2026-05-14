@@ -232,6 +232,11 @@ public class AppSettings
     public bool ShowDefaultRecordingDeviceEvenIfDisabled { get; set; } = true;
     public bool ShowDefaultCommsRecordingDeviceEvenIfDisabled { get; set; } = true;
 
+    // Default expanded / collapsed state for a device's app drawer. Only consulted for devices
+    // without a persisted per-device override in devices.xml; once the user toggles a specific
+    // device's chevron the per-device entry wins. Default true to preserve the original behavior.
+    public bool DefaultAppDrawerExpanded { get; set; } = true;
+
     // Persisted "last-seen active default" id per role / flow. AudioDeviceManager writes these
     // every time GetDefaultAudioEndpoint returns a real device, and reads them as a fallback
     // when the same lookup later comes back null - that null result, while a previously-default

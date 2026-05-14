@@ -709,6 +709,24 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Initial expanded state for a device&apos;s app drawer the first time it appears. Devices you&apos;ve explicitly collapsed or expanded with the chevron keep their per-device state; this only controls the default for devices without an override..
+        /// </summary>
+        public static string Settings_DeviceAppDrawers_DefaultAppDrawerExpanded_Description {
+            get {
+                return ResourceManager.GetString("Settings_DeviceAppDrawers_DefaultAppDrawerExpanded_Description", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Expand app drawers by default.
+        /// </summary>
+        public static string Settings_DeviceAppDrawers_DefaultAppDrawerExpanded_Title {
+            get {
+                return ResourceManager.GetString("Settings_DeviceAppDrawers_DefaultAppDrawerExpanded_Title", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to App drawers.
         /// </summary>
         public static string Settings_DeviceAppDrawers_SectionHeader {

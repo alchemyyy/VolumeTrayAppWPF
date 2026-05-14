@@ -209,8 +209,17 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
         // Seed drawer state from devices.xml without creating a row -- unknown endpoints stay
         // out of the persisted list until the user actually toggles the drawer.
+        // Per-device override wins; otherwise fall back to AppSettings.DefaultAppDrawerExpanded so
+        // a user can flip the global default without first touching each device individually.
         DeviceSettingsEntry? persistedEntry = AppServices.DeviceSettings?.Find(device.Id);
-        if (persistedEntry != null) _isAppDrawerExpanded = persistedEntry.IsAppDrawerExpanded;
+        if (persistedEntry != null)
+        {
+            _isAppDrawerExpanded = persistedEntry.IsAppDrawerExpanded;
+        }
+        else if (AppServices.Settings is { } seedSettings)
+        {
+            _isAppDrawerExpanded = seedSettings.DefaultAppDrawerExpanded;
+        }
 
         ((INotifyCollectionChanged)Device.Groups).CollectionChanged += OnGroupsCollectionChanged;
 #if DEBUG_SPAWN_APP_DUMMY_ON_DEVICE_VOLUME_CHANGE
