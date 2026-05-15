@@ -40,6 +40,7 @@ namespace VolumeTrayAppWPF.WPF;
 internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 {
     private readonly string? _ownAppID;
+    private readonly Func<AudioDevice, AudioAppGroup, bool>? _shouldSuppressGroup;
     private readonly ObservableCollection<AudioAppGroup> _visibleGroups = [];
     private readonly HashSet<AudioAppGroup> _subscribedGroups = [];
 
@@ -201,10 +202,12 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public VolumeFlyoutCell(AudioDevice device, string? ownAppID)
+    public VolumeFlyoutCell(AudioDevice device, string? ownAppID,
+        Func<AudioDevice, AudioAppGroup, bool>? shouldSuppressGroup = null)
     {
         Device = device;
         _ownAppID = ownAppID;
+        _shouldSuppressGroup = shouldSuppressGroup;
         VisibleGroups = new ReadOnlyObservableCollection<AudioAppGroup>(_visibleGroups);
 
         // Seed drawer state from devices.xml without creating a row -- unknown endpoints stay
@@ -255,6 +258,8 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
     private void OnGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildVisibleGroups();
 
+    internal void RefreshVisibleGroups() => RebuildVisibleGroups();
+
     /// <summary>
     /// Invoked from the host when a watched group raises <see cref="AudioAppGroup.State"/>. Filter
     /// inclusion can flip on state transitions (Expired in particular), so we rerun the filter.
@@ -279,10 +284,11 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 
         foreach (AudioAppGroup g in Device.Groups)
         {
-            if (!IsGroupVisible(g)) continue;
-
-            // Newly-seen groups need a State subscription so a later Expired transition removes them.
+            // Newly-seen groups need a State subscription even when currently filtered out; a later
+            // Active/Expired transition can change inclusion without another collection mutation.
             if (_subscribedGroups.Add(g)) g.PropertyChanged += OnGroupPropertyChanged;
+
+            if (!IsGroupVisible(g)) continue;
 
             if (writeIndex >= _visibleGroups.Count)
             {
@@ -375,6 +381,7 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
         if (g.IsSystemSounds) return false;
         if (g.Sessions.Count == 0) return false;
         if (_ownAppID != null && string.Equals(g.AppID, _ownAppID, StringComparison.Ordinal)) return false;
+        if (_shouldSuppressGroup?.Invoke(Device, g) == true) return false;
         // HideInactive on a capture device: skip sessions that aren't actively using the mic,
         // so the drawer compacts down to just the live capturers. Identical to DimInactive's
         // gating conditions (capture + non-Active) but acts on inclusion instead of opacity.

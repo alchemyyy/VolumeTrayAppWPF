@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using VolumeTrayAppWPF.Audio.Interop;
+using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;
 
 namespace VolumeTrayAppWPF.Audio;
@@ -54,19 +55,110 @@ internal static class DeviceShellLinks
     /// <summary>
     /// Dispatches to the legacy mmsys.cpl Playback tab or the modern Settings Sound page based on
     /// the user's <see cref="SoundSettingsTarget"/> preference. Used by the flyout's titlebar
-    /// Sound-settings button.
+    /// Sound-settings button. If the targeted surface is already open, brings its window to the
+    /// foreground (restoring from minimized if needed) instead of launching a fresh instance.
     /// </summary>
     public static void OpenSoundSettings(SoundSettingsTarget target)
     {
         switch (target)
         {
             case SoundSettingsTarget.WindowsSettingsApp:
+                if (TryFocusModernSoundSettings()) return;
                 OpenModernSoundSettings();
                 break;
             default:
+                if (TryFocusLegacySoundPanel()) return;
                 OpenPlaybackTab();
                 break;
         }
+    }
+
+    // Modern Settings app is a singleton; finding the SystemSettings.exe host and focusing its main
+    // window covers any page the user previously left it on. The URI launch path remains as a
+    // fallback when no instance is running (it both starts the app and lands on the Sound page).
+    private static bool TryFocusModernSoundSettings() => TryFocusFirstProcessByName("SystemSettings");
+
+    // mmsys.cpl runs hosted by rundll32.exe, and the system may have many unrelated rundll32 hosts
+    // alive (other control panels, Windows internals). Confirm the host loaded mmsys.cpl before
+    // claiming the window, so we don't accidentally surface some other dialog.
+    private static bool TryFocusLegacySoundPanel()
+    {
+        Process[] hosts = Process.GetProcessesByName("rundll32");
+        try
+        {
+            foreach (Process p in hosts)
+            {
+                try
+                {
+                    IntPtr hwnd = p.MainWindowHandle;
+                    if (hwnd == IntPtr.Zero) continue;
+                    if (!ProcessHostsModule(p, "mmsys.cpl")) continue;
+                    if (FocusWindow(hwnd)) return true;
+                }
+                catch (Exception ex)
+                {
+                    WPFLog.Log($"DeviceShellLinks.TryFocusLegacySoundPanel: {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            foreach (Process p in hosts) p.Dispose();
+        }
+        return false;
+    }
+
+    private static bool TryFocusFirstProcessByName(string processName)
+    {
+        Process[] procs = Process.GetProcessesByName(processName);
+        try
+        {
+            foreach (Process p in procs)
+            {
+                try
+                {
+                    IntPtr hwnd = p.MainWindowHandle;
+                    if (hwnd == IntPtr.Zero) continue;
+                    if (FocusWindow(hwnd)) return true;
+                }
+                catch (Exception ex)
+                {
+                    WPFLog.Log($"DeviceShellLinks.TryFocusFirstProcessByName({processName}): {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            foreach (Process p in procs) p.Dispose();
+        }
+        return false;
+    }
+
+    // Best-effort module match. Process.Modules can throw under access restrictions or when the
+    // target is exiting; treat any failure as "not a match" and move on.
+    private static bool ProcessHostsModule(Process p, string moduleName)
+    {
+        try
+        {
+            foreach (ProcessModule m in p.Modules)
+            {
+                if (string.Equals(m.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+        }
+        catch
+        {
+            // module enumeration failed; treat as no match
+        }
+        return false;
+    }
+
+    // Un-minimize then activate. SetForegroundWindow is gated by Windows foreground rules, but the
+    // caller is always reacting to a synchronous user click on our own window, so we hold the
+    // foreground-rights token at call time.
+    private static bool FocusWindow(IntPtr hwnd)
+    {
+        if (User32.IsIconic(hwnd)) User32.ShowWindow(hwnd, User32.SW_RESTORE);
+        return User32.SetForegroundWindow(hwnd);
     }
 
     // Launches a ms-settings: URI through ShellExecute so the registered URI handler picks it up.

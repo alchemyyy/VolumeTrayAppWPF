@@ -68,6 +68,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private AudioDevice? _defaultCommunicationsDevice;
     private AudioDevice? _defaultCaptureDevice;
     private AudioDevice? _defaultCommunicationsCaptureDevice;
+    private string? _notifiedRenderDefaultDeviceID;
+    private string? _notifiedRenderCommunicationsDeviceID;
+    private string? _notifiedCaptureDefaultDeviceID;
+    private string? _notifiedCaptureCommunicationsDeviceID;
     private bool _disposed;
 
     public ReadOnlyObservableCollection<AudioDevice> Devices { get; }
@@ -495,6 +499,26 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void HandleDefaultDeviceChanged(EDataFlow flow, ERole role, string? id)
+    {
+        RememberDefaultNotification(flow, role, id);
+        ScheduleUpdateAllDefaults();
+    }
+
+    private void RememberDefaultNotification(EDataFlow flow, ERole role, string? id)
+    {
+        if (role == ERole.eMultimedia)
+        {
+            if (flow == EDataFlow.eRender) _notifiedRenderDefaultDeviceID = id;
+            else if (flow == EDataFlow.eCapture) _notifiedCaptureDefaultDeviceID = id;
+        }
+        else if (role == ERole.eCommunications)
+        {
+            if (flow == EDataFlow.eRender) _notifiedRenderCommunicationsDeviceID = id;
+            else if (flow == EDataFlow.eCapture) _notifiedCaptureCommunicationsDeviceID = id;
+        }
+    }
+
     /// <summary>
     /// Update one device's friendly name in place when the OS reports PKEY_Device_FriendlyName changed.
     /// Avoids the full RebuildDeviceList that would otherwise drop every other device's session list.
@@ -716,6 +740,9 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
     private AudioDevice? LookupDefault(EDataFlow flow, ERole role)
     {
+        AudioDevice? notifiedDefault = FindNotifiedDefault(flow, role);
+        if (notifiedDefault != null) return notifiedDefault;
+
         IMMDevice? defaultDevice = null;
         string? defaultId = null;
         try
@@ -738,6 +765,20 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             if (d.Id == defaultId) return d;
         }
         return null;
+    }
+
+    private AudioDevice? FindNotifiedDefault(EDataFlow flow, ERole role)
+    {
+        string? id = role switch
+        {
+            ERole.eMultimedia when flow == EDataFlow.eRender => _notifiedRenderDefaultDeviceID,
+            ERole.eCommunications when flow == EDataFlow.eRender => _notifiedRenderCommunicationsDeviceID,
+            ERole.eMultimedia when flow == EDataFlow.eCapture => _notifiedCaptureDefaultDeviceID,
+            ERole.eCommunications when flow == EDataFlow.eCapture => _notifiedCaptureCommunicationsDeviceID,
+            _ => null
+        };
+
+        return string.IsNullOrEmpty(id) ? null : FindDeviceByID(id);
     }
 
     // CodecMonitor fires this on the dispatcher whenever a new A2DP SET_CONFIGURATION /
@@ -926,7 +967,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             try { DefaultDeviceChangedRaw?.Invoke(flow, role, pwstrDefaultDeviceId); }
             catch (Exception ex) { WPFLog.Log($"AudioDeviceManager.DefaultDeviceChangedRaw subscriber threw: {ex.Message}"); }
 
-            _owner.ScheduleUpdateAllDefaults();
+            _owner._dispatcher.BeginInvoke(() => _owner.HandleDefaultDeviceChanged(flow, role, pwstrDefaultDeviceId));
             return 0;
         }
 

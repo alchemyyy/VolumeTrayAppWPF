@@ -71,6 +71,19 @@ internal static class User32
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
+    // ShowWindow nCmdShow values used for activate-existing-window paths. SW_RESTORE both un-minimizes
+    // and activates; SW_SHOW just shows. Keep both around in case a future call site needs the latter.
+    public const int SW_SHOW = 5;
+    public const int SW_RESTORE = 9;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsIconic(IntPtr hWnd);
+
     [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = CharSet.Unicode)]
     public static extern int RegisterWindowMessage(string lpString);
 

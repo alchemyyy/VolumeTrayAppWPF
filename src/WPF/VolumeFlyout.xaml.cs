@@ -80,6 +80,10 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     // Caching the delegate lets us add / remove with the same reference per cell.
     private readonly NotifyCollectionChangedEventHandler _onSliderListChanged;
 
+    // Source app-session collection changes can affect duplicate filtering across other device
+    // cells, so keep a separate delegate for AudioDevice.Groups subscriptions.
+    private readonly NotifyCollectionChangedEventHandler _onSourceAppGroupsChanged;
+
     // Coalesces a burst of slider list mutations into a single UpdateLayout post when hidden.
     private bool _hiddenLayoutQueued;
 
@@ -371,6 +375,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         _ownAppID = string.IsNullOrEmpty(ownPath) ? null : ownPath.ToLowerInvariant();
 
         _onSliderListChanged = (_, _) => QueueLayoutWhileHidden();
+        _onSourceAppGroupsChanged = (_, _) => RefreshAllCellVisibleGroups();
         ((INotifyCollectionChanged)_cells).CollectionChanged += _onSliderListChanged;
 
         InitializeComponent();
@@ -396,6 +401,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         };
 
         ((INotifyCollectionChanged)_deviceManager.Devices).CollectionChanged += OnDevicesCollectionChanged;
+        _deviceManager.PropertyChanged += OnDeviceManagerPropertyChanged;
         SyncDeviceSubscriptions();
         RebuildCellList();
 
@@ -497,7 +503,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             _hwndSource = null;
         }
         ((INotifyCollectionChanged)_deviceManager.Devices).CollectionChanged -= OnDevicesCollectionChanged;
-        foreach (AudioDevice d in _subscribedDevices) d.PropertyChanged -= OnDevicePropertyChanged;
+        _deviceManager.PropertyChanged -= OnDeviceManagerPropertyChanged;
+        foreach (AudioDevice d in _subscribedDevices)
+        {
+            d.PropertyChanged -= OnDevicePropertyChanged;
+            ((INotifyCollectionChanged)d.Groups).CollectionChanged -= _onSourceAppGroupsChanged;
+        }
         _subscribedDevices.Clear();
         if (_appSettings != null) _appSettings.Changed -= OnAppSettingsChanged;
         CommunicationsDucking.Changed -= OnCommunicationsDuckingChanged;
@@ -530,6 +541,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             if (!liveSet.Contains(d))
             {
                 d.PropertyChanged -= OnDevicePropertyChanged;
+                ((INotifyCollectionChanged)d.Groups).CollectionChanged -= _onSourceAppGroupsChanged;
                 _subscribedDevices.Remove(d);
             }
         }
@@ -538,7 +550,11 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         for (int i = 0; i < live.Length; i++)
         {
             AudioDevice d = live[i];
-            if (_subscribedDevices.Add(d)) d.PropertyChanged += OnDevicePropertyChanged;
+            if (_subscribedDevices.Add(d))
+            {
+                d.PropertyChanged += OnDevicePropertyChanged;
+                ((INotifyCollectionChanged)d.Groups).CollectionChanged += _onSourceAppGroupsChanged;
+            }
         }
     }
 
@@ -547,6 +563,12 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         SyncDeviceSubscriptions();
         RebuildCellList();
         if (IsVisible) PositionNearTray();
+    }
+
+    private void OnDeviceManagerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AudioDeviceManager.DefaultDevice)) return;
+        RefreshAllCellVisibleGroups();
     }
 
     /// <summary>
@@ -559,6 +581,32 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         if (e.PropertyName == null || !OrderingPropertyNames.Contains(e.PropertyName)) return;
         RebuildCellList();
+    }
+
+    private void RefreshAllCellVisibleGroups()
+    {
+        foreach (VolumeFlyoutCell cell in _cellsByDevice.Values)
+            cell.RefreshVisibleGroups();
+    }
+
+    private bool ShouldSuppressAppGroup(AudioDevice device, AudioAppGroup group)
+    {
+        if (device.DataFlow != Audio.Interop.EDataFlow.eRender) return false;
+        if (group.State is Audio.Interop.AudioSessionState.Active or Audio.Interop.AudioSessionState.Expired) return false;
+        if (group.IsSystemSounds || group.Sessions.Count == 0) return false;
+
+        AudioDevice? defaultDevice = _deviceManager.DefaultDevice;
+        if (defaultDevice == null || ReferenceEquals(device, defaultDevice)) return false;
+
+        foreach (AudioAppGroup defaultGroup in defaultDevice.Groups)
+        {
+            if (ReferenceEquals(defaultGroup, group)) continue;
+            if (defaultGroup.IsSystemSounds || defaultGroup.Sessions.Count == 0) continue;
+            if (defaultGroup.State == Audio.Interop.AudioSessionState.Expired) continue;
+            if (string.Equals(defaultGroup.AppID, group.AppID, StringComparison.Ordinal)) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -609,7 +657,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             AudioDevice device = ordered[targetIndex];
             if (!_cellsByDevice.TryGetValue(device, out VolumeFlyoutCell? cell))
             {
-                cell = new VolumeFlyoutCell(device, _ownAppID);
+                cell = new VolumeFlyoutCell(device, _ownAppID, ShouldSuppressAppGroup);
                 ((INotifyCollectionChanged)cell.VisibleGroups).CollectionChanged += _onSliderListChanged;
                 _cellsByDevice[device] = cell;
             }
@@ -636,7 +684,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         {
             AudioDevice template = _cells[0].Device;
             for (int dummyIndex = 0; dummyIndex < 40; dummyIndex++)
-                _cells.Add(new VolumeFlyoutCell(template, _ownAppID));
+                _cells.Add(new VolumeFlyoutCell(template, _ownAppID, ShouldSuppressAppGroup));
             for (int i = 0; i < _cells.Count; i++)
             {
                 _cells[i].IsFirst = i == 0;
