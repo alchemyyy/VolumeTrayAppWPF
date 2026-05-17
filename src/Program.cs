@@ -1,9 +1,9 @@
-﻿using VolumeTrayAppWPF.Services;
-using VolumeTrayAppWPF.WPF;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
+using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.Utils;
 using VolumeTrayAppWPF.Visuals;
+using VolumeTrayAppWPF.WPF;
 
 namespace VolumeTrayAppWPF;
 

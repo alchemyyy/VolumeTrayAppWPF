@@ -1,8 +1,8 @@
 ﻿using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
-using VolumeTrayAppWPF.Models;
 using Microsoft.Win32;
+using VolumeTrayAppWPF.Models;
 using Color = System.Windows.Media.Color;
 
 namespace VolumeTrayAppWPF.Visuals;

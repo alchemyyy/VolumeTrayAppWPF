@@ -410,22 +410,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
                 if (wrapped.ContainerId is Guid container
                     && _batteryMonitor.IsBluetoothContainer(container)
                     && CanPromoteToBluetooth(wrapped))
-                {
                     wrapped.IsBluetooth = true;
-                }
                 // Newly-added BT render endpoint inherits whatever codec the monitor last saw
                 // so it doesn't paint blank until the next ETW event fires.
-                if (wrapped.IsBluetooth && wrapped.DataFlow == EDataFlow.eRender)
-                {
-                    wrapped.CurrentCodec = _codecMonitor.CurrentCodec;
-                }
+                if (wrapped.IsBluetooth && wrapped.DataFlow == EDataFlow.eRender) wrapped.CurrentCodec = _codecMonitor.CurrentCodec;
                 // Seed cached battery for either flow - capture (HFP) and render (A2DP) on the
                 // same headset share a container id, so both should pick up whatever level the
                 // monitor has recorded without waiting for the next DeviceWatcher tick.
-                if (wrapped.IsBluetooth && wrapped.ContainerId is Guid container2)
-                {
-                    wrapped.BatteryLevel = _batteryMonitor.TryGet(container2);
-                }
+                if (wrapped.IsBluetooth && wrapped.ContainerId is Guid container2) wrapped.BatteryLevel = _batteryMonitor.TryGet(container2);
             }
         }
         catch
@@ -580,9 +572,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     {
         AudioDevice? defaultRender = null;
         foreach (AudioDevice d in _devices)
-        {
             if (d.DataFlow == EDataFlow.eRender && d.IsDefault) { defaultRender = d; break; }
-        }
 
         foreach (AudioDevice d in _devices)
         {
@@ -596,9 +586,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private AudioDevice? FindDeviceByID(string id)
     {
         foreach (AudioDevice d in _devices)
-        {
             if (d.Id == id) return d;
-        }
         return null;
     }
 
@@ -765,9 +753,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
         if (string.IsNullOrEmpty(defaultId)) return null;
         foreach (AudioDevice d in _devices)
-        {
             if (d.Id == defaultId) return d;
-        }
         return null;
     }
 
@@ -796,10 +782,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     // multiple BT endpoints are Active - the ETW event is system-wide (one A2DP stream at a
     // time on Windows) and doesn't carry the remote BDADDR in a field we can rely on; in the
     // overwhelmingly common single-headset case this is correct.
-    private void OnBluetoothCodecChanged(BluetoothCodec? codec)
-    {
-        PropagateCodecToBluetoothDevices(codec);
-    }
+    private void OnBluetoothCodecChanged(BluetoothCodec? codec) => PropagateCodecToBluetoothDevices(codec);
 
     private void PropagateCodecToBluetoothDevices(BluetoothCodec? codec)
     {
@@ -868,9 +851,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private bool HasActiveBluetoothRenderDevice()
     {
         foreach (AudioDevice d in _devices)
-        {
             if (d.IsBluetooth && d.DataFlow == EDataFlow.eRender && d.IsActive) return true;
-        }
         return false;
     }
 
@@ -905,10 +886,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
         try { _enumerator.UnregisterEndpointNotificationCallback(_bridge); } catch { }
 
-        foreach (AudioDevice d in _devices.ToArray())
-        {
-            Safe.Dispose(d);
-        }
+        foreach (AudioDevice d in _devices.ToArray()) Safe.Dispose(d);
         _devices.Clear();
 
         // Dispose the throttler last - any payload still in flight will see _disposed on the
@@ -933,7 +911,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     private sealed class NotificationBridge : IMMNotificationClient
     {
         private readonly AudioDeviceManager _owner;
-        public NotificationBridge(AudioDeviceManager owner) { _owner = owner; }
+        public NotificationBridge(AudioDeviceManager owner) => _owner = owner;
 
         public int OnDeviceStateChanged(string pwstrDeviceId, uint dwNewState)
         {

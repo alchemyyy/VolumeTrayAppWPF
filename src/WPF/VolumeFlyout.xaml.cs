@@ -416,10 +416,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         Closed += OnFlyoutClosed;
     }
 
-    private void OnCommunicationsDuckingChanged()
-    {
-        Dispatcher.BeginInvoke(() => IsCommunicationsDuckingActive = CommunicationsDucking.IsActive());
-    }
+    private void OnCommunicationsDuckingChanged() => Dispatcher.BeginInvoke(() => IsCommunicationsDuckingActive = CommunicationsDucking.IsActive());
 
     /// <summary>
     /// Settings change handler. Pulls the flyout back to docked when AllowFlyoutUndock flips off
@@ -858,10 +855,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// button) off the top edge. SizeToContent="Height" still auto-sizes when the cells fit;
     /// MaxHeight only takes effect when they don't.
     /// </summary>
-    private void ApplyWorkAreaMaxHeight()
-    {
-        MaxHeight = SystemParameters.WorkArea.Height - 2 * EdgePadding;
-    }
+    private void ApplyWorkAreaMaxHeight() => MaxHeight = SystemParameters.WorkArea.Height - 2 * EdgePadding;
 
     /// <summary>
     /// Scrolls <see cref="CellsScrollViewer"/> to the bottom so the default device (which sits
@@ -869,10 +863,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// list overflows. Deferred to Loaded priority because ScrollableHeight is 0 until layout
     /// completes - an immediate call against an unmeasured ScrollViewer is a no-op.
     /// </summary>
-    private void ScrollCellsToBottom()
-    {
-        Dispatcher.BeginInvoke(CellsScrollViewer.ScrollToBottom, DispatcherPriority.Loaded);
-    }
+    private void ScrollCellsToBottom() => Dispatcher.BeginInvoke(CellsScrollViewer.ScrollToBottom, DispatcherPriority.Loaded);
 
     /// <summary>Hides the flyout and stops peak metering.</summary>
     public new void Hide()
@@ -953,7 +944,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             if (keep || settings.HasFocus()) return;
 
             HideAndNotify();
-        }, System.Windows.Threading.DispatcherPriority.Input);
+        }, DispatcherPriority.Input);
     }
 
     private void HideAndNotify()
@@ -1122,9 +1113,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
                     System.Windows.Application.Current?.Shutdown();
                 }
                 else
-                {
                     _isUpdateDownloadInFlight = false;
-                }
             });
         });
     }
@@ -1271,9 +1260,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
             device.SetListenTarget(null, enable: true);
         }
         else
-        {
             device.SetListenEnabled(!device.IsListeningToThisDevice);
-        }
     }
 
     private void ListenButton_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
@@ -1367,9 +1354,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
 
         List<AudioDevice> renderTargets = new();
         foreach (AudioDevice d in _deviceManager.Devices)
-        {
             if (d.DataFlow == Audio.Interop.EDataFlow.eRender && d.IsActive) renderTargets.Add(d);
-        }
         renderTargets.Sort((a, b) => string.Compare(a.FriendlyName, b.FriendlyName, StringComparison.CurrentCultureIgnoreCase));
 
         foreach (AudioDevice target in renderTargets)
@@ -1445,9 +1430,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         if (element.Parent is not Grid parent) return null;
         foreach (object child in parent.Children)
-        {
             if (child is System.Windows.Controls.TextBox box) return box;
-        }
         return null;
     }
 
@@ -1455,9 +1438,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         if (element.Parent is not Grid parent) return null;
         foreach (object child in parent.Children)
-        {
             if (child is TextBlock tb) return tb;
-        }
         return null;
     }
 
@@ -1469,10 +1450,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         // the parent cell's IsCapture - same hop the XAML "Cursor=Arrow on capture cell"
         // DataTrigger uses via RelativeSource. Inlined here rather than a named helper.
         DependencyObject? cursor = fe;
-        while (cursor != null && (cursor is not FrameworkElement parent || parent.DataContext is not VolumeFlyoutCell))
-        {
-            cursor = VisualTreeHelper.GetParent(cursor);
-        }
+        while (cursor != null && (cursor is not FrameworkElement parent || parent.DataContext is not VolumeFlyoutCell)) cursor = VisualTreeHelper.GetParent(cursor);
         if (cursor is FrameworkElement cellHost && cellHost.DataContext is VolumeFlyoutCell { IsCapture: true }) return;
 
         group.IsMuted = !group.IsMuted;

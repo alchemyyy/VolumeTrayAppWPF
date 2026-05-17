@@ -281,9 +281,7 @@ public sealed class UpdateCheckService : IDisposable
 
         StringBuilder digits = new(tag.Length);
         foreach (char c in tag)
-        {
             if (char.IsDigit(c)) digits.Append(c);
-        }
         if (digits.Length == 0) return 0;
         return int.TryParse(digits.ToString(), out int v) ? v : 0;
     }
@@ -378,7 +376,7 @@ public sealed class UpdateCheckService : IDisposable
         // One extra second buffer so any file handles held by the dying process release before the move.
         sb.AppendLine("timeout /t 1 /nobreak >NUL");
         sb.AppendLine($"move /Y \"{stagedExe}\" \"{currentExe}\" >NUL");
-        sb.AppendLine($"if errorlevel 1 goto cleanup");
+        sb.AppendLine("if errorlevel 1 goto cleanup");
         sb.AppendLine($"start \"\" \"{currentExe}\"");
         sb.AppendLine(":cleanup");
         sb.AppendLine("(goto) 2>nul & del \"%~f0\"");

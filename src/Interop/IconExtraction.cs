@@ -37,13 +37,13 @@ internal static class IconExtraction
         LR_DEFAULTCOLOR = 0x00000000,
     }
 
-    public enum IconCursorVersion : int
+    public enum IconCursorVersion
     {
         Default = 0x00030000,
     }
 
     // SHGetImageFromShellItem flag set; only RESIZETOFIT is needed for the icon use case.
-    public enum SIIGBF : int
+    public enum SIIGBF
     {
         SIIGBF_RESIZETOFIT = 0,
     }

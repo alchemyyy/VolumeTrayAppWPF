@@ -1,8 +1,6 @@
 using System.Runtime.InteropServices;
-using System.Threading;
 using Microsoft.Win32;
 using VolumeTrayAppWPF.Interop;
-using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 

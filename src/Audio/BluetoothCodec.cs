@@ -31,10 +31,7 @@ internal sealed record BluetoothCodec(byte StandardCodecId, int VendorId, int Ve
             case 0x04: return "ATRAC";
         }
 
-        if (StandardCodecId != 0xFF)
-        {
-            return $"Unknown Codec (Invalid Vendor): 0x{StandardCodecId:X2} {VendorId}:{VendorCodecId}";
-        }
+        if (StandardCodecId != 0xFF) return $"Unknown Codec (Invalid Vendor): 0x{StandardCodecId:X2} {VendorId}:{VendorCodecId}";
 
         // Vendor-codec table - same set BluetoothAudioCodecInspector publishes, sourced from
         // helgeklein.com's ETW walkthrough and the btcodecs catalog.

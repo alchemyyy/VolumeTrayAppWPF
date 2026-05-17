@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Drawing;
 using System.Windows.Controls;
 using VolumeTrayAppWPF.Audio;
 using VolumeTrayAppWPF.Models;
@@ -140,9 +139,7 @@ internal sealed class TrayShell : IDisposable
         // path doesn't fire on every meter tick.
         if (e.PropertyName == nameof(AudioDevice.Volume) ||
             e.PropertyName == nameof(AudioDevice.IsMuted))
-        {
             RequestRefresh();
-        }
     }
 
     private (Icon? icon, string tooltip) GetTrayIconAndTooltip()

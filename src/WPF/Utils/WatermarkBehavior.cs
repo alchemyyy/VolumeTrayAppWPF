@@ -70,11 +70,13 @@ public static class WatermarkBehavior
         if (existing != null)
         {
             foreach (Adorner a in existing)
+            {
                 if (a is WatermarkAdorner wa)
                 {
                     wa.UpdateText(watermark);
                     return;
                 }
+            }
         }
 
         layer.Add(new WatermarkAdorner(tb, watermark));
@@ -89,8 +91,10 @@ public static class WatermarkBehavior
         if (existing == null) return;
 
         foreach (Adorner a in existing)
+        {
             if (a is WatermarkAdorner wa)
                 layer.Remove(wa);
+        }
     }
 
     private sealed class WatermarkAdorner : Adorner

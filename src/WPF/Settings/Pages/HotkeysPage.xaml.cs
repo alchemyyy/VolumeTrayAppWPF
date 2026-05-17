@@ -262,9 +262,8 @@ public partial class HotkeysPage : UserControl
             }
         }
         else
-        {
             _settings.Hotkeys.RemoveAll(b => b.Matches(owner.Action, owner.Parameter, entry.BindingID));
-        }
+
         SaveAndNotify();
         ReapplyHotkeysAndUpdateStatuses();
     }

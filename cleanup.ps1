@@ -1,9 +1,12 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$ProjectPath = 'src/VolumeTrayAppWPF.csproj',
+    [Alias('ProjectPath')]
+    [string]$TargetPath = 'VolumeTrayAppWPF.sln',
+    [string]$Include = 'src/**/*.cs',
     [string]$SettingsPath = 'CleanupCode.DotSettings',
     [string]$Profile = 'CodeStyleIssuesAndLanguageUsage',
     [string]$EditorConfigOverlayPath,
+    [string]$EditorConfigOverlayDirectory = 'src',
     [string]$CleanupCodeExe,
     [switch]$NoBuild,
     [switch]$NoInstall
@@ -24,7 +27,7 @@ function Resolve-RepoPath {
     return (Resolve-Path -LiteralPath (Join-Path $root $Path)).Path
 }
 
-$target = Get-Item -LiteralPath (Resolve-RepoPath $ProjectPath)
+$target = Get-Item -LiteralPath (Resolve-RepoPath $TargetPath)
 $settings = Resolve-RepoPath $SettingsPath
 
 function Resolve-CleanupRunner {
@@ -73,16 +76,21 @@ function Resolve-CleanupRunner {
 
 $runner = Resolve-CleanupRunner
 $targetPath = $target.FullName
-$targetDirectory = if ($target.PSIsContainer) { $target.FullName } else { $target.DirectoryName }
 
+# Use solution mode by default. CleanupCode limits custom profiles in
+# solution-less project mode to reformat stages, which would skip the
+# redundancy/import stages this profile is meant to run.
 $arguments = @(
     $runner.Args
     "--settings=$settings"
     "--profile=$Profile"
-    '--no-buildin-settings'
     '--verbosity=INFO'
     '--no-updates'
 )
+
+if ($Include) {
+    $arguments += "--include=$Include"
+}
 
 if ($NoBuild) {
     $arguments += '--no-build'
@@ -93,6 +101,9 @@ $arguments += $targetPath
 Write-Host "Running $($runner.Name) on $targetPath"
 Write-Host "Settings: $settings"
 Write-Host "Profile: $Profile"
+if ($Include) {
+    Write-Host "Include: $Include"
+}
 
 if ($EditorConfigOverlayPath) {
     Write-Host "EditorConfig overlay: $(Resolve-RepoPath $EditorConfigOverlayPath)"
@@ -102,7 +113,8 @@ if (-not $PSCmdlet.ShouldProcess($targetPath, "Run $($runner.Name) with '$Profil
     return
 }
 
-$overlayDestination = Join-Path $targetDirectory '.editorconfig'
+$overlayDirectory = if ($EditorConfigOverlayPath) { Resolve-RepoPath $EditorConfigOverlayDirectory } else { $null }
+$overlayDestination = if ($overlayDirectory) { Join-Path $overlayDirectory '.editorconfig' } else { $null }
 $overlayBackup = $null
 
 try {

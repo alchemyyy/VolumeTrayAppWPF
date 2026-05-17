@@ -1,4 +1,3 @@
-using System.Windows.Media;
 using Color = System.Windows.Media.Color;
 
 namespace VolumeTrayAppWPF.WPF.Utils;

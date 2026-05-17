@@ -216,13 +216,8 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
         // a user can flip the global default without first touching each device individually.
         DeviceSettingsEntry? persistedEntry = AppServices.DeviceSettings?.Find(device.Id);
         if (persistedEntry != null)
-        {
             _isAppDrawerExpanded = persistedEntry.IsAppDrawerExpanded;
-        }
-        else if (AppServices.Settings is { } seedSettings)
-        {
-            _isAppDrawerExpanded = seedSettings.DefaultAppDrawerExpanded;
-        }
+        else if (AppServices.Settings is { } seedSettings) _isAppDrawerExpanded = seedSettings.DefaultAppDrawerExpanded;
 
         ((INotifyCollectionChanged)Device.Groups).CollectionChanged += OnGroupsCollectionChanged;
 #if DEBUG_SPAWN_APP_DUMMY_ON_DEVICE_VOLUME_CHANGE
@@ -358,9 +353,8 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
             AudioAppGroup g = subscribed[i];
             bool stillOnDevice = false;
             foreach (AudioAppGroup live in Device.Groups)
-            {
                 if (ReferenceEquals(live, g)) { stillOnDevice = true; break; }
-            }
+
             if (!stillOnDevice)
             {
                 g.PropertyChanged -= OnGroupPropertyChanged;
@@ -388,9 +382,7 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
         if (IsCapture
             && AppServices.Settings is { CaptureActivityIndicator: CaptureActivityIndicator.HideInactive }
             && g.State != AudioSessionState.Active)
-        {
             return false;
-        }
         return true;
     }
 

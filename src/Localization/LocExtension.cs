@@ -23,10 +23,7 @@ public sealed class LocExtension : MarkupExtension
 
     public LocExtension() { }
 
-    public LocExtension(string key)
-    {
-        Key = key;
-    }
+    public LocExtension(string key) => Key = key;
 
     public override object ProvideValue(IServiceProvider serviceProvider)
     {

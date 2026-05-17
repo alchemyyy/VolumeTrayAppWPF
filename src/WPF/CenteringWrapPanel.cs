@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 using VolumeTrayAppWPF.Models;
 using Panel = System.Windows.Controls.Panel;
 using Size = System.Windows.Size;
@@ -98,10 +97,7 @@ internal sealed class CenteringWrapPanel : Panel
     {
         double itemW = ItemWidth;
         double itemH = ItemHeight;
-        if (double.IsNaN(itemW) || double.IsNaN(itemH) || itemW <= 0 || itemH <= 0)
-        {
-            return new Size(0, 0);
-        }
+        if (double.IsNaN(itemW) || double.IsNaN(itemH) || itemW <= 0 || itemH <= 0) return new Size(0, 0);
 
         Size itemConstraint = new(itemW, itemH);
         for (int i = 0; i < InternalChildren.Count; i++) InternalChildren[i].Measure(itemConstraint);
@@ -114,22 +110,17 @@ internal sealed class CenteringWrapPanel : Panel
             int cols = n == 0 ? 0 : (int)Math.Ceiling((double)n / perColumn);
             return new Size(cols * itemW, perColumn * itemH);
         }
-        else
-        {
-            int perRow = ResolvePrimary(availableSize.Width, itemW, n);
-            int rows = n == 0 ? 0 : (int)Math.Ceiling((double)n / perRow);
-            return new Size(perRow * itemW, rows * itemH);
-        }
+
+        int perRow = ResolvePrimary(availableSize.Width, itemW, n);
+        int rows = n == 0 ? 0 : (int)Math.Ceiling((double)n / perRow);
+        return new Size(perRow * itemW, rows * itemH);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
         double itemW = ItemWidth;
         double itemH = ItemHeight;
-        if (double.IsNaN(itemW) || double.IsNaN(itemH) || itemW <= 0 || itemH <= 0)
-        {
-            return finalSize;
-        }
+        if (double.IsNaN(itemW) || double.IsNaN(itemH) || itemW <= 0 || itemH <= 0) return finalSize;
 
         int n = InternalChildren.Count;
         if (n == 0) return finalSize;
@@ -216,10 +207,7 @@ internal sealed class CenteringWrapPanel : Panel
     {
         int explicitColumns = Columns;
         if (explicitColumns > 0) return explicitColumns;
-        if (double.IsInfinity(availableSize) || double.IsNaN(availableSize) || availableSize <= 0)
-        {
-            return Math.Max(1, childCount);
-        }
+        if (double.IsInfinity(availableSize) || double.IsNaN(availableSize) || availableSize <= 0) return Math.Max(1, childCount);
         return Math.Max(1, (int)Math.Floor(availableSize / itemSize));
     }
 }

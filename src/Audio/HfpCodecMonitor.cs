@@ -64,10 +64,7 @@ internal sealed class HfpCodecMonitor : INotifyPropertyChanged, IDisposable
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public HfpCodecMonitor(Dispatcher dispatcher)
-    {
-        _dispatcher = dispatcher;
-    }
+    public HfpCodecMonitor(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
     /// <summary>True once the ETW session is open and the worker is pumping events.</summary>
     public bool IsRunning
@@ -105,7 +102,7 @@ internal sealed class HfpCodecMonitor : INotifyPropertyChanged, IDisposable
         {
             StopOrphanedSession();
 
-            _session = new TraceEventSession(SessionName, TraceEventSessionOptions.Create)
+            _session = new TraceEventSession(SessionName)
             {
                 StopOnDispose = true,
             };
@@ -187,13 +184,9 @@ internal sealed class HfpCodecMonitor : INotifyPropertyChanged, IDisposable
             string key = providerName + ":" + eventName;
 
             if (_seenEventKeys.Add(key))
-            {
                 LogEvent(evt, providerName, eventName, "FIRST");
-            }
             else
-            {
                 LogEvent(evt, providerName, eventName, "TICK");
-            }
         }
         catch (Exception ex)
         {

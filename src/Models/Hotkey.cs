@@ -1,5 +1,4 @@
 using System.Xml.Serialization;
-using VolumeTrayAppWPF.Interop;
 
 namespace VolumeTrayAppWPF.Models;
 

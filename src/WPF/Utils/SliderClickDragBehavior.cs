@@ -35,7 +35,7 @@ public static class SliderClickDragBehavior
     // Per-slider drag state. Keyed by the Slider itself; cleared on detach + on mouse-up.
     // Tiny in practice (one or two sliders mid-drag at most), but a dictionary keeps the behaviour
     // pure-attached without forcing consumers to hold a controller reference.
-    private static readonly System.Collections.Generic.Dictionary<Slider, bool> _dragging = new();
+    private static readonly Dictionary<Slider, bool> _dragging = new();
 
     private static void OnEnableChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -133,13 +133,17 @@ public static class SliderClickDragBehavior
         // IsDirectionReversed flips the mapping on either axis.
         double newValue;
         if (isVertical)
+        {
             newValue = slider.IsDirectionReversed
                 ? slider.Minimum + normalized * range
                 : slider.Maximum - normalized * range;
+        }
         else
+        {
             newValue = slider.IsDirectionReversed
                 ? slider.Maximum - normalized * range
                 : slider.Minimum + normalized * range;
+        }
 
         slider.Value = newValue;
     }

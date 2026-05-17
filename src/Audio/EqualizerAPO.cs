@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 

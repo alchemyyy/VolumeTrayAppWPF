@@ -1,8 +1,7 @@
-using System.IO;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Interop;
 using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using VolumeTrayAppWPF.Audio.Interop;
 using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Models;
 
@@ -141,9 +140,7 @@ internal static class DeviceShellLinks
         try
         {
             foreach (ProcessModule m in p.Modules)
-            {
                 if (string.Equals(m.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase)) return true;
-            }
         }
         catch
         {

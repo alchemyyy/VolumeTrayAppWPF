@@ -5,7 +5,6 @@ using System.Security;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using Microsoft.Win32;
-using VolumeTrayAppWPF.Utils;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -260,9 +259,7 @@ internal static class EqualizerAPOInstaller
                             installed = true;
                         }
                         else
-                        {
                             originalApoGuids[i] = raw;
-                        }
                     }
                 }
             }
@@ -524,9 +521,7 @@ internal static class EqualizerAPOInstaller
             // device key).
             using RegistryKey? deviceKey = OpenWritableWithFallback(hklm, deviceSubKey);
             if (deviceKey == null)
-            {
                 WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): could not open {deviceSubKey} for write (key missing or access denied)");
-            }
             else
             {
                 try
@@ -548,9 +543,7 @@ internal static class EqualizerAPOInstaller
             // absent / stale Child APOs.
             using RegistryKey? fxProps = OpenWritableWithFallback(hklm, fxPropsSubKey);
             if (fxProps == null)
-            {
                 WPFLog.Log($"EqualizerAPOInstaller.Uninstall({deviceGuid}): could not open {fxPropsSubKey} for write (key missing or access denied)");
-            }
             else
             {
                 string preGuid = FormatGuid(PreMixGuid);
@@ -559,13 +552,9 @@ internal static class EqualizerAPOInstaller
                 {
                     string slot = originalApoGuids[i];
                     if (slot == APOGUID_NOVALUE)
-                    {
                         DeleteValueIfPresent(fxProps, FxSlotValueNames[i]);
-                    }
                     else if (slot.Length > 0)
-                    {
                         fxProps.SetValue(FxSlotValueNames[i], slot, RegistryValueKind.String);
-                    }
                     else
                     {
                         // No backup entry for this slot. Clear any EAPO GUID still living

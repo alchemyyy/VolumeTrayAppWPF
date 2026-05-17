@@ -41,9 +41,8 @@ public sealed class StringInSetVisibilityConverter : IValueConverter
         string current = value?.ToString() ?? string.Empty;
         bool match = false;
         foreach (string token in spec.Split('|'))
-        {
             if (string.Equals(current, token, StringComparison.Ordinal)) { match = true; break; }
-        }
+
         if (invert) match = !match;
         return match ? Visibility.Visible : Visibility.Collapsed;
     }

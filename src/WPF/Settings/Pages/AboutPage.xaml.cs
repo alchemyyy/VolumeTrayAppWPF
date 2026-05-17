@@ -181,9 +181,7 @@ public partial class AboutPage : UserControl
         }
 
         if (ok)
-        {
             System.Windows.Application.Current?.Shutdown();
-        }
         else
         {
             // Re-enable so the user can retry; RefreshUpdateUi handles the label based on current state.
@@ -217,18 +215,14 @@ public partial class AboutPage : UserControl
         DateTime? last = svc.LastCheckTimeUtc;
 
         if (isChecking)
-        {
             UpdateStatusText.Text = LocalizationManager.Instance["Settings_About_UpdateStatus_Checking"];
-        }
         else if (info != null)
         {
             UpdateStatusText.Text = string.Format(
                 LocalizationManager.Instance["Settings_About_UpdateStatus_AvailableFormat"], info.ReleaseName);
         }
         else if (last == null)
-        {
             UpdateStatusText.Text = LocalizationManager.Instance["Settings_About_UpdateStatus_NeverChecked"];
-        }
         else
         {
             UpdateStatusText.Text = string.Format(

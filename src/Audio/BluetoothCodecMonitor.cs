@@ -79,10 +79,7 @@ internal sealed class BluetoothCodecMonitor : INotifyPropertyChanged, IDisposabl
     /// </summary>
     public event Action<BluetoothCodec?>? CodecChanged;
 
-    public BluetoothCodecMonitor(Dispatcher dispatcher)
-    {
-        _dispatcher = dispatcher;
-    }
+    public BluetoothCodecMonitor(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
     /// <summary>
     /// The most recently observed A2DP codec, or null when nothing has been seen yet (or after
@@ -143,7 +140,7 @@ internal sealed class BluetoothCodecMonitor : INotifyPropertyChanged, IDisposabl
         {
             StopOrphanedSession();
 
-            _session = new TraceEventSession(SessionName, TraceEventSessionOptions.Create)
+            _session = new TraceEventSession(SessionName)
             {
                 // Belt-and-braces: even if Dispose is missed (e.g. force-kill via taskkill on
                 // build prep), the session goes away with the process by way of the ETW

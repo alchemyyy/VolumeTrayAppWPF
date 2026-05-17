@@ -1,5 +1,4 @@
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Interop;
@@ -89,7 +88,7 @@ internal static class AppIconResolver
 
         public ImageSource Icon => Entry.Bitmap;
 
-        internal IconHandle(CacheEntry entry) { Entry = entry; }
+        internal IconHandle(CacheEntry entry) => Entry = entry;
 
         public void Dispose()
         {
@@ -184,7 +183,7 @@ internal static class AppIconResolver
         {
             int ordinal = Math.Abs(iconIndex);
             string normalized = NormalizePath(iconPath.ToString());
-            string peKey = KEY_PE + "|" + normalized + "|" + ordinal.ToString();
+            string peKey = KEY_PE + "|" + normalized + "|" + ordinal;
             IconHandle? hit = TryAcquireIdentity(peKey);
             if (hit != null) return hit;
 
@@ -196,10 +195,7 @@ internal static class AppIconResolver
         // unparseable ordinal that produces 0 above. Strip the marker and fall through to the
         // shell. Ref: https://github.com/mpv-player/mpv/issues/7269
         string shellPath = path;
-        if (shellPath.Contains(INVALID_ORDINAL_MARKER))
-        {
-            shellPath = shellPath.Remove(shellPath.LastIndexOf(INVALID_ORDINAL_MARKER));
-        }
+        if (shellPath.Contains(INVALID_ORDINAL_MARKER)) shellPath = shellPath.Remove(shellPath.LastIndexOf(INVALID_ORDINAL_MARKER));
 
         string shellKey = KEY_SHELL_DESKTOP + "|" + NormalizePath(shellPath);
         IconHandle? shellHit = TryAcquireIdentity(shellKey);
@@ -294,10 +290,7 @@ internal static class AppIconResolver
                 return;
             }
 
-            if (entry.LruNode == null)
-            {
-                entry.LruNode = s_lru.AddFirst(entry);
-            }
+            if (entry.LruNode == null) entry.LruNode = s_lru.AddFirst(entry);
 
             int limit = AppServices.Settings?.IconLruLimit ?? AppSettings.IconLruLimitDefault;
             while (s_lru.Count > limit)
@@ -308,10 +301,7 @@ internal static class AppIconResolver
                 s_lru.RemoveLast();
                 victim.LruNode = null;
                 s_byContent.Remove(victim.ContentHash);
-                for (int i = 0; i < victim.IdentityKeys.Count; i++)
-                {
-                    s_byIdentity.Remove(victim.IdentityKeys[i]);
-                }
+                for (int i = 0; i < victim.IdentityKeys.Count; i++) s_byIdentity.Remove(victim.IdentityKeys[i]);
                 // Frozen BitmapSource becomes unreachable and is reclaimed by GC.
             }
         }
@@ -357,9 +347,7 @@ internal static class AppIconResolver
                         }
                     }
                     else
-                    {
                         run = 0;
-                    }
                 }
                 if (rowMaxX >= 0)
                 {

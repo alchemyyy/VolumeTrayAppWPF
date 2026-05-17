@@ -76,9 +76,7 @@ internal static class FlyoutDeviceOrdering
         // Render-then-capture pass when not intermixing keeps capture devices grouped after playback
         // inside each bucket; the final reversal then puts capture above playback in the rendered flyout.
         if (intermix)
-        {
             for (int i = 0; i < visible.Count; i++) buckets[ClassifyBucket(visible[i])].Add(visible[i]);
-        }
         else
         {
             for (int i = 0; i < visible.Count; i++)

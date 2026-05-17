@@ -1,6 +1,6 @@
 ﻿using System.IO;
-using VolumeTrayAppWPF.Services;
 using Microsoft.Win32;
+using VolumeTrayAppWPF.Services;
 
 namespace VolumeTrayAppWPF.Utils;
 

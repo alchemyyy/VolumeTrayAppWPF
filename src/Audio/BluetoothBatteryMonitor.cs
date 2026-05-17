@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
-using VolumeTrayAppWPF.Utils;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Enumeration.Pnp;
 
@@ -103,7 +102,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
     /// </summary>
     public event Action<Guid>? BluetoothContainerSeen;
 
-    public BluetoothBatteryMonitor(Dispatcher dispatcher) { _dispatcher = dispatcher; }
+    public BluetoothBatteryMonitor(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
     /// <summary>True once the watcher is started and pumping events.</summary>
     public bool IsRunning
@@ -117,10 +116,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
     /// Used by the manager to seed a newly-wrapped Bluetooth endpoint with the cached value so
     /// it doesn't paint blank until the next OS update.
     /// </summary>
-    public int? TryGet(Guid containerId)
-    {
-        return _batteries.TryGetValue(containerId, out int v) ? v : (int?)null;
-    }
+    public int? TryGet(Guid containerId) => _batteries.TryGetValue(containerId, out int v) ? v : null;
 
     /// <summary>
     /// True if <paramref name="containerId"/> has been observed under the BT Devices class AQS
@@ -338,10 +334,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
             containerId = c;
             _idToContainer[id] = c;
         }
-        else if (!_idToContainer.TryGetValue(id, out containerId))
-        {
-            return;
-        }
+        else if (!_idToContainer.TryGetValue(id, out containerId)) return;
 
         // Record the container in the BT set the first time we see it, regardless of whether
         // battery / connection state changed in this event. Audio code relies on this to upgrade
@@ -382,9 +375,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
         // devnode for a single headset, etc.). Only collapse the cached battery when the last
         // tracked id for that container disappears.
         foreach (KeyValuePair<string, Guid> kv in _idToContainer)
-        {
             if (kv.Value == containerId) return;
-        }
         ApplyBattery(containerId, null);
     }
 
@@ -397,9 +388,8 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
             _batteries[containerId] = v;
         }
         else
-        {
             changed = _batteries.Remove(containerId);
-        }
+
         if (!changed) return;
 
         WPFLog.LogDebug($"BluetoothBatteryMonitor: container={containerId} battery={(newValue?.ToString() ?? "<null>")}");
@@ -435,7 +425,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
     private static bool? ReadBoolProperty(IReadOnlyDictionary<string, object> props, string key)
     {
         if (!props.TryGetValue(key, out object? value) || value == null) return null;
-        return value is bool b ? b : (bool?)null;
+        return value is bool b ? b : null;
     }
 
     private void DetachWatcher()
@@ -449,10 +439,7 @@ internal sealed class BluetoothBatteryMonitor : INotifyPropertyChanged, IDisposa
             // Stop is only valid on Started / EnumerationCompleted; calling it on Created /
             // Stopping / Stopped raises. Mirrors the EarTrumpet DeviceWatcher teardown shape.
             DeviceWatcherStatus s = _watcher.Status;
-            if (s == DeviceWatcherStatus.Started || s == DeviceWatcherStatus.EnumerationCompleted)
-            {
-                _watcher.Stop();
-            }
+            if (s == DeviceWatcherStatus.Started || s == DeviceWatcherStatus.EnumerationCompleted) _watcher.Stop();
         }
         catch (Exception ex) { WPFLog.Log($"BluetoothBatteryMonitor: detach: {ex.Message}"); }
         _watcher = null;

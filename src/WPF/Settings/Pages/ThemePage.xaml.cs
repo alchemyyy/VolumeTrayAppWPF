@@ -4,7 +4,6 @@ using System.Windows.Media;
 using VolumeTrayAppWPF.Localization;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Visuals;
-using VolumeTrayAppWPF.WPF;
 using VolumeTrayAppWPF.WPF.Settings.Utils;
 using Button = System.Windows.Controls.Button;
 using Color = System.Windows.Media.Color;

@@ -2,10 +2,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
-using VolumeTrayAppWPF.Interop;
 using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.Utils;
 using Timer = System.Threading.Timer;
@@ -899,10 +897,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // Listen-to-this-device is a capture-only feature. Seed the fields directly so the bound
         // UI doesn't need a PropertyChanged round-trip on first paint; runtime changes flow
         // through RefreshListenStateFromStore via the manager's property-change callback.
-        if (DataFlow == EDataFlow.eCapture)
-        {
-            (_isListeningToThisDevice, _listenTargetDeviceID) = ReadListenStateFromStore(_device);
-        }
+        if (DataFlow == EDataFlow.eCapture) (_isListeningToThisDevice, _listenTargetDeviceID) = ReadListenStateFromStore(_device);
 
         // Exclusive-mode "allow" bit lives on both render and capture endpoints (mmsys.cpl shows
         // the Advanced > Exclusive Mode checkbox for either). Seed direct, then refresh runs on
@@ -980,9 +975,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             PROPERTYKEY targetKey = PropertyKeys.PKEY_AudioEndpoint_ListenTargetDeviceID;
             PROPVARIANT targetPv = default;
             if (string.IsNullOrEmpty(targetDeviceID))
-            {
                 targetPv.vt = PROPVARIANT.VT_EMPTY;
-            }
             else
             {
                 targetPtr = Marshal.StringToCoTaskMemUni(targetDeviceID);
@@ -995,7 +988,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             PROPVARIANT enablePv = default;
             enablePv.vt = PROPVARIANT.VT_BOOL;
             // VT_BOOL is VARIANT_BOOL: -1 (0xFFFF) for TRUE, 0 for FALSE. Stored in p1's low word.
-            enablePv.p1 = enable ? new IntPtr(unchecked((int)0xFFFF)) : IntPtr.Zero;
+            enablePv.p1 = enable ? new IntPtr(unchecked(0xFFFF)) : IntPtr.Zero;
             store.SetValue(ref enableKey, ref enablePv);
 
             store.Commit();
@@ -1022,7 +1015,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             _device.OpenPropertyStore(Stgm.Write, out store);
             PROPVARIANT pv = default;
             pv.vt = PROPVARIANT.VT_BOOL;
-            pv.p1 = value ? new IntPtr(unchecked((int)0xFFFF)) : IntPtr.Zero;
+            pv.p1 = value ? new IntPtr(unchecked(0xFFFF)) : IntPtr.Zero;
             store.SetValue(ref key, ref pv);
             store.Commit();
         }
@@ -1258,10 +1251,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// live endpoint. Called by AudioDeviceManager from its OnDeviceStateChanged path when
     /// newState includes the Active bit.
     /// </summary>
-    internal void UpgradeFromActiveState()
-    {
-        TryActivateProxies();
-    }
+    internal void UpgradeFromActiveState() => TryActivateProxies();
 
     /// <summary>
     /// Drops Active-only endpoint proxies after the OS reports this wrapper leaving Active. The next
@@ -1291,13 +1281,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         _sessionBridge = null;
 
         if (endpointVolume != null && volumeBridge != null)
-        {
             try { endpointVolume.UnregisterControlChangeNotify(volumeBridge); } catch { }
-        }
+
         if (sessionManager != null && sessionBridge != null)
-        {
             try { sessionManager.UnregisterSessionNotification(sessionBridge); } catch { }
-        }
 
         Safe.Release(endpointVolume);
         Safe.Release(endpointMeter);
@@ -1364,9 +1351,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
                     _meterLerp.PinRawPeaksToSilence();
                 }
                 else
-                {
                     _meterLerp.WriteRawPeaks(minPeak, maxPeak);
-                }
             }
             catch
             {
@@ -1482,9 +1467,8 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // session for the app. Linear scan is fine - typical session counts are well under a dozen.
         AudioAppGroup? group = null;
         for (int i = 0; i < _groups.Count; i++)
-        {
             if (_groups[i].AppID == session.AppID) { group = _groups[i]; break; }
-        }
+
         if (group == null)
         {
             // Populate the group with its first session BEFORE publishing it to the observable
@@ -1498,9 +1482,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             _groups.Add(group);
         }
         else
-        {
             group.AddSession(session);
-        }
 
         // A newly-added Active session wakes the capture engine; recompute so the bound UI flips
         // off MICROPHONE_SLEEP without waiting for the next state-change event.
@@ -1520,10 +1502,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // the canonical signal for "exclusive control is now held"; flip the lock indicator
         // before we drop the session wrapper. Other reasons (device removal, format change,
         // logoff, our own process-exit synthesis) are just lifecycle and don't imply exclusive.
-        if (session.LastDisconnectReason == AudioSessionDisconnectReason.ExclusiveModeOverride)
-        {
-            IsExclusiveControlHeld = true;
-        }
+        if (session.LastDisconnectReason == AudioSessionDisconnectReason.ExclusiveModeOverride) IsExclusiveControlHeld = true;
         RemoveSession(session);
     }
 
@@ -1555,9 +1534,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private bool HasAnyActiveSession()
     {
         for (int i = 0; i < _groups.Count; i++)
-        {
             if (_groups[i].State == AudioSessionState.Active) return true;
-        }
         return false;
     }
 
@@ -1616,9 +1593,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
             PROPVARIANT pv = default;
             if (trimmed == null)
-            {
                 pv.vt = PROPVARIANT.VT_EMPTY;
-            }
             else
             {
                 stringPtr = Marshal.StringToCoTaskMemUni(trimmed);
@@ -2041,10 +2016,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         WPFLog.LogDebug($"AudioDevice.DetectIsBluetooth: friendly='{friendlyName}' enumerator='{(enumerator.Length == 0 ? "<empty>" : enumerator)}'");
 
-        if (enumerator.StartsWith("BTH", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
+        if (enumerator.StartsWith("BTH", StringComparison.OrdinalIgnoreCase)) return true;
 
         foreach (string token in BluetoothNameTokens)
         {
@@ -2233,7 +2205,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         (ushort, ushort, uint)? parsed = ParseFormatBlob(ReadCurrentFormatBlob());
         if (parsed == null) return null;
         (ushort channels, ushort bits, uint rate) = parsed.Value;
-        return ((int)channels, (int)bits, (int)rate);
+        return (channels, bits, (int)rate);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)
@@ -2275,7 +2247,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private sealed class EndpointVolumeBridge : IAudioEndpointVolumeCallback
     {
         private readonly AudioDevice _owner;
-        public EndpointVolumeBridge(AudioDevice owner) { _owner = owner; }
+        public EndpointVolumeBridge(AudioDevice owner) => _owner = owner;
 
         public int OnNotify(IntPtr pNotify)
         {
@@ -2296,7 +2268,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     private sealed class SessionNotificationBridge : IAudioSessionNotification
     {
         private readonly AudioDevice _owner;
-        public SessionNotificationBridge(AudioDevice owner) { _owner = owner; }
+        public SessionNotificationBridge(AudioDevice owner) => _owner = owner;
 
         public int OnSessionCreated(IAudioSessionControl newSession)
         {

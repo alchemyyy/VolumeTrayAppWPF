@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
@@ -237,10 +236,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         // the audio engine notices on its own schedule; the OS-level handle signal fires within
         // microseconds of the process record going away, so this collapses the disconnect latency.
         // System sounds (pid 0) and unreachable processes are no-ops in ProcessExitMonitor.Watch.
-        if (_processExitMonitor != null && pid != 0 && !IsSystemSounds)
-        {
-            _watchingProcess = _processExitMonitor.Watch(pid, OnProcessExited);
-        }
+        if (_processExitMonitor != null && pid != 0 && !IsSystemSounds) _watchingProcess = _processExitMonitor.Watch(pid, OnProcessExited);
 
         // Kick off the deferred icon + display-name resolution. Capture pid into the closure so we
         // don't read the field after a possible Dispose; ResolveAsyncMetadata guards every COM hop
@@ -280,10 +276,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
                     // If the session was disposed while we were extracting the icon, release the
                     // handle here so it ages out instead of leaking.
                     if (_disposed || _disconnected) { icon?.Dispose(); return; }
-                    if (string.Equals(_displayName, "Unknown", StringComparison.Ordinal))
-                    {
-                        resolvedName = ProcessHelper.GetDisplayNameForProcess(pid);
-                    }
+                    if (string.Equals(_displayName, "Unknown", StringComparison.Ordinal)) resolvedName = ProcessHelper.GetDisplayNameForProcess(pid);
                 }
                 catch { /* leave resolvedName null */ }
             }
@@ -338,9 +331,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
                 if (handle != null) ApplyIconHandle(handle);
                 if (!string.IsNullOrEmpty(resolvedName)
                     && !string.Equals(resolvedName, "Unknown", StringComparison.Ordinal))
-                {
                     DisplayName = resolvedName;
-                }
             });
         }
         catch
@@ -396,10 +387,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             string resolved = !string.IsNullOrEmpty(sessionName)
                 ? sessionName
                 : ProcessHelper.GetDisplayNameForProcess(ProcessID);
-            if (!string.IsNullOrEmpty(resolved) && !string.Equals(resolved, "Unknown", StringComparison.Ordinal))
-            {
-                DisplayName = resolved;
-            }
+            if (!string.IsNullOrEmpty(resolved) && !string.Equals(resolved, "Unknown", StringComparison.Ordinal)) DisplayName = resolved;
         }
 
         if (stuckIcon)
@@ -477,9 +465,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
                 _meterLerp.PinRawPeaksToSilence();
             }
             else
-            {
                 _meterLerp.WriteRawPeaks(minPeak, maxPeak);
-            }
         }
         catch
         {
@@ -531,9 +517,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         // Stop watching the process before releasing COM proxies. If the watcher fires concurrently
         // the marshaled callback's _disposed guard collapses it to a no-op.
         if (_watchingProcess && _processExitMonitor != null)
-        {
             try { _processExitMonitor.Unwatch(ProcessID); } catch { }
-        }
 
         // Drop any queued SetMasterVolume so the throttler driver doesn't try to call into the
         // RCW we're about to release. A payload already in flight will catch the COM exception.
@@ -565,7 +549,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     {
         private readonly AudioSession _owner;
 
-        public EventBridge(AudioSession owner) { _owner = owner; }
+        public EventBridge(AudioSession owner) => _owner = owner;
 
         public int OnDisplayNameChanged(string newDisplayName, ref Guid eventContext)
         {
