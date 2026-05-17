@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Timers;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using VolumeTrayAppWPF.Audio.Interop;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
@@ -51,6 +52,14 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     // collapse the burst into a single UpdateAllDefaults pass on the UI thread.
     private readonly AsyncThrottler<string> _defaultsRefreshThrottler;
     private const string DefaultsRefreshKey = "defaults";
+
+    // One-shot recovery path for power-resume / stale-CoreAudio-notification cases. Normal endpoint
+    // add / remove / state callbacks stay incremental; this full rebuild is reserved for cases where
+    // the default render endpoint disappears or the tray is forced to paint the no-device fallback.
+    private readonly AsyncThrottler<string> _deviceListRefreshThrottler;
+    private const string MissingDefaultDeviceListRefreshKey = "missing-default-device-list-refresh";
+    private const string ResumeDeviceListRefreshKey = "resume-device-list-refresh";
+    private bool _missingDefaultRecoveryArmed;
 
     // Realtime listener for the system A2DP codec. The ETW event the monitor consumes is
     // system-wide (one A2DP stream at a time), so we propagate the codec to every Active BT
@@ -147,6 +156,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         // the coalescing instead. Cooldown would only space out successive runs, which we don't
         // need - one final UpdateAllDefaults per quiet window is the goal.
         _defaultsRefreshThrottler = new AsyncThrottler<string>(0);
+        _deviceListRefreshThrottler = new AsyncThrottler<string>(0);
 
         _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCOMObject();
 
@@ -206,6 +216,8 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         _batteryMonitor.BatteryChanged += OnBluetoothBatteryChanged;
         _batteryMonitor.BluetoothContainerSeen += OnBluetoothContainerSeen;
         _batteryMonitor.Start();
+
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
     }
 
     private double ResolveRenderIntervalMs()
@@ -335,6 +347,8 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
     /// </summary>
     private void RebuildDeviceList()
     {
+        ClearRememberedDefaultNotifications();
+
         foreach (AudioDevice d in _devices.ToArray()) d.Dispose();
         _devices.Clear();
 
@@ -400,6 +414,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             if (wrapped != null)
             {
                 _devices.Add(wrapped);
+                NoteExternalDeviceTopologyChanged();
                 ScheduleUpdateAllDefaults();
                 // Promote IsBluetooth synchronously if the watcher already classified this
                 // container - covers the common case where a runtime device-add lands after the
@@ -440,6 +455,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         bool wasBluetoothRender = match.IsBluetooth && match.DataFlow == EDataFlow.eRender;
         _devices.Remove(match);
         Safe.Dispose(match);
+        NoteExternalDeviceTopologyChanged();
         ScheduleUpdateAllDefaults();
 
         // Last BT render endpoint just got removed - drop the cached codec.
@@ -471,6 +487,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         if (isActive) match.UpgradeFromActiveState();
         else match.DowngradeFromActiveState();
 
+        NoteExternalDeviceTopologyChanged();
         ScheduleUpdateAllDefaults();
         // Any render endpoint going active / inactive can change the dim state of every capture
         // row's listen button (target-active is a cross-device derived flag), so recompute here.
@@ -497,8 +514,17 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
     private void HandleDefaultDeviceChanged(EDataFlow flow, ERole role, string? id)
     {
+        NoteExternalDeviceTopologyChanged();
         RememberDefaultNotification(flow, role, id);
         ScheduleUpdateAllDefaults();
+    }
+
+    private void ClearRememberedDefaultNotifications()
+    {
+        _notifiedRenderDefaultDeviceID = null;
+        _notifiedRenderCommunicationsDeviceID = null;
+        _notifiedCaptureDefaultDeviceID = null;
+        _notifiedCaptureCommunicationsDeviceID = null;
     }
 
     private void RememberDefaultNotification(EDataFlow flow, ERole role, string? id)
@@ -633,6 +659,77 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         });
     }
 
+    internal void RequestMissingDefaultRecovery(string reason)
+    {
+        if (!_dispatcher.CheckAccess())
+        {
+            try { _ = _dispatcher.BeginInvoke(() => RequestMissingDefaultRecovery(reason)); }
+            catch { /* dispatcher shut down - nothing to recover */ }
+            return;
+        }
+
+        if (_disposed || _missingDefaultRecoveryArmed) return;
+
+        _missingDefaultRecoveryArmed = true;
+        ScheduleDeviceListRefresh(reason, TimeConstants.DeviceListRefreshAfterMissingDefaultMs);
+    }
+
+    private void UpdateMissingDefaultRecovery(AudioDevice? renderDefault)
+    {
+        if (renderDefault != null)
+        {
+            _missingDefaultRecoveryArmed = false;
+            return;
+        }
+
+        RequestMissingDefaultRecovery("missing-render-default");
+    }
+
+    private void NoteExternalDeviceTopologyChanged() => _missingDefaultRecoveryArmed = false;
+
+    private void ScheduleDeviceListRefresh(string reason, int delayMs)
+    {
+        int dwellMs = Math.Max(0, delayMs);
+        string key = reason == "power-resume"
+            ? ResumeDeviceListRefreshKey
+            : MissingDefaultDeviceListRefreshKey;
+        _ = _deviceListRefreshThrottler.RunAsync(key, async ctx =>
+        {
+            try { await Task.Delay(dwellMs, ctx.CancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return; }
+            if (ctx.HasReplacement) return;
+
+            try
+            {
+                await _dispatcher.InvokeAsync(() =>
+                {
+                    if (_disposed) return;
+                    if (DefaultDevice != null) return;
+                    WPFLog.Log($"AudioDeviceManager.RebuildDeviceList: reason={reason}");
+                    RebuildDeviceList();
+                });
+            }
+            catch { /* dispatcher shut down - nothing to refresh */ }
+        });
+    }
+
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != PowerModes.Resume) return;
+
+        WPFLog.Log("AudioDeviceManager.PowerModeChanged: resume");
+        try
+        {
+            _ = _dispatcher.BeginInvoke(() =>
+            {
+                if (_disposed) return;
+                _missingDefaultRecoveryArmed = false;
+                ScheduleDeviceListRefresh("power-resume", TimeConstants.DeviceListRefreshAfterResumeMs);
+            });
+        }
+        catch { /* dispatcher shut down - nothing to recover */ }
+    }
+
     /// <summary>
     /// Re-evaluates every default-role binding (render multimedia + render comms + capture
     /// multimedia + capture comms) against the current device list. Cheap to call - four
@@ -683,6 +780,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         DefaultCommunicationsDevice = renderComms;
         DefaultCaptureDevice = captureDefault;
         DefaultCommunicationsCaptureDevice = captureComms;
+        UpdateMissingDefaultRecovery(renderDefault);
 
         // Capture rows that follow the default playback device (null target id) reread their dim
         // state from whichever render endpoint is now the default.
@@ -863,6 +961,8 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         if (_disposed) return;
         _disposed = true;
 
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+
         _peakSampleTimer.Stop();
         _peakRenderTimer.Stop();
         _peakSampleTimer.Elapsed -= OnPeakSampleElapsed;
@@ -894,6 +994,7 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
         // is preferable to forcibly cancelling, which can race with finalization.
         Safe.Dispose(_volumeThrottler);
         Safe.Dispose(_defaultsRefreshThrottler);
+        Safe.Dispose(_deviceListRefreshThrottler);
 
         // Tear the watcher thread down after every device (and so every session) is disposed -
         // sessions Unwatch on Dispose, so by the time we get here the watch set is empty and the

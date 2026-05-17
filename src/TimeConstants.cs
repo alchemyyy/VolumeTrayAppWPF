@@ -48,6 +48,12 @@ public static class TimeConstants
     // catch the trailing role-change notifications.
     public const int DefaultsRefreshCoalesceDwellMs = 50;
 
+    // CoreAudio can report every endpoint as disabled / not-present during sleep-resume and then
+    // miss the final Active/default callback. These waits let the device stack settle before the
+    // manager performs a one-shot full enumeration recovery.
+    public const int DeviceListRefreshAfterResumeMs = 2_000;
+    public const int DeviceListRefreshAfterMissingDefaultMs = 1_000;
+
     // Trailing-edge debounce window for the volume-change ding. Each scroll/wheel event resets this
     // timer; the ding only fires once the timer elapses with no fresh event arriving. Keeps a fast
     // wheel spin (or rapid slider drag releases) from machine-gunning the beep. long enough

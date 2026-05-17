@@ -149,9 +149,10 @@ internal sealed class TrayShell : IDisposable
 
         if (device == null)
         {
+            _audioManager.RequestMissingDefaultRecovery("tray-null-default");
             _renderer.IsLightTheme = isLight;
-            _renderer.Glyph = GlyphCatalog.PLAYBACK_VOLUME_SILENT;
-            _renderer.BackdropGlyph = GlyphCatalog.PLAYBACK_VOLUME_HIGH;
+            _renderer.Glyph = GlyphCatalog.PLAYBACK_VOLUME_MUTE;
+            _renderer.BackdropGlyph = null;
             return (_renderer.CreateIcon(), "No audio device");
         }
 
