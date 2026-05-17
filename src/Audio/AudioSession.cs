@@ -6,7 +6,6 @@ using VolumeTrayAppWPF.Audio.Interop;
 using VolumeTrayAppWPF.Models;
 using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.Utils;
-using Timer = System.Threading.Timer;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -46,7 +45,8 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     private float _volume;
     private bool _isMuted;
     private string _displayName;
-    private AudioSessionState _state;
+    // Also read by the background sample timer as the session-meter liveness gate.
+    private volatile AudioSessionState _state;
     private ImageSource? _icon;
     // Refcounted reference to the cached icon entry. Owned by this session; disposed on session
     // teardown or replaced (via ApplyIconHandle) when a re-resolution lands on a different bitmap.
@@ -57,18 +57,6 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 
     // Step-counter peak-meter lerp. Shared with AudioDevice via the MeterLerp struct.
     private MeterLerp _meterLerp;
-
-    // Stuck-meter watchdog. Mirrors the AudioDevice-level watchdog: each fresh (min, max) pair
-    // re-arms a one-shot timer; after MeterStaleWatchdogMs of bit-exact same-value reads the
-    // callback flips _meterIsLatched and subsequent same-value samples force the lerp to silence.
-    // Per-session meters need this independently of the device-level one because each session's
-    // IAudioMeterInformation is its own COM proxy and can latch on its own (typically when an app
-    // pauses playback without releasing the session, or after a default-device switch leaves the
-    // session pointed at a quiescent endpoint).
-    private readonly Timer _stuckMeterWatchdog;
-    private float _lastRawPeakMin;
-    private float _lastRawPeakMax;
-    private volatile bool _meterIsLatched;
 
     public uint ProcessID { get; }
     public bool IsSystemSounds { get; }
@@ -226,10 +214,8 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         // Initial volume / mute / state pulled synchronously so the first paint shows real values.
         _simpleVolume.GetMasterVolume(out _volume);
         _simpleVolume.GetMute(out _isMuted);
-        _control.GetState(out _state);
-
-        // Stuck-meter watchdog (see field comment). Disarmed until the first different peak pair lands.
-        _stuckMeterWatchdog = new Timer(OnStuckMeterWatchdog, null, Timeout.Infinite, Timeout.Infinite);
+        _control.GetState(out AudioSessionState initialState);
+        _state = initialState;
 
         // Wire callback. The bridge holds a reference back to us for state updates.
         _events = new EventBridge(this);
@@ -450,38 +436,20 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
 
         try
         {
-            MeterReader.ReadStereoPeaks(_meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
-
-            if (minPeak != _lastRawPeakMin || maxPeak != _lastRawPeakMax)
+            if (State != AudioSessionState.Active)
             {
-                // Fresh value - clear any latched-stale state, cache, write through, re-arm.
-                _lastRawPeakMin = minPeak;
-                _lastRawPeakMax = maxPeak;
-                _meterIsLatched = false;
-                _meterLerp.WriteRawPeaks(minPeak, maxPeak);
-                _stuckMeterWatchdog.Change(TimeConstants.MeterStaleWatchdogMs, Timeout.Infinite);
-            }
-            else if (_meterIsLatched)
-            {
-                // Watchdog confirmed the meter is stuck - force silence so the lerp decays. Stays
-                // in this branch until the COM call finally produces a genuinely different pair.
                 _meterLerp.PinRawPeaksToSilence();
+                return;
             }
-            else
-                _meterLerp.WriteRawPeaks(minPeak, maxPeak);
+
+            MeterReader.ReadStereoPeaks(_meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
+            _meterLerp.WriteRawPeaks(minPeak, maxPeak);
         }
         catch
         {
             // Meter can fail mid-disconnect; ignore until the disconnect callback fires.
             // Leave the previous raw values in place so the next successful sample reconciles.
         }
-    }
-
-    // Stuck-meter watchdog callback. See AudioDevice.OnStuckMeterWatchdog for the rationale.
-    private void OnStuckMeterWatchdog(object? _)
-    {
-        if (_disposed || _disconnected) return;
-        _meterIsLatched = true;
     }
 
     /// <summary>
@@ -493,6 +461,17 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     {
         if (_disposed || _disconnected) return;
         _meterLerp.OnNewSample(interpolationSteps);
+    }
+
+    /// <summary>
+    /// Dispatcher-side lifecycle fast path. When the session reports Inactive / Expired, arm the
+    /// lerp toward silence immediately instead of waiting for the next sample-timer tick.
+    /// </summary>
+    private void PinMeterToSilenceNow()
+    {
+        if (_disposed || _disconnected) return;
+        _meterLerp.PinRawPeaksToSilence();
+        _meterLerp.OnNewSample(interpolationSteps: 1);
     }
 
     /// <summary>
@@ -524,10 +503,6 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         // Drop any queued SetMasterVolume so the throttler driver doesn't try to call into the
         // RCW we're about to release. A payload already in flight will catch the COM exception.
         _volumeWrite.Drop();
-
-        // Disarm the stuck-meter watchdog. Timer.Dispose waits for an in-flight callback; the
-        // _disposed early-return in OnStuckMeterWatchdog collapses one that slipped through.
-        _stuckMeterWatchdog.Dispose();
 
         try { _control.UnregisterAudioSessionNotification(_events); }
         catch { /* session may already be gone */ }
@@ -609,6 +584,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
             {
                 _owner.State = newState;
                 if (newState == AudioSessionState.Active) _owner.TryReresolveProcessMetadata();
+                else _owner.PinMeterToSilenceNow();
                 _owner.StateChanged?.Invoke(_owner);
             });
             return 0;

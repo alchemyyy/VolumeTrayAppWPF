@@ -6,7 +6,6 @@ using System.Windows.Threading;
 using VolumeTrayAppWPF.Audio.Interop;
 using VolumeTrayAppWPF.Services;
 using VolumeTrayAppWPF.Utils;
-using Timer = System.Threading.Timer;
 
 namespace VolumeTrayAppWPF.Audio;
 
@@ -100,18 +99,6 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     // which is what gives the meter its smoothness.
     private MeterLerp _meterLerp;
 
-    // Watchdog for the Windows IAudioMeterInformation latch on idle render endpoints (A2DP
-    // offload makes BT especially prone). UpdatePeakValueBackground re-arms this one-shot timer
-    // every time the COM read returns a different (min, max) pair from the previous sample.
-    // After MeterStaleWatchdogMs of bit-exact same-value reads the callback flips _meterIsLatched,
-    // and subsequent same-value samples force the lerp to silence instead of writing the stale
-    // value through. The next genuinely different read clears the flag. volatile so the bg
-    // sample thread sees the callback's flip without a fence.
-    private readonly Timer _stuckMeterWatchdog;
-    private float _lastRawPeakMin;
-    private float _lastRawPeakMax;
-    private volatile bool _meterIsLatched;
-
     // Throttled COM-write driver for endpoint volume. Shape shared with AudioSession via the
     // VolumeThrottle composition - the only difference is the COM call (SetMasterVolumeLevelScalar
     // vs SetMasterVolume).
@@ -119,11 +106,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
     // True on a capture endpoint when no session is currently in the Active state. Windows lets
     // the capture engine idle when no app is streaming the mic, so the endpoint meter stops
-    // updating and holds whatever peak was last sampled. Bg-thread sample reads see this flag and
-    // force the raw peaks to 0 so the lerp falls to silence instead of freezing on a stale value;
-    // the bound UI also swaps the mute-row glyph to MICROPHONE_SLEEP. volatile so the bg sample
-    // thread reads a coherent value - writes always happen on the UI thread.
+    // updating and holds whatever peak was last sampled. The bound UI swaps the mute-row glyph to
+    // MICROPHONE_SLEEP; the background sample loop reads _pinEndpointMeterToSilence instead.
     private volatile bool _isCaptureSleeping;
+
+    // Event-driven gate for endpoint-level meter samples. The sample timer runs on a threadpool
+    // worker, so it reads this cached decision instead of enumerating UI-owned session groups.
+    // Capture: pin while no capture client is active. Render: pin while no shared render session
+    // is active, except when exclusive mode has taken over and shared-session visibility is lost.
+    private volatile bool _pinEndpointMeterToSilence;
 
     public string Id { get; }
     public EDataFlow DataFlow { get; }
@@ -403,6 +394,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             if (_isExclusiveControlHeld == value) return;
             _isExclusiveControlHeld = value;
             OnPropertyChanged();
+            RecomputeEndpointMeterSilenceState();
         }
     }
 
@@ -907,11 +899,6 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // mmsys.cpl writes via the manager's OnPropertyValueChanged hook.
         _isExclusiveModeAllowed = ReadAllowExclusiveControlFromStore(_device);
 
-        // One-shot stuck-meter watchdog. Stays disarmed until the first different peak pair lands;
-        // every fresh pair after that re-arms it via Timer.Change. Initialized before
-        // TryActivateProxies so a fast first sample can't race the field.
-        _stuckMeterWatchdog = new Timer(OnStuckMeterWatchdog, null, Timeout.Infinite, Timeout.Infinite);
-
         // Endpoint volume / meter / session manager are only addressable on Active devices.
         // For Disabled / NotPresent / Unplugged endpoints we keep a thin wrapper alive so the
         // tray menu and visibility filters can still reason about them; UpgradeFromActiveState
@@ -1208,9 +1195,10 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
 
             EnumerateExistingSessions();
 
-            // After the initial session enumeration, decide whether the capture engine is idle.
-            // Render endpoints short-circuit inside the recompute - the flag stays false there.
-            RecomputeCaptureSleepingState();
+            // After the initial session enumeration, decide whether endpoint meter samples are
+            // admissible. Capture endpoints sleep with no active capture client; render endpoints
+            // sleep with no active shared render session unless exclusive mode owns visibility.
+            RecomputeEndpointMeterSilenceState();
         }
         catch (Exception ex)
         {
@@ -1265,6 +1253,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         if (_disposed) return;
         ReleaseEndpointProxies();
+        PinEndpointMeterToSilenceNow();
     }
 
     private void ReleaseEndpointProxies()
@@ -1324,12 +1313,11 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         IAudioMeterInformation? meter = _endpointMeter;
         if (meter == null) return;
 
-        if (_isCaptureSleeping)
+        if (_pinEndpointMeterToSilence)
         {
-            // Capture engine is idled by Windows when no app holds an active stream. The endpoint
-            // meter holds the last value from when something was capturing - reading it would
-            // freeze the level bar on a stale peak. Pin raw peaks to 0 instead; the lerp falls
-            // smoothly to silence.
+            // Event-driven lifecycle says endpoint metering is currently stale: either capture is
+            // asleep, or render has no active shared stream to justify a non-zero endpoint peak.
+            // Pin raw peaks to 0 instead; the lerp falls smoothly to silence.
             _meterLerp.PinRawPeaksToSilence();
         }
         else
@@ -1337,24 +1325,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             try
             {
                 MeterReader.ReadStereoPeaks(meter, unified, biasMultiplier, out float minPeak, out float maxPeak);
-
-                if (minPeak != _lastRawPeakMin || maxPeak != _lastRawPeakMax)
-                {
-                    // Fresh value - clear any latched-stale state, cache, write through, re-arm.
-                    _lastRawPeakMin = minPeak;
-                    _lastRawPeakMax = maxPeak;
-                    _meterIsLatched = false;
-                    _meterLerp.WriteRawPeaks(minPeak, maxPeak);
-                    _stuckMeterWatchdog.Change(TimeConstants.MeterStaleWatchdogMs, Timeout.Infinite);
-                }
-                else if (_meterIsLatched)
-                {
-                    // Windows-confirmed latch - ignore the stale COM value and force silence so
-                    // the lerp decays. Stays in this branch until a genuinely different pair lands.
-                    _meterLerp.PinRawPeaksToSilence();
-                }
-                else
-                    _meterLerp.WriteRawPeaks(minPeak, maxPeak);
+                _meterLerp.WriteRawPeaks(minPeak, maxPeak);
             }
             catch
             {
@@ -1386,15 +1357,6 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         _meterLerp.OnNewSample(interpolationSteps);
 
         for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnNewSample(interpolationSteps);
-    }
-
-    // Stuck-meter watchdog callback. Fires on a threadpool worker after MeterStaleWatchdogMs of
-    // bit-exact same-value reads. Just flips the latched flag - the next bg sample sees it and
-    // routes through PinRawPeaksToSilence instead of writing the stale value back to the lerp.
-    private void OnStuckMeterWatchdog(object? _)
-    {
-        if (_disposed) return;
-        _meterIsLatched = true;
     }
 
     /// <summary>
@@ -1486,15 +1448,15 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         else
             group.AddSession(session);
 
-        // A newly-added Active session wakes the capture engine; recompute so the bound UI flips
-        // off MICROPHONE_SLEEP without waiting for the next state-change event.
-        RecomputeCaptureSleepingState();
-
         // Exclusive mode and shared-mode sessions can't coexist on the same endpoint - the audio
         // engine refuses to create shared-mode sessions while exclusive holds. So the mere arrival
         // of any new session here means whatever held exclusive has released; clear the indicator.
         // Covers the common "exclusive app quit; shared playback resumed" recovery case.
         if (_isExclusiveControlHeld) IsExclusiveControlHeld = false;
+
+        // A newly-added Active session wakes the endpoint meter; recompute so capture rows flip
+        // off MICROPHONE_SLEEP and render rows stop pinning without waiting for a state-change echo.
+        RecomputeEndpointMeterSilenceState();
     }
 
     private void OnSessionDisconnected(AudioSession session)
@@ -1512,25 +1474,48 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     {
         // Expired state means the app stopped using the endpoint; drop it so the flyout list stays current.
         if (session.State == AudioSessionState.Expired) RemoveSession(session);
-        // Any Active <-> Inactive flip can change the capture engine's idle status. RemoveSession
-        // also calls Recompute, but it's idempotent (the flag only fires PropertyChanged on actual
-        // change) so the double call on the Expired path is harmless.
-        RecomputeCaptureSleepingState();
+        // Any Active <-> Inactive flip can change endpoint-meter admissibility. RemoveSession also
+        // calls Recompute, but it is idempotent so the double call on the Expired path is harmless.
+        RecomputeEndpointMeterSilenceState();
     }
 
     /// <summary>
-    /// Walks the live group list and flips <see cref="IsCaptureSleeping"/> based on whether any
-    /// session is currently Active. No-op on render endpoints - the engine never idles there, so
-    /// the flag stays false and the bound UI keeps showing the normal speaker tier. Must be called
-    /// on the UI thread since the group list is UI-thread-only.
+    /// Walks the live group list and updates the event-driven meter gate from session activity.
+    /// Must be called on the UI thread since the group list is UI-thread-only.
     /// </summary>
-    private void RecomputeCaptureSleepingState()
+    private void RecomputeEndpointMeterSilenceState()
     {
         if (_disposed) return;
-        bool sleeping = DataFlow == EDataFlow.eCapture && !HasAnyActiveSession();
-        if (_isCaptureSleeping == sleeping) return;
-        _isCaptureSleeping = sleeping;
-        OnPropertyChanged(nameof(IsCaptureSleeping));
+        bool hasActiveSession = HasAnyActiveSession();
+
+        bool sleeping = DataFlow == EDataFlow.eCapture && !hasActiveSession;
+        if (_isCaptureSleeping != sleeping)
+        {
+            _isCaptureSleeping = sleeping;
+            OnPropertyChanged(nameof(IsCaptureSleeping));
+        }
+
+        bool shouldPin = DataFlow switch
+        {
+            EDataFlow.eCapture => sleeping,
+            EDataFlow.eRender => !_isExclusiveControlHeld && !hasActiveSession,
+            _ => false
+        };
+
+        if (_pinEndpointMeterToSilence == shouldPin) return;
+        _pinEndpointMeterToSilence = shouldPin;
+        if (shouldPin) PinEndpointMeterToSilenceNow();
+    }
+
+    /// <summary>
+    /// Dispatcher-side lifecycle fast path. When session events prove the endpoint cannot have a
+    /// meaningful shared meter value, arm the lerp toward silence without waiting for the sampler.
+    /// </summary>
+    private void PinEndpointMeterToSilenceNow()
+    {
+        if (_disposed) return;
+        _meterLerp.PinRawPeaksToSilence();
+        _meterLerp.OnNewSample(interpolationSteps: 1);
     }
 
     private bool HasAnyActiveSession()
@@ -1555,8 +1540,8 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             session.StateChanged -= OnSessionStateChanged;
             g.RemoveSession(session);
             Safe.Dispose(session);
-            // Losing this session may have been the last active one; refresh the sleep flag.
-            RecomputeCaptureSleepingState();
+            // Losing this session may have been the last active one; refresh the meter gate.
+            RecomputeEndpointMeterSilenceState();
             return;
         }
     }

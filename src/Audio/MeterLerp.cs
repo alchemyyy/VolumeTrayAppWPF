@@ -116,9 +116,8 @@ internal struct MeterLerp
     }
 
     /// <summary>
-    /// Bg-thread reset for the capture-engine-idle path. Forces the raw peaks to 0 so the next
-    /// OnNewSample lerps smoothly to silence instead of freezing on whatever the endpoint meter
-    /// last reported before Windows idled the engine.
+    /// Forces the raw peaks to 0 so the next OnNewSample lerps smoothly to silence. Used by the
+    /// background sample gate and by dispatcher-side stream lifecycle events.
     /// </summary>
     public void PinRawPeaksToSilence()
     {
