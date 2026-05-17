@@ -45,19 +45,16 @@ public sealed record InstallResult(bool Success, string? ErrorMessage = null, bo
 /// </summary>
 public static class InstallationService
 {
-    // Derived from Program.ApplicationName so the skeleton picks up whatever name the fork sets,
-    // without forcing every install path to be threaded through the Program constant explicitly.
     public static string InstalledEXEFileName => Program.ApplicationName + ".exe";
 
     public static string LocalAppDataInstallDir =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Program.ApplicationName);
+        Program.LocalAppDataRoot;
 
     public static string LocalAppDataInstallEXE =>
         Path.Combine(LocalAppDataInstallDir, InstalledEXEFileName);
 
     public static string ProgramFilesInstallDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Program.ApplicationName);
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Program.SharedRootFolderName);
 
     public static string ProgramFilesInstallEXE =>
         Path.Combine(ProgramFilesInstallDir, InstalledEXEFileName);

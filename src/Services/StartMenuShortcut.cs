@@ -35,7 +35,7 @@ public static class StartMenuShortcut
         @"AppData\Roaming\Microsoft\Windows\Start Menu\Programs";
 
     private static string LocalAppDataExeRelativePath =>
-        @"AppData\Local\" + Program.ApplicationName + @"\" + InstallationService.InstalledEXEFileName;
+        @"AppData\Local\" + Program.SharedRootFolderName + @"\" + InstallationService.InstalledEXEFileName;
 
     private static string PlainFileName => $"{Program.ApplicationName}.lnk";
     private static string LocalSuffixedFileName => $"{Program.ApplicationName} ({LocalSuffix}).lnk";

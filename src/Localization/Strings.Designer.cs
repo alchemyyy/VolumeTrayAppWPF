@@ -3383,7 +3383,7 @@ namespace VolumeTrayAppWPF.Localization {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Also remove the VolumeTrayAppWPF folder under %LOCALAPPDATA%, including settings.xml..
+        ///   Looks up a localized string similar to Also remove %LOCALAPPDATA%\TrayAppWPF\VolumeTrayAppWPF, including settings.xml..
         /// </summary>
         public static string Uninstaller_DeleteSettings_DefaultDescription {
             get {

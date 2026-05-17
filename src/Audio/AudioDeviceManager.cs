@@ -456,8 +456,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// OnDeviceStateChanged: refresh the existing wrapper's State and, when transitioning to Active,
-    /// upgrade its endpoint proxies so volume / metering wakes back up. Default-device evaluation
-    /// runs at the end so a state flip on a default-eligible device propagates immediately.
+    /// upgrade its endpoint proxies so volume / metering wakes back up. When leaving Active, drop
+    /// those proxies so a later Active transition re-subscribes instead of keeping invalidated COM
+    /// callbacks. Default-device evaluation runs at the end so a state flip on a default-eligible
+    /// device propagates immediately.
     /// </summary>
     private void HandleDeviceStateChanged(string id, uint newState)
     {
@@ -472,8 +474,10 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        bool isActive = (newState & (uint)DeviceState.Active) != 0;
         match.State = (DeviceState)newState;
-        if ((newState & (uint)DeviceState.Active) != 0) match.UpgradeFromActiveState();
+        if (isActive) match.UpgradeFromActiveState();
+        else match.DowngradeFromActiveState();
 
         ScheduleUpdateAllDefaults();
         // Any render endpoint going active / inactive can change the dim state of every capture
@@ -778,7 +782,12 @@ internal sealed class AudioDeviceManager : INotifyPropertyChanged, IDisposable
             _ => null
         };
 
-        return string.IsNullOrEmpty(id) ? null : FindDeviceByID(id);
+        if (string.IsNullOrEmpty(id)) return null;
+
+        AudioDevice? device = FindDeviceByID(id);
+        if (device == null) return null;
+        if (device.DataFlow != flow || !device.IsActive) return null;
+        return device;
     }
 
     // CodecMonitor fires this on the dispatcher whenever a new A2DP SET_CONFIGURATION /

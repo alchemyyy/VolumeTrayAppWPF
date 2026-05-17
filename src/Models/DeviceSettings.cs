@@ -53,8 +53,7 @@ public class DeviceSettings
 
     public static string GetDefaultPath()
     {
-        string appDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        string appFolder = Path.Combine(appDataFolder, Program.ApplicationName);
+        string appFolder = Program.AppLocalAppDataDirectory;
         Directory.CreateDirectory(appFolder);
         return Path.Combine(appFolder, "devices.xml");
     }

@@ -1100,7 +1100,7 @@ Target: {1}</value>
     <value>This will remove the installed copy of VolumeTrayAppWPF and its registration in Windows Apps. Choose what to do with your settings.</value>
   </data>
   <data name="Uninstaller_DeleteSettings_DefaultDescription" xml:space="preserve">
-    <value>Also remove the VolumeTrayAppWPF folder under %LOCALAPPDATA%, including settings.xml.</value>
+    <value>Also remove %LOCALAPPDATA%\TrayAppWPF\VolumeTrayAppWPF, including settings.xml.</value>
   </data>
   <data name="Uninstaller_DeleteSettings_Description_Format" xml:space="preserve">
     <value>Also remove "{0}" including settings.xml.</value>

@@ -18,6 +18,13 @@ internal static class Program
     public static int? WatcherPID { get; private set; }
 
     public const string ApplicationName = "VolumeTrayAppWPF";
+    public const string SharedRootFolderName = "TrayAppWPF";
+
+    public static string LocalAppDataRoot =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), SharedRootFolderName);
+
+    public static string AppLocalAppDataDirectory =>
+        Path.Combine(LocalAppDataRoot, ApplicationName);
 
     /// <summary>
     /// True when this process was started with <c>--uninstall</c>.

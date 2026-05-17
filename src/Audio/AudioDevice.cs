@@ -1181,7 +1181,11 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// </summary>
     private void TryActivateProxies()
     {
-        if (_endpointVolume != null) return;
+        if (_endpointVolume != null)
+        {
+            RefreshEndpointVolumeState();
+            return;
+        }
 
         try
         {
@@ -1196,12 +1200,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             _endpointMeter = (IAudioMeterInformation)meterObj;
             _sessionManager = (IAudioSessionManager2)mgrObj;
 
-            endpointVolume.GetMasterVolumeLevelScalar(out _volume);
-            endpointVolume.GetMute(out _isMuted);
             // Notify bindings that volume/mute now have real values - the wrapper may have lived as
             // an inactive shell up to this point and the bound UI is showing the 0/false defaults.
-            OnPropertyChanged(nameof(Volume));
-            OnPropertyChanged(nameof(IsMuted));
+            RefreshEndpointVolumeState(forceNotify: true);
 
             _volumeBridge = new EndpointVolumeBridge(this);
             endpointVolume.RegisterControlChangeNotify(_volumeBridge);
@@ -1221,14 +1222,86 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private bool RefreshEndpointVolumeState(bool forceNotify = false)
+    {
+        if (_disposed) return false;
+
+        IAudioEndpointVolume? endpointVolume = _endpointVolume;
+        if (endpointVolume == null) return false;
+
+        try
+        {
+            endpointVolume.GetMasterVolumeLevelScalar(out float volume);
+            endpointVolume.GetMute(out bool muted);
+            if (float.IsNaN(volume) || float.IsInfinity(volume)) return false;
+
+            float clamped = Math.Clamp(volume, 0f, 1f);
+            bool volumeChanged = forceNotify || Math.Abs(clamped - _volume) >= 0.0005f;
+            bool muteChanged = forceNotify || muted != _isMuted;
+
+            _volume = clamped;
+            _isMuted = muted;
+
+            if (volumeChanged) OnPropertyChanged(nameof(Volume));
+            if (muteChanged) OnPropertyChanged(nameof(IsMuted));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Re-runs the endpoint activation chain when the OS reports the device transitioned to
-    /// Active. No-op if the proxies are already wired (the device was already active). Called by
-    /// AudioDeviceManager from its OnDeviceStateChanged path when newState includes the Active bit.
+    /// Active. If the proxies are still wired, refreshes the cached volume/mute values from the
+    /// live endpoint. Called by AudioDeviceManager from its OnDeviceStateChanged path when
+    /// newState includes the Active bit.
     /// </summary>
     internal void UpgradeFromActiveState()
     {
-        if (_endpointVolume == null) TryActivateProxies();
+        TryActivateProxies();
+    }
+
+    /// <summary>
+    /// Drops Active-only endpoint proxies after the OS reports this wrapper leaving Active. The next
+    /// Active transition must activate fresh proxies so endpoint-volume callbacks re-subscribe
+    /// instead of staying attached to an invalidated audio-engine instance.
+    /// </summary>
+    internal void DowngradeFromActiveState()
+    {
+        if (_disposed) return;
+        ReleaseEndpointProxies();
+    }
+
+    private void ReleaseEndpointProxies()
+    {
+        _volumeWrite.Drop();
+
+        IAudioEndpointVolume? endpointVolume = _endpointVolume;
+        IAudioMeterInformation? endpointMeter = _endpointMeter;
+        IAudioSessionManager2? sessionManager = _sessionManager;
+        EndpointVolumeBridge? volumeBridge = _volumeBridge;
+        SessionNotificationBridge? sessionBridge = _sessionBridge;
+
+        _endpointVolume = null;
+        _endpointMeter = null;
+        _sessionManager = null;
+        _volumeBridge = null;
+        _sessionBridge = null;
+
+        if (endpointVolume != null && volumeBridge != null)
+        {
+            try { endpointVolume.UnregisterControlChangeNotify(volumeBridge); } catch { }
+        }
+        if (sessionManager != null && sessionBridge != null)
+        {
+            try { sessionManager.UnregisterSessionNotification(sessionBridge); } catch { }
+        }
+
+        Safe.Release(endpointVolume);
+        Safe.Release(endpointMeter);
+        Safe.Release(sessionManager);
     }
 
     /// <summary>
@@ -2175,18 +2248,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         // dispatches RefreshEqualizerAPOState which would otherwise race the field clears below.
         try { EqualizerAPOMonitor.AvailabilityChanged -= OnEqualizerAPOAvailabilityChanged; } catch { }
 
-        // Drop any queued endpoint-volume write so the throttler driver doesn't try to call
-        // SetMasterVolumeLevelScalar on the about-to-be-released RCW.
-        _volumeWrite.Drop();
-
-        if (_endpointVolume != null && _volumeBridge != null)
-        {
-            try { _endpointVolume.UnregisterControlChangeNotify(_volumeBridge); } catch { }
-        }
-        if (_sessionManager != null && _sessionBridge != null)
-        {
-            try { _sessionManager.UnregisterSessionNotification(_sessionBridge); } catch { }
-        }
+        ReleaseEndpointProxies();
 
         // Tear down every group's sessions, then the groups themselves. Each group disposes its
         // session subscriptions; we still own the AudioSession lifecycle (Dispose/Disconnect handlers).
@@ -2204,14 +2266,12 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         _groups.Clear();
         _sessionsBySessionInstanceID.Clear();
 
-        Safe.Release(_endpointVolume);
-        Safe.Release(_endpointMeter);
-        Safe.Release(_sessionManager);
         Safe.Release(_device);
     }
 
-    // Endpoint volume / mute callbacks. Marshal native AUDIO_VOLUME_NOTIFICATION_DATA from the
-    // raw pointer; ignoring the trailing variable-length per-channel array since we only track master.
+    // Endpoint volume / mute callbacks. Use the native notification only as the event-context
+    // signal, then re-read the endpoint state from IAudioEndpointVolume so a stale callback payload
+    // cannot poison the cached scalar with 0.
     private sealed class EndpointVolumeBridge : IAudioEndpointVolumeCallback
     {
         private readonly AudioDevice _owner;
@@ -2225,21 +2285,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
             // Suppress echoes from our own writes.
             if (data.guidEventContext == AudioEventContext.Value) return 0;
 
-            float vol = data.fMasterVolume;
-            bool muted = data.bMuted;
-
             _owner._dispatcher.BeginInvoke(() =>
             {
-                if (Math.Abs(vol - _owner._volume) >= 0.0005f)
-                {
-                    _owner._volume = vol;
-                    _owner.OnPropertyChanged(nameof(Volume));
-                }
-                if (muted != _owner._isMuted)
-                {
-                    _owner._isMuted = muted;
-                    _owner.OnPropertyChanged(nameof(IsMuted));
-                }
+                _owner.RefreshEndpointVolumeState();
             });
             return 0;
         }
