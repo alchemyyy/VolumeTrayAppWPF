@@ -862,6 +862,9 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
     /// </summary>
     public float PeakValueMax => _meterLerp.DisplayMax;
 
+    /// <summary>Coalesced peak payload for the WPF meter binding.</summary>
+    public MeterPeakValues PeakValues => new(_meterLerp.DisplayMin, _meterLerp.DisplayMax);
+
     /// <summary>
     /// True when this is a capture endpoint with no currently-Active session. Windows idles the
     /// capture engine in that state and the endpoint meter freezes on its last value, so the UI
@@ -1406,8 +1409,7 @@ internal sealed class AudioDevice : INotifyPropertyChanged, IDisposable
         if (_disposed) return;
 
         _meterLerp.OnRenderTick(maxStep, out bool minChanged, out bool maxChanged);
-        if (minChanged) OnPropertyChanged(nameof(PeakValueMin));
-        if (maxChanged) OnPropertyChanged(nameof(PeakValueMax));
+        if (minChanged || maxChanged) OnPropertyChanged(nameof(PeakValues));
 
         for (int i = _groups.Count - 1; i >= 0; i--) _groups[i].OnRenderTick(maxStep);
     }

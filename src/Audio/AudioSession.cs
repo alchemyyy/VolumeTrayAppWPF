@@ -150,6 +150,9 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
     /// </summary>
     public float PeakValueMax => _meterLerp.DisplayMax;
 
+    /// <summary>Coalesced peak payload for group aggregation and WPF meter binding.</summary>
+    public MeterPeakValues PeakValues => new(_meterLerp.DisplayMin, _meterLerp.DisplayMax);
+
     public AudioSessionState State
     {
         get => _state;
@@ -502,8 +505,7 @@ internal sealed class AudioSession : INotifyPropertyChanged, IDisposable
         if (_disposed || _disconnected) return;
 
         _meterLerp.OnRenderTick(maxStep, out bool minChanged, out bool maxChanged);
-        if (minChanged) OnPropertyChanged(nameof(PeakValueMin));
-        if (maxChanged) OnPropertyChanged(nameof(PeakValueMax));
+        if (minChanged || maxChanged) OnPropertyChanged(nameof(PeakValues));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

@@ -958,7 +958,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     /// the gesture lives in SliderClickDragBehavior; we only need to play the wav once the user
     /// finishes interacting (thumb drag or track click). immediate=true bypasses the trailing
     /// dwell that the wheel handler relies on - a drag release is a single discrete commit, so the
-    /// ding should land on mouse-up rather than ~200ms later.
+    /// ding should land on mouse-up rather than after the wheel-feedback dwell.
     /// Branches on DataContext type: the slider's context is the device wrapper for device sliders
     /// and the AudioAppGroup for session sliders.
     /// </summary>
@@ -966,7 +966,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
     {
         if (sender is not Slider slider) return;
         if (slider.DataContext is AudioDevice device) _feedback.PlayForDevice(device, immediate: true);
-        else if (slider.DataContext is AudioAppGroup group) _feedback.PlayForApp(group.Volume, immediate: true);
+        else if (slider.DataContext is AudioAppGroup group) _feedback.PlayForApp(group, immediate: true);
     }
 
     /// <summary>
@@ -1001,7 +1001,7 @@ internal partial class VolumeFlyout : Window, INotifyPropertyChanged
         else if (group != null)
         {
             group.Volume = scalar;
-            if (changed) _feedback.PlayForApp(group.Volume);
+            if (changed) _feedback.PlayForApp(group);
         }
         e.Handled = true;
     }

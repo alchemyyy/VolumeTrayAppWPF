@@ -89,6 +89,7 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
             _isAppDrawerExpanded = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsAppDrawerVisible));
+            UpdateGroupMeterVisibility();
             PersistAppDrawerExpanded(value);
         }
     }
@@ -362,10 +363,33 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
             }
         }
 
+        UpdateGroupMeterVisibility();
+
         if (changed)
         {
             OnPropertyChanged(nameof(HasVisibleGroups));
             OnPropertyChanged(nameof(IsAppDrawerVisible));
+        }
+    }
+
+    private void UpdateGroupMeterVisibility()
+    {
+        bool drawerVisible = HasVisibleGroups && _isAppDrawerExpanded;
+
+        foreach (AudioAppGroup group in Device.Groups)
+        {
+            bool shouldMeter = false;
+            if (drawerVisible)
+            {
+                foreach (AudioAppGroup visibleGroup in _visibleGroups)
+                {
+                    if (!ReferenceEquals(visibleGroup, group)) continue;
+                    shouldMeter = true;
+                    break;
+                }
+            }
+
+            group.IsPeakMeterVisible = shouldMeter;
         }
     }
 
@@ -397,7 +421,11 @@ internal sealed class VolumeFlyoutCell : INotifyPropertyChanged, IDisposable
 #endif
         if (AppServices.Settings is { } settings) settings.Changed -= OnSettingsChanged;
 
-        foreach (AudioAppGroup g in _subscribedGroups) g.PropertyChanged -= OnGroupPropertyChanged;
+        foreach (AudioAppGroup g in _subscribedGroups)
+        {
+            g.IsPeakMeterVisible = false;
+            g.PropertyChanged -= OnGroupPropertyChanged;
+        }
         _subscribedGroups.Clear();
         _visibleGroups.Clear();
     }

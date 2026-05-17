@@ -23,6 +23,9 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     private float _peakValueMin;
     private float _peakValueMax;
     private bool _isExclusiveControlHolder;
+    private bool _isPeakMeterVisible;
+    private bool _batchingSessionPeakUpdates;
+    private bool _aggregatePeakDirty;
     private bool _disposed;
 
     public string AppID { get; } = appID;
@@ -86,18 +89,13 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     }
 
     /// <summary>Loudest min(L, R) peak across the grouped sessions; drives the base meter bar.</summary>
-    public float PeakValueMin
-    {
-        get => _peakValueMin;
-        private set { if (Math.Abs(value - _peakValueMin) > 0.001f) { _peakValueMin = value; OnPropertyChanged(); } }
-    }
+    public float PeakValueMin => _peakValueMin;
 
     /// <summary>Loudest max(L, R) peak across the grouped sessions; drives the stereo overlay.</summary>
-    public float PeakValueMax
-    {
-        get => _peakValueMax;
-        private set { if (Math.Abs(value - _peakValueMax) > 0.001f) { _peakValueMax = value; OnPropertyChanged(); } }
-    }
+    public float PeakValueMax => _peakValueMax;
+
+    /// <summary>Coalesced peak payload for the WPF meter binding.</summary>
+    public MeterPeakValues PeakValues => new(_peakValueMin, _peakValueMax);
 
     /// <summary>
     /// True when one of this group's sessions is the process currently holding the parent device
@@ -109,6 +107,16 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     {
         get => _isExclusiveControlHolder;
         internal set { if (_isExclusiveControlHolder != value) { _isExclusiveControlHolder = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>
+    /// True only while this group is represented by a visible app drawer. Device meters continue
+    /// updating regardless; this gate keeps hidden per-app session meters out of the hot loop.
+    /// </summary>
+    internal bool IsPeakMeterVisible
+    {
+        get => _isPeakMeterVisible;
+        set => _isPeakMeterVisible = value;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -184,7 +192,7 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     /// </summary>
     internal void UpdatePeakValueBackground(bool unified, int biasMultiplier)
     {
-        if (_disposed) return;
+        if (_disposed || !_isPeakMeterVisible) return;
 
         AudioSession[] sessions;
         try { sessions = _sessions.ToArray(); }
@@ -204,7 +212,7 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     /// </summary>
     internal void OnNewSample(int interpolationSteps)
     {
-        if (_disposed) return;
+        if (_disposed || !_isPeakMeterVisible) return;
         for (int i = _sessions.Count - 1; i >= 0; i--) _sessions[i].OnNewSample(interpolationSteps);
     }
 
@@ -215,8 +223,21 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
     /// </summary>
     internal void OnRenderTick(float maxStep)
     {
-        if (_disposed) return;
-        for (int i = _sessions.Count - 1; i >= 0; i--) _sessions[i].OnRenderTick(maxStep);
+        if (_disposed || !_isPeakMeterVisible) return;
+
+        _batchingSessionPeakUpdates = true;
+        try
+        {
+            for (int i = _sessions.Count - 1; i >= 0; i--) _sessions[i].OnRenderTick(maxStep);
+        }
+        finally
+        {
+            _batchingSessionPeakUpdates = false;
+        }
+
+        if (!_aggregatePeakDirty) return;
+        _aggregatePeakDirty = false;
+        RefreshAggregatePeak();
     }
 
     private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -233,9 +254,11 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
                 if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
                     OnPropertyChanged(nameof(IsMuted));
                 break;
+            case nameof(AudioSession.PeakValues):
             case nameof(AudioSession.PeakValueMin):
             case nameof(AudioSession.PeakValueMax):
-                RefreshAggregatePeak();
+                if (_batchingSessionPeakUpdates) _aggregatePeakDirty = true;
+                else RefreshAggregatePeak();
                 break;
             case nameof(AudioSession.Icon):
                 if (ReferenceEquals(sender, _sessions.Count > 0 ? _sessions[0] : null))
@@ -265,8 +288,18 @@ internal sealed class AudioAppGroup(string appID, Dispatcher dispatcher) : INoti
             if (pMin > maxOfMins) maxOfMins = pMin;
             if (pMax > maxOfMaxes) maxOfMaxes = pMax;
         }
-        PeakValueMin = maxOfMins;
-        PeakValueMax = maxOfMaxes;
+        SetPeakValues(maxOfMins, maxOfMaxes);
+    }
+
+    private void SetPeakValues(float min, float max)
+    {
+        bool minChanged = Math.Abs(min - _peakValueMin) > 0.001f;
+        bool maxChanged = Math.Abs(max - _peakValueMax) > 0.001f;
+        if (!minChanged && !maxChanged) return;
+
+        _peakValueMin = min;
+        _peakValueMax = max;
+        OnPropertyChanged(nameof(PeakValues));
     }
 
     public void Dispose()

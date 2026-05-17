@@ -158,24 +158,15 @@
                                     <RepeatButton Style="{StaticResource VolumeSliderIncreaseButtonStyle}"/>
                                 </Track.IncreaseRepeatButton>
                             </Track>
-                            <!-- Two-layer peak meter overlay. MeterPeak (base) is sized to min(L, R) and
-                                 MeterPeakStereo paints on top sized to max(L, R). -->
-                            <Border x:Name="MeterPeakStereo"
-                                    Height="4"
-                                    Width="0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Background="{DynamicResource MeterPeakStereoBrush}"
-                                    CornerRadius="{DynamicResource CornerRadiusSmall}"
-                                    IsHitTestVisible="False"/>
-                            <Border x:Name="MeterPeak"
-                                    Height="4"
-                                    Width="0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Background="{DynamicResource MeterPeakBrush}"
-                                    CornerRadius="{DynamicResource CornerRadiusSmall}"
-                                    IsHitTestVisible="False"/>
+                            <!-- Render-only peak meter overlay. Stereo is drawn first to max(L, R),
+                                 base is drawn on top to min(L, R). -->
+                            <wpf:PeakMeterOverlay x:Name="MeterPeakOverlay"
+                                                  Height="4"
+                                                  VerticalAlignment="Center"
+                                                  BaseBrush="{DynamicResource MeterPeakBrush}"
+                                                  StereoBrush="{DynamicResource MeterPeakStereoBrush}"
+                                                  CornerRadius="{DynamicResource CornerRadiusSmall}"
+                                                  IsHitTestVisible="False"/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -471,8 +462,7 @@
                 <wpf:VolumeSlider Grid.Column="1"
                                   Style="{StaticResource VolumeSliderStyle}"
                                   Value="{Binding Volume, Mode=TwoWay, Converter={StaticResource ScalarToPercent}, UpdateSourceTrigger=PropertyChanged}"
-                                  PeakValueMin="{Binding PeakValueMin}"
-                                  PeakValueMax="{Binding PeakValueMax}"
+                                  PeakValues="{Binding PeakValues}"
                                   ToolTip="{Binding DisplayName}"
                                   PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
                                   PreviewMouseWheel="Slider_PreviewMouseWheel"/>
@@ -1076,8 +1066,7 @@
 
                     <wpf:VolumeSlider Grid.Column="1"
                                       Value="{Binding Volume, Mode=TwoWay, Converter={StaticResource ScalarToPercent}, UpdateSourceTrigger=PropertyChanged}"
-                                      PeakValueMin="{Binding PeakValueMin}"
-                                      PeakValueMax="{Binding PeakValueMax}"
+                                      PeakValues="{Binding PeakValues}"
                                       ToolTip="{Binding FriendlyName}"
                                       PreviewMouseLeftButtonUp="Slider_PreviewMouseLeftButtonUp"
                                       PreviewMouseWheel="Slider_PreviewMouseWheel">

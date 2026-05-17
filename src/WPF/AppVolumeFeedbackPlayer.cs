@@ -95,26 +95,17 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
         {
             if (!immediate)
             {
-                if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+                if (!await DwellWithReplacementBailAsync(
+                        ctx,
+                        TimeConstants.VolumeFeedbackDingDelayMs,
+                        () => ShouldSuppressDeviceDing(device)).ConfigureAwait(false))
+                    return;
             }
             else if (ctx.HasReplacement) return;
-            // Suppress the ding when the device is already rendering audio so the beep doesn't step on
-            // music / calls / games. Bypassed while a previously fired ding is still draining on this
-            // device so a fast scroll doesn't chain-suppress on its own residual peak. PeakValueMax is
-            // the smoothed display value, fine for a coarse "is anything playing" gate.
-            long nowTicks = Environment.TickCount64;
-            AppSettings? settings = _settings;
-            if (settings != null
-                && settings.SuppressDeviceVolumeChangeSoundWhenAudioPlaying
-                && device.PeakValueMax > settings.DingSuppressionPeakThresholdPercent * 0.01f)
-            {
-                bool ownDingInFlight = _dingActiveUntilTicks.TryGetValue(device.Id, out long until)
-                                       && nowTicks < until;
-                if (!ownDingInFlight) return;
-            }
+            if (ShouldSuppressDeviceDing(device)) return;
             // Stamp the bypass window BEFORE PlayChangeFeedback returns so any payload that lands
             // between this assignment and the actual playback start still sees an in-flight ding.
-            _dingActiveUntilTicks[device.Id] = nowTicks + dingWindowMs;
+            _dingActiveUntilTicks[device.Id] = Environment.TickCount64 + dingWindowMs;
             try { device.PlayChangeFeedback(wavBytes); }
             catch { /* feedback is best-effort */ }
         });
@@ -126,12 +117,14 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
     /// immediate=true fires on the caller's tick (drag-release) instead of waiting out the trailing
     /// dwell that scroll-wheel callers rely on.
     /// </summary>
-    public void PlayForApp(float scalarVolume, bool immediate = false)
+    public void PlayForApp(AudioAppGroup group, bool immediate = false)
     {
         if (_settings?.PlayAppVolumeChangeSound != true) return;
 
         EnsureAppFeedbackData();
         if (_wavTemplate == null) return;
+
+        float scalarVolume = group.Volume;
 
         // Capture scalarVolume in the closure: latest-pending-wins on the throttler means the payload
         // that ultimately runs is the most recent one queued, so the played volume reflects the user's
@@ -140,12 +133,40 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
         {
             if (!immediate)
             {
-                if (!await DwellWithReplacementBailAsync(ctx, TimeConstants.VolumeFeedbackDingDelayMs).ConfigureAwait(false)) return;
+                if (!await DwellWithReplacementBailAsync(
+                        ctx,
+                        TimeConstants.VolumeFeedbackDingDelayMs,
+                        () => ShouldSuppressAppDing(group)).ConfigureAwait(false))
+                    return;
             }
             else if (ctx.HasReplacement) return;
+            if (ShouldSuppressAppDing(group)) return;
             try { await _uiDispatcher.InvokeAsync(() => PlayAppFeedbackNow(scalarVolume)); }
             catch { /* dispatcher torn down */ }
         });
+    }
+
+    // Suppress the ding when the device is already rendering audio so the beep doesn't step on
+    // music / calls / games. Bypassed while a previously fired ding is still draining on this
+    // device so a fast scroll doesn't chain-suppress on its own residual peak. PeakValueMax is
+    // the smoothed display value, fine for a coarse "is anything playing" gate.
+    private bool ShouldSuppressDeviceDing(AudioDevice device)
+    {
+        AppSettings? settings = _settings;
+        if (settings == null || !settings.SuppressDeviceVolumeChangeSoundWhenAudioPlaying) return false;
+        if (device.PeakValueMax <= settings.DingSuppressionPeakThresholdPercent * 0.01f) return false;
+
+        return !_dingActiveUntilTicks.TryGetValue(device.Id, out long until)
+               || Environment.TickCount64 >= until;
+    }
+
+    // Per-app feedback is also skipped while the target app is visibly producing audio. Otherwise
+    // dragging a music/video app's slider layers the confirmation ding over the content being adjusted.
+    private bool ShouldSuppressAppDing(AudioAppGroup group)
+    {
+        AppSettings? settings = _settings;
+        if (settings == null || !settings.SuppressDeviceVolumeChangeSoundWhenAudioPlaying) return false;
+        return group.PeakValueMax > settings.DingSuppressionPeakThresholdPercent * 0.01f;
     }
 
     private void PlayAppFeedbackNow(float scalarVolume)
@@ -168,20 +189,24 @@ internal sealed class AppVolumeFeedbackPlayer : IDisposable
     }
 
     // Waits up to <paramref name="totalMs"/> in poll-sized slices, returning false the moment a fresher
-    // payload is queued for the same key OR cancellation is signalled. Returns true only when the full
-    // dwell elapses without a replacement -- the caller treats that as "ok to fire the ding".
-    private static async Task<bool> DwellWithReplacementBailAsync(ThrottlerContext ctx, int totalMs)
+    // payload is queued for the same key, cancellation is signalled, or the caller's cancellation
+    // predicate trips. Returns true only when the full dwell elapses without a replacement.
+    private static async Task<bool> DwellWithReplacementBailAsync(
+        ThrottlerContext ctx,
+        int totalMs,
+        Func<bool>? shouldCancel = null)
     {
         int waited = 0;
         while (waited < totalMs)
         {
             if (ctx.HasReplacement) return false;
+            if (shouldCancel?.Invoke() == true) return false;
             int slice = Math.Min(DingDwellPollSliceMs, totalMs - waited);
             try { await Task.Delay(slice, ctx.CancellationToken).ConfigureAwait(false); }
             catch (OperationCanceledException) { return false; }
             waited += slice;
         }
-        return !ctx.HasReplacement;
+        return !ctx.HasReplacement && shouldCancel?.Invoke() != true;
     }
 
     private void EnsureAppFeedbackData()
